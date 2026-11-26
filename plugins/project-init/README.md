@@ -96,11 +96,11 @@ plugins/project-init/
 <!-- switches:begin -->
 | 이름 | 끄는 것 | 상태 | 대신할 길 |
 |---|---|---|---|
-| `DEVBREW_PROJECT_INIT_DISABLE` | project-init 전체(훅과 셋업) | 은퇴 예정 | Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다 |
-| `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` · `DEVBREW_SKIP_HOOKS=project-init:PostToolUse` | 브랜치 · 커밋 확인 훅 | 은퇴 예정 | 플러그인 끄기, 또는 설정의 `disableAllHooks`(모든 플러그인의 훅이 함께 꺼진다) |
+| `DEVBREW_PROJECT_INIT_DISABLE` | project-init 전체(훅과 셋업) | 은퇴 | Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다 |
+| `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` · `DEVBREW_SKIP_HOOKS=project-init:PostToolUse` | 브랜치 · 커밋 확인 훅 | 은퇴 | 플러그인 끄기, 또는 설정의 `disableAllHooks`(모든 플러그인의 훅이 함께 꺼진다) |
 <!-- switches:end -->
 
-은퇴 예정 이름은 지금은 그대로 끈다. 곧 은퇴하며, 은퇴 뒤에는 「대신할 길」 칸을 쓴다.
+은퇴 이름은 더 듣지 않는다 — 켜 두면 진입 skill 첫머리에 「더 듣지 않는다」 줄이 보인다. 「대신할 길」 칸을 쓴다.
 
 ## 통합
 

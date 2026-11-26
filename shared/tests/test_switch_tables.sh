@@ -94,46 +94,45 @@ for p in plugins:
 total = len(state)
 kept = sum(1 for s in state.values() if s == "남음")
 retiring = sum(1 for s in state.values() if s == "은퇴 예정")
-# 은퇴 0 — 둘째 판이 은퇴 20 으로 바꾼다
 retired = sum(1 for s in state.values() if s == "은퇴")
-for label, got, want in (("행 첫 이름 합계", total, 27), ("남음", kept, 7), ("은퇴 예정", retiring, 20), ("은퇴", retired, 0)):
+for label, got, want in (("행 첫 이름 합계", total, 27), ("남음", kept, 7), ("은퇴 예정", retiring, 0), ("은퇴", retired, 20)):
     if got == want: ok("%s %d" % (label, got))
     else: no("%s: 기대 %d, 실제 %d" % (label, want, got))
 if not bad: ok("두 표에 실린 이름은 두 표의 상태가 같다")
 '
 
 note "B2. names_pinned"
-# 플러그인 · 행 첫 이름 → 상태 · 별칭. 설계 1 「끄는 길」 의 표에서 옮긴 기대값이다 — 둘째 판은 이 줄을 고치는 것으로 은퇴를 기록한다.
+# 플러그인 · 행 첫 이름 → 상태 · 별칭. 설계 1 「끄는 길」 의 표에서 옮긴 기대값이다 — 은퇴 20 행은 상태가 「은퇴」 다.
 run_section B2 '
 EXPECT = {
     ("plugin-audit", "DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX"): ("남음", ()),
     ("plugin-audit", "DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX"): ("남음", ("DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX",)),
-    ("plugin-audit", "DEVBREW_PLUGIN_AUDIT_DISABLE"): ("은퇴 예정", ()),
-    ("plugin-audit", "DEVBREW_PLUGIN_AUDIT_DISABLE_WEB"): ("은퇴 예정", ()),
-    ("project-init", "DEVBREW_PROJECT_INIT_DISABLE"): ("은퇴 예정", ()),
-    ("project-init", "DEVBREW_SKIP_HOOKS=project-init:post-tool-use"): ("은퇴 예정", ("DEVBREW_SKIP_HOOKS=project-init:PostToolUse",)),
+    ("plugin-audit", "DEVBREW_PLUGIN_AUDIT_DISABLE"): ("은퇴", ()),
+    ("plugin-audit", "DEVBREW_PLUGIN_AUDIT_DISABLE_WEB"): ("은퇴", ()),
+    ("project-init", "DEVBREW_PROJECT_INIT_DISABLE"): ("은퇴", ()),
+    ("project-init", "DEVBREW_SKIP_HOOKS=project-init:post-tool-use"): ("은퇴", ("DEVBREW_SKIP_HOOKS=project-init:PostToolUse",)),
     ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE_CODEX"): ("남음", ()),
     ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST"): ("남음", ()),
     ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE_PUBLISH"): ("남음", ()),
-    ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE"): ("은퇴 예정", ()),
-    ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER"): ("은퇴 예정", ()),
-    ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE"): ("은퇴 예정", ()),
-    ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE_E2E"): ("은퇴 예정", ()),
-    ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC"): ("은퇴 예정", ()),
-    ("quality-gates", "DEVBREW_SKIP_HOOKS=quality-gates:qg-gc"): ("은퇴 예정", ()),
+    ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE"): ("은퇴", ()),
+    ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER"): ("은퇴", ()),
+    ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE"): ("은퇴", ()),
+    ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE_E2E"): ("은퇴", ()),
+    ("quality-gates", "DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC"): ("은퇴", ()),
+    ("quality-gates", "DEVBREW_SKIP_HOOKS=quality-gates:qg-gc"): ("은퇴", ()),
     ("spec-distill", "DEVBREW_SPEC_DISTILL_DISABLE_CODEX"): ("남음", ()),
     ("spec-distill", "DEVBREW_SPEC_DISTILL_DISABLE_WEB"): ("남음", ()),
     ("spec-distill", "DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST"): ("남음", ()),
-    ("spec-distill", "DEVBREW_SPEC_DISTILL_DISABLE"): ("은퇴 예정", ()),
-    ("spec-distill", "DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC"): ("은퇴 예정", ()),
-    ("spec-distill", "DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW"): ("은퇴 예정", ()),
-    ("spec-distill", "DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE"): ("은퇴 예정", ()),
-    ("spec-distill", "DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE"): ("은퇴 예정", ()),
-    ("spec-distill", "DEVBREW_SKIP_HOOKS=spec-distill:review-entry"): ("은퇴 예정", ()),
-    ("spec-distill", "DEVBREW_QUALITY_GATES_DISABLE_WEB"): ("은퇴 예정", ()),
-    ("spec-distill", "DEVBREW_SKIP_HOOKS=spec-distill:statusline"): ("은퇴 예정", ()),
-    ("spec-distill", "DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd"): ("은퇴 예정", ("DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup",)),
-    ("spec-distill", "DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc"): ("은퇴 예정", ()),
+    ("spec-distill", "DEVBREW_SPEC_DISTILL_DISABLE"): ("은퇴", ()),
+    ("spec-distill", "DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC"): ("은퇴", ()),
+    ("spec-distill", "DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW"): ("은퇴", ()),
+    ("spec-distill", "DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE"): ("은퇴", ()),
+    ("spec-distill", "DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE"): ("은퇴", ()),
+    ("spec-distill", "DEVBREW_SKIP_HOOKS=spec-distill:review-entry"): ("은퇴", ()),
+    ("spec-distill", "DEVBREW_QUALITY_GATES_DISABLE_WEB"): ("은퇴", ()),
+    ("spec-distill", "DEVBREW_SKIP_HOOKS=spec-distill:statusline"): ("은퇴", ()),
+    ("spec-distill", "DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd"): ("은퇴", ("DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup",)),
+    ("spec-distill", "DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc"): ("은퇴", ()),
 }
 got = {}
 for p in plugins:
@@ -147,6 +146,15 @@ for k in sorted(set(EXPECT) | set(got)):
     elif k not in EXPECT: no("기대값에 없는 행이다: %s %s" % k); bad = True
     elif got[k] != EXPECT[k]: no("%s %s: 기대 %r, 실제 %r" % (k + (EXPECT[k], got[k]))); bad = True
 if not bad: ok("표 %d 행의 이름 · 상태 · 별칭이 기대값과 같다" % len(got))
+# 통째 끄기 세 행의 「끄는 것」 은 정확히 「<플러그인> 전체」 다 — 진입 skill 이 줄 머리로 알아보는 글자의 원천이다
+for p in ("spec-distill", "quality-gates", "plugin-audit"):
+    n = "DEVBREW_" + p.upper().replace("-", "_") + "_DISABLE"
+    try: rows = rd(p)
+    except m.TableError: no(p + " 표를 못 읽어 통째 끄기 행을 보지 못한다"); continue
+    hit = [r for r in rows if r["names"][0] == n]
+    if len(hit) != 1: no("%s 통째 끄기 행이 %d 개다" % (p, len(hit))); continue
+    if hit[0]["state"] == "은퇴" and hit[0]["what"] == p + " 전체": ok(p + " 통째 끄기 행: 은퇴 · 끄는 것 「" + p + " 전체」")
+    else: no("%s 통째 끄기 행: 상태 %r · 끄는 것 %r" % (p, hit[0]["state"], hit[0]["what"]))
 '
 
 note "C. readme_matches_table"

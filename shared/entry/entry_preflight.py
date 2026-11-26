@@ -7,9 +7,7 @@ rc 는 늘 0 이다. rc≠0 이면 플랫폼이 skill 호출 전체를 끊고, �
 조용한 실패가 된다. 그래서 어떤 실패도 `error` 감시줄로 바꾼다.
 
 형제 모듈을 import 하지 않는다. 심볼릭 링크로 실행되면 sys.path[0] 이 정본 디렉토리
-(`shared/entry/`)라서 형제가 풀리지 않는다. kill switch 변수명 도출은
-`shared/killswitch/kill_switch_active.py` 와 같다(`-`→`_`, 대문자화, 값이 정확히 "1").
-`shared/tests/test_entry_preflight.sh` 가 두 도출을 대조한다.
+(`shared/entry/`)라서 형제가 풀리지 않는다.
 
 끄기 변수 표(`switches.md`)는 부른 경로의 플러그인 폴더(스크립트 두 단계 위)에서 읽는다 — 링크를 풀지 않는다.
 """
@@ -33,10 +31,6 @@ def _one_line(value):
     return " ".join(str(value).split())
 
 
-def switch_name(plugin):
-    return "DEVBREW_" + plugin.upper().replace("-", "_") + "_DISABLE"
-
-
 def find_root(cwd):
     """(루트, 출처). git 작업 트리면 그 최상위, 아니면 cwd."""
     try:
@@ -57,9 +51,6 @@ def sentinel(argv, environ, cwd):
         return "{0} error plugin=? skill=? reason=usage: entry_preflight.py <plugin> <skill>".format(PREFIX)
     plugin, skill = argv
     head = "plugin={0} skill={1}".format(_one_line(plugin), _one_line(skill))
-    name = switch_name(plugin)
-    if environ.get(name) == "1":
-        return "{0} disabled {1} switch={2}=1".format(PREFIX, head, name)
     root, source = find_root(cwd)
     line = "{0} ok {1} root={2}".format(PREFIX, head, _one_line(root))
     if source == "cwd":
