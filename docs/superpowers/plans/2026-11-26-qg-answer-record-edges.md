@@ -68,7 +68,7 @@
 | 표지 없는 옛 원문 | 원문 절 머리(`_ORIGIN_HEADS`)는 찾았는데 그 절들의 글에 `🗣` 도 `☑` 도 없으면 지금 줄 `직접 쓴 말 · 고른 라벨을 가르지 못함` 을 낸다 |
 | 머리를 못 읽은 바뀐 문서 | `review_breadth` 가 넷째 값으로 그 수를 돌려주고, `_breadth` 가 `의도 문서인지 확인 못 한 문서 <n> — 머리를 읽지 못함` 을 낸다 |
 | 리뷰 기록 빼기 | `io_.REVIEW_RECORD_TYPE = "roadmap-review"` — `review_breadth` 의 의도 문서 고르기와 `other_teams._intent_docs` 가 함께 쓴다 |
-| 좁은 리뷰의 넓이 글(`intent-scope.md`) | 차례대로 처음 맞는 것: 바뀐 파일 목록을 모르거나 비었으면 `좁게 본다 — 바뀐 파일 목록을 모른다`(설계 D58) · 문서 아닌 파일이나 모델이 읽는 파일이 있으면 `좁게 본다 — 코드가 바뀐 PR` · 모두 문서이고 머리를 읽지 못한 문서가 있으면 `좁게 본다 — 의도 문서인지 확인 못 한 문서가 있다`(설계 D62) · 그 밖(모두 문서인데 의도 문서가 없음) `좁게 본다 — 의도 문서가 바뀌지 않았다` |
+| 좁은 리뷰의 넓이 글(`intent-scope.md`) | 차례대로 처음 맞는 것: 바뀐 파일 목록을 모르거나 비었으면 `좁게 본다 — 바뀐 파일 목록을 모른다`(설계 D58) · 문서 아닌 파일이나 모델이 읽는 파일이 있으면 `좁게 본다 — 코드가 바뀐 PR` · 모두 문서이고 머리를 읽지 못했거나 파일 자체를 읽지 못한(추적되지 않음 · 링크 · 보통 파일 아님 · 시간 한도) 문서가 있으면 `좁게 본다 — 의도 문서인지 확인 못 한 문서가 있다`(설계 D62 · D63 — 공시 줄은 지금처럼 사유별로 따로) · 그 밖(모두 문서인데 의도 문서가 없음) `좁게 본다 — 의도 문서가 바뀌지 않았다` |
 | 설정 도움말 | `config` 의 `help` 를 `docs 답 자리 · 입력 상한 · 다른 팀 기록 상한 · 의도 문서 표시를 읽는다` 로 |
 | 질문 앞 머리말 첫 줄 | `<리뷰 범위> 리뷰` — 브랜치 범위면 `git rev-parse --abbrev-ref HEAD`(분리된 HEAD 면 `HEAD <해시 앞 8자>`) · 세션 범위 `이번 세션에서 바뀐 파일 <n>개` · 토픽 범위 `토픽 <토픽 열쇠>` · `--paths` 범위 `고른 파일 <n>개` |
 
@@ -582,14 +582,14 @@ def test_render_last_line_is_result_line(self):       # AC27 끝 문장
 **Interfaces:**
 - Produces:
   - `review_breadth(mode, names, read_doc, markers) -> (breadth, docs, unread, head_unread)` — `head_unread` 는 읽었는데 `frontmatter_unreadable` 인 문서 수(의도 문서로 세지 않는다). `type` 이 `REVIEW_RECORD_TYPE` 인 문서는 의도 문서로 세지 않는다.
-  - `render_scope(breadth, names, repo, base, end, head_unread: int = 0)` — 좁은 넓이 글을 `names` 와 `head_unread` 로 가른다(「정한 이름과 꼴」 의 차례). `BREADTH_LABELS["narrow"]` 를 쓰던 자리는 새 함수 `narrow_label(names: Optional[set], head_unread: int) -> str` 를 쓴다. `_prepare` 는 `_breadth` 가 돌려준 `head_unread` 를 `render_scope` 에 넘긴다(`_breadth` 의 돌려주는 값에 넷째로 더한다).
+  - `render_scope(breadth, names, repo, base, end, unsure: int = 0)` — 좁은 넓이 글을 `names` 와 `unsure`(파일 자체를 읽지 못한 문서 수 `unread` + 머리를 읽지 못한 문서 수 `head_unread`)로 가른다(「정한 이름과 꼴」 의 차례). `BREADTH_LABELS["narrow"]` 를 쓰던 자리는 새 함수 `narrow_label(names: Optional[set], unsure: int) -> str` 를 쓴다. `_prepare` 는 `_breadth` 가 돌려준 `unread + head_unread` 를 `render_scope` 에 넘긴다(`_breadth` 의 돌려주는 값에 넷째로 더한다). 공시 줄은 지금처럼 사유별로 따로다(`… — 추적되지 않는다` · `… — <시간 한도>` · `… — 머리를 읽지 못함`).
   - `_open_doc` · `_follow_roadmaps` 는 시간 한도면 `st["timed_out"]` · `st["timed_out_roadmap"]` 를 세우고 `rejected` 를 세우지 않는다. 요약 줄은 「정한 이름과 꼴」.
 
 - [ ] **Step 1: 실패하는 시험을 하나씩 쓴다:**
   - `TestOriginTimeout`(T3 · AC15): 가짜 `subprocess.run` 이 넘길 git 부속 명령을 케이스마다 받게 고친다 — `test_ls_tree_timeout_reason`(`ls-tree` 만 시간 한도 → `<경로> 를 읽지 못함 — git 읽기가 시간 한도 30초를 넘김` · `추적` 글 없음 · 요약 `원문 없음 — 시간 한도로 읽지 못함`) · `test_roadmap_show_timeout_reason`(설계문서 `show` 는 통과 · 로드맵 경로의 `show` 만 시간 한도 → `로드맵 <경로> 를 읽지 못함 — …` · `로드맵 링크 거부` 없음 · 요약 `로드맵 없음 — 시간 한도로 읽지 못함`) · `test_real_link_rejection_unchanged`(링크 문서 → 지금처럼 `원문 링크 거부`).
   - `test_markerless_origin_noticed`(AC16 — `## 6. 사용자 원문` 절은 있고 🗣 · ☑ 가 없는 묶음 → `직접 쓴 말 · 고른 라벨을 가르지 못함` / 짝: 표지가 있는 같은 꼴 문서는 그 줄 없음 — `_ORIGIN_DOC` 픽스처).
   - `TestBreadth`: `test_head_unreadable_counted`(AC17 — 머리가 YAML 로 안 읽히는 바뀐 문서 → 넷째 값 1 · 의도 문서 아님 · `prepare` 공시 `의도 문서인지 확인 못 한 문서 1 — 머리를 읽지 못함`) · `test_review_record_not_intent_doc`(AC18 — 범위 모드에서 바뀐 문서가 `type: roadmap-review` + 의도 표시 → 의도 문서 목록에 없음 · 의도 출처 칸에 그 글 없음).
-  - `test_narrow_label_by_change`(AC19 — 코드 파일이 든 PR → scope 칸 첫 줄 `넓이: 좁게 본다 — 코드가 바뀐 PR` · 문서만 바뀌고 의도 문서 없음 → `넓이: 좁게 본다 — 의도 문서가 바뀌지 않았다` · 바뀐 파일 목록(`review-i<N>.names`)을 지운 실행 → `넓이: 좁게 본다 — 바뀐 파일 목록을 모른다` · 문서만 바뀌고 그 가운데 머리가 YAML 로 안 읽히는 문서가 있음 → `넓이: 좁게 본다 — 의도 문서인지 확인 못 한 문서가 있다` · 문서 아닌 파일과 머리를 못 읽은 문서가 함께 바뀐 PR → `코드가 바뀐 PR`(차례 확인)).
+  - `test_narrow_label_by_change`(AC19 — 코드 파일이 든 PR → scope 칸 첫 줄 `넓이: 좁게 본다 — 코드가 바뀐 PR` · 문서만 바뀌고 의도 문서 없음 → `넓이: 좁게 본다 — 의도 문서가 바뀌지 않았다` · 바뀐 파일 목록(`review-i<N>.names`)을 지운 실행 → `넓이: 좁게 본다 — 바뀐 파일 목록을 모른다` · 문서만 바뀌고 그 가운데 머리가 YAML 로 안 읽히는 문서가 있음 → `넓이: 좁게 본다 — 의도 문서인지 확인 못 한 문서가 있다` · 문서만 바뀌고 그 가운데 추적되지 않는 문서 · 심볼릭 링크 문서가 있음(각각 — 설계 D63) → 같은 글, 공시는 `의도 문서인지 확인 못 한 문서 1 — 추적되지 않는다` 그대로 · 문서 아닌 파일과 머리를 못 읽은 문서가 함께 바뀐 PR → `코드가 바뀐 PR`(차례 확인)).
   - 고치는 기존 시험: `review_breadth` 세 값 언패킹(넷으로).
 - [ ] **Step 2: 실패를 본다** — Run: `cd plugins/quality-gates/tests && python3 -m unittest test_intent_wide -v`.
 - [ ] **Step 3: 구현 · 문서** — 위 Produces.
