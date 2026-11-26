@@ -6,6 +6,10 @@
 `<session-id>` 는 `$CLAUDE_CODE_SESSION_ID` 이고 `[A-Za-z0-9_-]{8,}` 를 통과해야 한다. 형제 폴더는
 다른 세션의 것이다 — 건드리지 않는다.
 
+qg 밖에서 이 폴더의 파일을 이름으로 읽는 쪽이 있다 — spec-distill 지휘자의 머지 앞 리뷰가 `result.md` 의
+`## 판정` · `## 범위` · `## 고칠 목록`(`### 막는 지적` · `### 차등 회귀`) · `## intent-critic` 의 거른 질문 목록 머리 둘,
+`findings-pre-merge.yaml` 의 키, `intent-return.md` 의 질문 칸 `state` 를 읽는다. 이 이름을 바꾸면 그쪽도 함께 바꾼다.
+
 ## 형식
 
 ```markdown
@@ -18,7 +22,8 @@ started_at: "<ISO-8601 UTC>"
 
 ## 판정
 
-<verdict.py 출력 원문 — verdict: · reason: · reasons: 줄과 판정 줄>
+<verdict.py 출력 원문 — verdict: · reason: · reasons: 줄과 판정 줄. `verdict: not-certified` 에 `reason: trivia`(파이프라인을 건너뜀) ·
+ `reason: scope-empty`(대조할 대상이 0)이면 리뷰할 대상이 없던 실행이다>
 
 ## 범위
 
@@ -104,6 +109,10 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 `review-i1.names` · `review-i1.full.diff` · `review-i1.diff` · `review-i1.doc-paths` · `review-i1.self-state` · `review-i1.mode`(Review Step 1c 의 리뷰 diff 와 그 실행이 쓴 범위 모드) ·
 `other-teams.md`(intent-critic 단계의 다른 팀 기록 — 팀 지도 · 진행 중인 의도 문서 · 겹치는 diff · 확인 못 함) —
 도 같은 생명주기를 따른다.
+
+합치기 전 지적 목록 `findings-pre-merge.yaml` 도 같은 폴더에 있고 같은 생명주기를 따른다 — 합성기 `--pre-merge-out` 이 쓰고,
+합성 단계에 닿지 않은 실행에는 없다. 맨 위 키 `findings` 아래 지적마다 `severity` · `file` · `line` · `summary` · `proposed_fix`
+칸이 있고, 막는 지적은 `severity` 가 `CRITICAL` · `IMPORTANT` 인 항목이다.
 
 `intent-*`(intent-critic 단계의 실행 파일 — 예: 리뷰어의 넓이 칸 `intent-scope.md`. 이름과 내용은 `scripts/intent_critic.py` 와 [intent-critic 절차](intent-critic.md)가 정한다)와
 `other-teams.md` 는 판정 · 게시 뒤에만 생기고 다음 실행의 Preflight P2 가 지운다. 답 파일은 세션 폴더가 아니라 docs 답 자리에 산다(레포 설정 `DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR`, 기본
