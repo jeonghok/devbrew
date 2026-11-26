@@ -355,7 +355,9 @@ for ent in raw:
     try:
         with open(os.path.join(root, f), "rb") as fh: txt = fh.read().decode("utf-8")
     except (OSError, UnicodeDecodeError): skipped_decode += 1; continue
-    if rd_: txt = re.sub(r"<!-- switches:begin -->.*?<!-- switches:end -->", "", txt, flags=re.S)   # 끄기 변수 표 표지 안은 표가 맡는다(절 C) — 밖 본문만 코퍼스다
+    if rd_:
+        txt, nsub = re.subn(r"<!-- switches:begin -->.*?<!-- switches:end -->", "", txt, flags=re.S)   # 끄기 변수 표 표지 안은 표가 맡는다(절 C) — 밖 본문만 코퍼스다
+        if nsub != 1: no(f + " 표지 쌍이 %d 개다 — 정확히 한 쌍이어야 표 밖 본문을 가른다" % nsub); continue
     branches.add("plugins/" + plug.group(1) if plug else ("shared" if sh else ("tools" if tl else ("README 산문" if rd_ else "docs/git-workflow"))))
     corpus.append((f, txt))
 if len(corpus) > 50 and len(ret) >= 20: ok("코퍼스 %d 파일(디코드 못 해 뺀 파일 %d 개) · 은퇴 이름 %d 개(별칭 포함)를 도출했다" % (len(corpus), skipped_decode, len(ret)))
@@ -373,7 +375,7 @@ got = sorted(f for f, t in corpus if bare.search(t) and not re.match(r"^plugins/
 want = ["plugins/spec-distill/scripts/review_entry.py", "shared/entry/entry_preflight.py"]
 if got == want: ok("맨이름 " + SKIPNAME + " 가 나오는 파일이 정확히 둘이다")
 else: no("맨이름 " + SKIPNAME + " 가 나오는 파일 집합이 다르다: " + repr(got))
-alltext = "\n".join(t for _, t in corpus)
+alltext = "\n".join(t for f_, t in corpus if not re.match(r"^plugins/[^/]+/README\.md$", f_))   # 남는 이름의 양성 짝은 코드 코퍼스에서 — README 산문은 은퇴 이름 검사에만 든다
 for n in sorted(kept_names):
     if bound(n).search(alltext): ok("남는 이름 " + n + " 가 코퍼스에 있다(양성 짝)")
     else: no("남는 이름 " + n + " 가 코퍼스에 없다")
