@@ -208,6 +208,27 @@ artifact_max_rounds.sh
 `<k>` 명으로 정했으면 라운드당 `<k>`+2 이하이고, 동시 실행은 비평자 `<k>` 명 ∥ codex(adversarial 은 병합 후 순차)다.
 규모는 E3 에서 사용자가 정하고 아래 줄로 라운드마다 공시하며 라운드끼리는 순차라 subagent spray 아님.
 
+**0. 세션 폴더 (대상마다 첫 라운드 앞에 한 번)** — 병합된 지적 · 그 끝 값 사본 · 반박자 응답은 작업 폴더가 아니라
+qg 세션 폴더 아래 이 skill 몫 폴더(`artifact-critique/`)에 쓴다 — 라운드 커밋 · 변경 신호에 들지 않는다. 세션 폴더는
+qg 와 같은 시작 스크립트가 `--ensure` 로 얻는다(세션 마커 `result.md` 가 없으면 마커가 든 뼈대로 만들고, 있으면 그대로
+둔다 — 그래서 정리 · 다음 qg 시작과 수명이 같다). 시작 줄은 버리고 오류만 보인다. `<session-id>` 에는 이 세션의 id 를
+넣는다(아래 라운드 펜스들도 같다):
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] 문서 비평의 세션 폴더를 얻지 못했다 — 이 대상의 비평을 멈춘다" >&2; exit 1; }
+SID="<session-id>"
+"$QG/scripts/setup-qg.sh" --ensure --session-id "$SID" >/dev/null || { echo "[quality-gates] 문서 비평의 세션 폴더를 얻지 못했다 — 이 대상의 비평을 멈춘다" >&2; exit 1; }
+AC="$TOP/.claude/quality-gates/$SID/artifact-critique"
+mkdir -p "$AC" || { echo "[quality-gates] 문서 비평의 세션 폴더를 얻지 못했다 — 이 대상의 비평을 멈춘다" >&2; exit 1; }
+echo "artifact-critique-dir: $AC"
+```
+
+| 결과 | 동작 |
+|---|---|
+| `artifact-critique-dir: <경로>` | 라운드로 간다 |
+| rc ≠ 0 | stderr(시작 스크립트의 사유와 멈춤 줄)를 그대로 보이고 그 대상의 비평을 멈춘다 — 리뷰받는 글을 프롬프트에 끼워 넣는 옛 길로 돌아가지 않는다. 종료 요약의 그 대상 종료 사유에 멈춤 줄을 그대로 싣고 다음 대상으로 간다 |
+
 **라운드 시작** — `detect_codex.sh` 로 codex 가용성을 먼저 보고(판정 규칙은 2), dispatch 전에 이 줄을 낸다:
 
 `> [quality-gates] 라운드 <N> (<대상>) — 비평자 <k>명(기본 1명) · codex <부름 | 안 부름(<사유>)> · 반박자 1명`
@@ -260,20 +281,34 @@ Agent({
   `> [quality-gates] codex 감지기 실행 실패(detector_not_runnable) — tier-unpinned 단독 비평.`
   (위 두 문구와 **구분**된 별도 라인 — "codex가 없다"와 "감지기를 못 돌렸다"는 다른 사실이다.)
 
-**2.5 merge + key** — 비평자 `<k>` 명(+가용·성공 시 codex)의 findings를 dedup하고 dedup_key를 주입:
+**2.5 merge + key** — 비평자 `<k>` 명(+가용·성공 시 codex)의 findings를 dedup하고 dedup_key를 주입해 몫 폴더의
+병합 원본 `merged-t<T>-r<R>.yaml` 에 쓰고(`T` 는 대상 번호 — 대상 목록의 차례, `R` 은 라운드 번호), 반박자 칸에 실을
+끝 값 사본 `merged-t<T>-r<R>-slot.txt` 를 붙인다(원본 끝에 `qg-slot-end: <값>` 한 줄 — 호출마다 새 값). 원본은
+4 의 합성 둘째 걸음이 읽으므로 끝 줄을 붙이지 않는다:
 
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — 이 대상의 비평을 멈춘다." >&2; exit 1; }
+SID="<session-id>"; AC="$TOP/.claude/quality-gates/$SID/artifact-critique"
+T=<대상 번호>; R=<라운드 번호>
+case "$T" in ''|*[!0-9]*) echo "[quality-gates] 대상 번호는 숫자다" >&2; exit 2 ;; esac
+case "$R" in ''|*[!0-9]*) echo "[quality-gates] 라운드 번호는 숫자다" >&2; exit 2 ;; esac
+[ -d "$AC" ] || { echo "[quality-gates] 문서 비평의 세션 폴더를 얻지 못했다 — 이 대상의 비평을 멈춘다(몫 폴더 없음 — 0 의 펜스를 먼저 돈다)" >&2; exit 1; }
+M="$AC/merged-t${T}-r${R}.yaml"
+python3 "$QG/scripts/synthesize_artifact_findings.py" --phase key <--findings critic-1.yaml … --findings critic-k.yaml [--findings codex.yaml]> > "$M" || exit
+python3 -I "$QG/scripts/qg_nonce.py" attach "$M" "$AC/merged-t${T}-r${R}-slot.txt" || exit
 ```
-synthesize_artifact_findings.py --phase key --findings critic-1.yaml … --findings critic-k.yaml [--findings codex.yaml] > merged.yaml
-```
 
-`merged.yaml`의 각 finding은 `dedup_key`를 갖는다(다음 단계 adversarial가 echo).
+자리표는 비평자마다 `--findings critic-<i>.yaml` 하나씩이고, `[--findings codex.yaml]` 은 codex 가 가용 · 성공일 때만 싣는다. 병합 원본의 각 finding은 `dedup_key`를 갖는다(다음 단계 adversarial가 echo). 펜스가 0 이 아니면 그 라운드의 반박자를
+부르지 않는다 — 출력을 보이고 4 의 판정 실패 질문으로 간다.
 
-**3. adversarial** — `artifact-adversarial`(반박자) 디스패치(read-only). `merged.yaml`을 프롬프트에
-   넣어 §10 verdict를 받는다(`finding_key`=각 finding의 `dedup_key`). 출력을 `verdicts.yaml`에 저장.
+**3. adversarial** — `artifact-adversarial`(반박자) 디스패치(read-only). 2.5 의 끝 값 사본 경로
+   (`MERGED_FINDINGS_FILE` = `$AC/merged-t<T>-r<R>-slot.txt`)를 칸에 싣는다 — 내용을 싣지 않는다. 반박자는 그 파일을
+   끝까지 읽고 끝 값을 응답 맨 앞에 적은 뒤 §10 verdict를 낸다(`finding_key`=각 finding의 `dedup_key`). 파일을 읽지
+   못한 반박자는 `QG_INPUT_UNREADABLE: <읽지 못한 경로>` 한 줄만 답한다.
    `project_dir` + E2c 가 인가한 `canonical`(raw `<path>` 아님)을 스레딩한다. adversarial 은 egress 도구가 없다(`tools: Read, Grep, Glob`)
    — 그래도 산출물을 read 하므로 E2c 가 인가한 그 경로로 읽게 critic · codex 와 같은 canonical 을 넘긴다.
-   **`merged.yaml`의 keyed 내용(각 finding의
-   `dedup_key` 포함)을 프롬프트에 그대로 inline** — 이 스레딩이 빠지면 adversarial이
+   **병합 사본 경로(각 finding의 `dedup_key` 가 그 파일에 있다)를 칸에 싣는 것이 빠지면** adversarial이
    `finding_key`를 echo할 수 없어 모든 finding이 미판정(unadjudicated) 처리된다(§10 fail-closed
    경로, Issue 1의 false-convergence 가드가 막아주는 케이스와 직결):
 
@@ -282,27 +317,59 @@ Agent({
   subagent_type: "quality-gates:artifact-adversarial",
   // **처분** — consumer=plugins/quality-gates/scripts/synthesize_artifact_findings.py · fail-closed
   description: "Artifact adversarial review round N",
-  prompt: "project_dir: <project_dir>${PROJECT_DIR}</project_dir>\nartifact_path: <artifact_path>${CANONICAL_PATH}</artifact_path>\n다음은 병합된 keyed findings(merged.yaml)이다 — 각 finding의 dedup_key를 finding_key로 echo하며 §10 verdict(confirm/downgrade/reject)를 매겨라:\n<merged_findings>${MERGED_FINDINGS}</merged_findings>"
+  prompt: "project_dir: <project_dir>${PROJECT_DIR}</project_dir>\nartifact_path: <artifact_path>${CANONICAL_PATH}</artifact_path>\n병합된 keyed findings 는 아래 경로의 파일이다 — 끝까지 읽고, 각 finding의 dedup_key를 finding_key로 echo하며 §10 verdict(confirm/downgrade/reject)를 매겨라:\n<merged_findings_file>${MERGED_FINDINGS_FILE}</merged_findings_file>"
 })
 ```
 
-**4. synthesize (결정론)** —
+**응답 쓰기.** 반박자 응답 전체를 글자 그대로 몫 폴더의 `adversarial-t<T>-r<R>.txt` 에 쓴다 — 4 의 합성기가 그 글에서
+끝 값을 찾는다. `verdicts.yaml` 에는 응답 안의 YAML 블록만 쓴다 — 블록 밖 글(`qg-slot-end:` 줄 포함)과 펜스 줄은 넣지
+않는다(합성기가 그 파일 전체를 YAML 로 읽는다). 값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를
+먼저 돌려 나온 8자를 아래 `<8 hex>` 네 자리에 넣는다. 반박자가 죽어 응답이 없으면 두 몸을 빈 줄로 둔다:
 
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — 이 대상의 비평을 멈춘다." >&2; exit 1; }
+SID="<session-id>"; AC="$TOP/.claude/quality-gates/$SID/artifact-critique"
+T=<대상 번호>; R=<라운드 번호>
+case "$T" in ''|*[!0-9]*) echo "[quality-gates] 대상 번호는 숫자다" >&2; exit 2 ;; esac
+case "$R" in ''|*[!0-9]*) echo "[quality-gates] 라운드 번호는 숫자다" >&2; exit 2 ;; esac
+[ -d "$AC" ] || { echo "[quality-gates] 문서 비평의 세션 폴더를 얻지 못했다 — 이 대상의 비평을 멈춘다(몫 폴더 없음 — 0 의 펜스를 먼저 돈다)" >&2; exit 1; }
+cat > "$AC/adversarial-t${T}-r${R}.txt" <<'QG_ADV_RESP_<8 hex>'
+<반박자 응답 전체 — 글자 그대로. 응답이 없으면 빈 줄>
+QG_ADV_RESP_<8 hex>
+cat > verdicts.yaml <<'QG_ADV_VERDICTS_<8 hex>'
+<응답 안의 YAML 블록 본문만 — 블록 밖 글(qg-slot-end: 줄 포함)과 펜스 줄은 넣지 않는다. 블록이 없으면 빈 줄>
+QG_ADV_VERDICTS_<8 hex>
 ```
-synthesize_artifact_findings.py --phase synth --findings merged.yaml --adversarial verdicts.yaml
+
+**4. synthesize (결정론)** — 병합 원본을 읽고, 반박자 응답 전체를 끝 값 사본과 먼저 견준다:
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — 이 대상의 비평을 멈춘다." >&2; exit 1; }
+SID="<session-id>"; AC="$TOP/.claude/quality-gates/$SID/artifact-critique"
+T=<대상 번호>; R=<라운드 번호>
+case "$T" in ''|*[!0-9]*) echo "[quality-gates] 대상 번호는 숫자다" >&2; exit 2 ;; esac
+case "$R" in ''|*[!0-9]*) echo "[quality-gates] 라운드 번호는 숫자다" >&2; exit 2 ;; esac
+[ -d "$AC" ] || { echo "[quality-gates] 문서 비평의 세션 폴더를 얻지 못했다 — 이 대상의 비평을 멈춘다(몫 폴더 없음 — 0 의 펜스를 먼저 돈다)" >&2; exit 1; }
+python3 "$QG/scripts/synthesize_artifact_findings.py" --phase synth --findings "$AC/merged-t${T}-r${R}.yaml" --adversarial verdicts.yaml --adversarial-response "$AC/adversarial-t${T}-r${R}.txt" --slot "$AC/merged-t${T}-r${R}-slot.txt"
 ```
 
 출력에서 `converged` / `degraded` / `degraded_reason` / `unadjudicated` / `kept_*` /
-`stagnation_keys` / `kept:`를 읽는다.
+`stagnation_keys` / `kept:` / `adversarial_slot` 을 읽는다. 응답에 칸 사본의 끝 값이 없으면 합성기가 그 판정을 쓰지 않고
+`degraded: true` · `degraded_reason: adversarial` · `adversarial_slot: 끝 값 없음`(응답에 `QG_INPUT_UNREADABLE:` 로
+시작하는 줄이 있으면 `읽지 못함`)을 낸다 — 끝 값이 맞으면 `adversarial_slot: ok` 다.
 - `unadjudicated > 0` → loud log(모드마다 다르다):
   - 「고치며 돌기」: `> [quality-gates] adversarial 미판정 <N>건 — 이번 라운드 편집 제외(fail-closed).`
   - 「지적만 받기」: `> [quality-gates] 반박자가 판정 못 한 지적 <N>건 — 고친 것도 버린 것도 아니다, 보고에 「판정 못 함」으로 따로 싣는다.`
 - `degraded: true` → adversarial가 0-verdict/파싱불가(findings는 있었음), 또는 findings-side
   로드 실패, 또는 손실 있는 phase-key 병합(`degraded_reason: adversarial|findings_load|sources_failed`).
   kept-empty를 수렴으로 읽지 **않는다** → **NEEDS_RESOLUTION**: `AskUserQuestion`으로
-  *"이번 라운드 adversarial 판정 실패(사유: `<degraded_reason>`) — 재시도 / 중단?"*
+  *"이번 라운드 adversarial 판정 실패(사유: `<degraded_reason>`<사유 괄호>) — 재시도 / 중단?"*
   (false-convergence fail-open 봉쇄). `degraded_reason`을 사용자에게 노출해 원인(adversarial
-  실패인지 findings 로드 실패인지 소스 유실인지)을 알린다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다.
+  실패인지 findings 로드 실패인지 소스 유실인지)을 알린다. `<사유 괄호>` 는 `adversarial_slot` 이 `끝 값 없음` ·
+  `읽지 못함` 일 때만 `(<그 값>)` 이다 — 예: 「이번 라운드 adversarial 판정 실패(사유: `adversarial`(끝 값 없음)) — 재시도 / 중단?」.
+  재시도는 2.5 펜스부터 다시 돈다 — 반박자를 다시 부르는 호출도 새 끝 값의 사본을 받는다. 권하는 쪽이 있으면 첫 자리로 옮기고 라벨 끝에 「(권장)」을 단다.
 
 **4b. 지적만 받기면 여기서 끝** — 「지적만 받기」 모드면 남은 `kept` 를(SUGGESTION 포함) 보고하고 그 대상을 끝낸다 —
    5~9 와 편집 · 커밋을 하지 않는다(종료 사유 `findings_only`). `degraded: true` 면 위 NEEDS_RESOLUTION 게이트가 먼저다.

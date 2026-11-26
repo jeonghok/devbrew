@@ -650,5 +650,63 @@ class LegacyRuntimeEvidenceMarker(unittest.TestCase):
         self.assertFalse(folder.exists(), "runtime-evidence.md 만 남은 옛 폴더가 회수되지 않는다 — 업그레이드 누수")
 
 
+
+class ArtifactCritiqueSessionTest(unittest.TestCase):
+    """문서 비평이 얻은 세션 폴더 — 마커가 서고 정리 · 다음 qg 시작과 수명이 같다(R7 AC33).
+    문서 비평 SKILL 의 세션 폴더 펜스를 tests/lib/skill_fence.py 로 뽑아 임시 리포에서 돈다."""
+
+    ROOT = Path(__file__).resolve().parent.parent
+    SID = "artgcsess01"
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        for args in (["init", "-q", "-b", "main"], ["config", "user.name", "t"],
+                     ["config", "user.email", "t@example.com"]):
+            subprocess.run(["git", "-C", str(self.tmp)] + args, check=True, capture_output=True)
+        self.env = os.environ.copy()
+        for k in ("CLAUDE_CODE_SESSION_ID", "DEVBREW_QUALITY_GATES_DISABLE",
+                  "DEVBREW_QUALITY_GATES_TTL_HOURS", "DEVBREW_QUALITY_GATES_GC_VERBOSE"):
+            self.env.pop(k, None)
+        self.env["CLAUDE_PLUGIN_ROOT"] = str(self.ROOT)
+        self.env["PYTHONDONTWRITEBYTECODE"] = "1"
+        r = subprocess.run([sys.executable, str(self.ROOT / "tests" / "lib" / "skill_fence.py"),
+                            str(self.ROOT / "skills" / "artifact-critique" / "SKILL.md"),
+                            'setup-qg.sh" --ensure --session-id', "--sub", "<session-id>", self.SID],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.fence = self.tmp / "fence.sh"
+        self.fence.write_text(r.stdout, encoding="utf-8")
+        self.folder = self.tmp / ".claude" / "quality-gates" / self.SID
+
+    def _artifact_only_run(self):
+        r = subprocess.run(["bash", str(self.fence)], cwd=self.tmp, env=self.env,
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        (self.folder / "artifact-critique" / "merged-t1-r1.yaml").write_text("findings: []\n",
+                                                                           encoding="utf-8")
+
+    def test_artifact_only_session_has_marker_and_is_collected(self):
+        self._artifact_only_run()
+        self.assertTrue((self.folder / "result.md").is_file(), "문서 비평 펜스만 돈 세션 폴더에 마커가 없다")
+        old = time.time() - 48 * 3600
+        for dirpath, dirnames, filenames in os.walk(self.folder):
+            for name in filenames + dirnames:
+                os.utime(os.path.join(dirpath, name), (old, old))
+        os.utime(self.folder, (old, old))
+        proc = run_gc(self.tmp)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertFalse(self.folder.exists(), "기한이 지난 문서 비평 세션 폴더를 정리가 지우지 않는다")
+
+    def test_next_qg_start_not_refused(self):
+        self._artifact_only_run()
+        r = subprocess.run(["bash", str(self.ROOT / "scripts" / "setup-qg.sh"), "--session-id", self.SID],
+                           cwd=self.tmp, env=self.env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("Quality Gates 를 시작한다", r.stdout)
+        self.assertFalse((self.folder / "artifact-critique").exists(),
+                         "다음 qg 시작이 세션 폴더째 새로 만든다")
+
+
 if __name__ == "__main__":
     unittest.main()
