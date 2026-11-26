@@ -44,6 +44,7 @@ INDENT = "    "
 PREFIX = "[spec-distill] "
 STAMP = "%Y-%m-%d %H:%M"
 AGENTS = "살아 있는 agent"
+HC_FINISHED = "finished"   # `hc ls --all` 이 함께 내는 끝난 터미널의 state — 살아 있는 내 자식으로 세지 않는다
 LEFT_ROWS = ("작업", "자원", AGENTS)   # 머지 뒤 일이 남았는지 보는 기계 상태 절(에픽 칸이 그 에픽인 줄) — 걸음 6 이 치우는 줄만 센다
 LEFT_KIND = "worktree"   # 자원 가운데 걸음 6 이 치우는 종류 — 보관 · 임시 · 옮김 폴더 같은 자원 줄은 세지 않는다(설계 §2)
 AGENTS_PER_EPIC = 9   # 계획 1 · 구현 1 · 통합 리뷰 1 · qg 담당자 4 · spec 리뷰 한 라운드의 리뷰어 2
@@ -381,7 +382,7 @@ def seg_workers(machine, why):
     rc, out, err = run(["hc", "ls", "--json", "--all"])
     try:
         terms = json.loads("\n".join(out))["terminals"] if rc == 0 else None
-        kids = [t for t in terms if t.get("parent") == me]
+        kids = [t for t in terms if t.get("parent") == me and t.get("state") != HC_FINISHED]
     except (ValueError, KeyError, TypeError, AttributeError):
         kids = None
     if kids is None:

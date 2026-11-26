@@ -606,7 +606,7 @@ class Steps(SyncRepo):
 class Workers(SyncRepo):
     def test_session_workers(self):
         self.assertEqual(self.ledger("claim", "--roadmap", RM, "--session", SID)[0], 0)
-        for cells in ("plan-e1 · E1 · 계획 · /wt/e1 · t", "sub-x · E1 · 구현 · /wt/x · t"):
+        for cells in ("plan-e1 · E1 · 계획 · /wt/e1 · t", "sub-x · E1 · 구현 · /wt/x · t", "done-w · E1 · 구현 · /wt/d · t"):
             self.assertEqual(self.ledger("add", "--roadmap", RM, "--session", SID, "--section", "살아 있는 agent",
                                          "--cells", cells)[0], 0)
             self.addCleanup(self.ledger, "drop", "--roadmap", RM, "--session", SID, "--section", "살아 있는 agent",
@@ -614,6 +614,9 @@ class Workers(SyncRepo):
         terms = [{"address": "t9b", "name": "plan-e1", "parent": ME, "state": "live", "status": "working"},
                  {"address": "t9c", "name": "stray", "parent": ME, "state": "live", "status": "idle"},
                  {"address": "t8z", "name": "sub-x", "parent": "t1a", "state": "live", "status": "working"},
+                 {"address": "t9d", "name": "done-w", "parent": ME, "state": "finished", "status": None,
+                  "exit_code": 0},   # 머지 앞 리뷰 지적 2 — 끝난 내 자식은 살아 있는 자식이 아니다
+                 {"address": "t9e", "name": "gone-x", "parent": ME, "state": "finished", "status": None, "exit_code": 1},
                  {"address": ME, "name": "leader", "state": "live", "status": "working"}]
         self.hc_json.write_text(json.dumps({"hidden_finished": 0, "terminals": terms}), encoding="utf-8")
         self.addCleanup(self.hc_json.write_text, json.dumps({"terminals": []}), encoding="utf-8")
@@ -621,16 +624,18 @@ class Workers(SyncRepo):
         env = dict(self.env, HC_TERMINAL_ID=ME, FAKE_HC_LOG=str(log))
         rc, out, err = self.sync(env=env)
         self.assertEqual(rc, 0, out + err)
-        self.assertIn("\n세션 담당자 — 이상: 표 2 · 내 자식 2 · 어긋남 2\n", out)
+        self.assertIn("\n세션 담당자 — 이상: 표 3 · 내 자식 2 · 어긋남 3\n", out)
         self.assertIn("\n    견줄 줄: sub-x · E1 · 구현\n", out)
+        self.assertIn("\n    견줄 줄: done-w · E1 · 구현\n", out)   # 터미널이 끝난 담당자의 표 줄
+        self.assertNotIn("t9e", out)   # 표에 없는 끝난 터미널은 「표에 없는 내 자식」 이 아니다
         self.assertIn("\n    표에 없는 내 자식: t9c stray idle\n", out)
         self.assertNotIn("plan-e1", out)
         self.assertEqual(log.read_text(encoding="utf-8").split("\n")[0], "ls --json --all")
-        self.assertEqual(sorted(r["이름"] for r in self.machine()["살아 있는 agent"]), ["plan-e1", "sub-x"])   # 표의 줄은 그대로
+        self.assertEqual(sorted(r["이름"] for r in self.machine()["살아 있는 agent"]), ["done-w", "plan-e1", "sub-x"])   # 표의 줄은 그대로
         nohc = dict(env, PATH="%s:/usr/bin:/bin" % self.bin_nohc)
         rc, out, err = self.sync(env=nohc)
         self.assertEqual(rc, 0, out + err)
-        self.assertIn("\n세션 담당자 — hc 없음 — 표의 줄 2 은 하니스 agent 목록과 견줄 줄\n", out)
+        self.assertIn("\n세션 담당자 — hc 없음 — 표의 줄 3 은 하니스 agent 목록과 견줄 줄\n", out)
 
 
 class Team(SyncRepo):
