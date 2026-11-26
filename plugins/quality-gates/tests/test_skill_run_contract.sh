@@ -200,7 +200,7 @@ EXT="$(awk '/^\*\*External reviewers\*\*/{f=1} f&&/^\*\*다른 전제 각도/{ex
 EXTF="$(printf '%s\n' "$EXT" | awk '/^```text$/{f=1;next} f&&/^```$/{exit} f')"
 [ -n "$EXTF" ] && ok "외부 리뷰어 프롬프트 펜스를 찾았다" || no "외부 리뷰어 프롬프트 펜스가 없다"
 assert_contains "$EXTF" '<criteria>${CRITERIA}</criteria>' "E: 외부 리뷰어 프롬프트가 기준 블록을 싣는다"
-assert_contains "$EXTF" '<intent>${INTENT}</intent>' "E: 외부 리뷰어 프롬프트가 의도 출처를 싣는다"
+assert_contains "$EXTF" '<intent_file>${INTENT_FILE}</intent_file>' "E: 외부 리뷰어 프롬프트가 의도 출처(칸 사본 경로)를 싣는다"
 assert_contains "$EXT" '**처분** — consumer=orchestrator · fail-open · disclosure=실패' "외부 리뷰어 dispatch 자리가 처분을 밝힌다"
 assert_grep "$EXT" 'marked `실패` in the end line' "처분의 disclosure 리터럴이 본문의 공시 문장에 실재한다"
 # M2 — 「실패」 가 실릴 자리가 iteration 줄 템플릿에 실재한다(처분 줄의 disclosure 채널).

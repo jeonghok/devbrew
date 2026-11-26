@@ -164,7 +164,7 @@ case_pick_fence() {
   syn=$(make_synth pick 'verdicts:
   - {f: f1, verdict: lower, evidence: "의도 출처는 캐시 무효화만 요구한다"}')
   pick() {   # pick <번호들>
-    printf '%s\n' "$fence" | LC_ALL=C sed -e "s|<Step 3.5 의 절대 경로>|${syn%/synth.out}|" -e "s|<기타 칸에서 읽은 L 번호들 — 쉼표로, 예: L1,L3 · 「전부」와 같은 뜻이면 all>|$1|" > "$ROOT/pick.sh"
+    printf '%s\n' "$fence" | LC_ALL=C sed -e "s|<Step 3 의 RV 절대 경로>|${syn%/synth.out}|" -e "s|<기타 칸에서 읽은 L 번호들 — 쉼표로, 예: L1,L3 · 「전부」와 같은 뜻이면 all>|$1|" > "$ROOT/pick.sh"
     grep -q '^PICK=.<' "$ROOT/pick.sh" && echo "자리표가 채워지지 않았다(펜스의 PICK 자리 글자가 바뀌었다)"
     bash "$ROOT/pick.sh" 2>&1
   }
