@@ -357,6 +357,32 @@ onein "team 검수 걸음의 qg" "$TQB" "다음 시도의 구현 결과 파일�
 for tok in '보관 폴더' '상태 파일' 'qg-' 'state' 'resource-dir'; do
   assert_not_contains "$DLINE" "$tok" "AC23: 결정 기록에 싣는 한 줄에 「${tok}」 가 없다(보관 폴더 · 상태 파일 경로를 싣지 않는다)"
 done
+# team-return-path(fix 1 I1) — 반려 때 적는 처리 파일은 next 가 그 경로를 열어 처리 머리를 찾는 자리다: 리더 worktree 안 다음 시도의 구현 결과 파일 · 돌아오면 next 전에 과제 브랜치를 가져온다
+RPATH='`<과제 폴더>/results/implement-plan-<n>-<시도>.md` 절대경로'
+onein "team 검수 걸음의 qg" "$TQB" "리더가 과제 브랜치를 읽는 worktree(\`--repo\` 로 넘기는 자리) 안의 ${RPATH}"
+onein "team 검수 걸음의 qg" "$TQB" '`<시도>` 는 보낼 때 그 계획의 가장 큰 `implement` 시도 번호에 1 을 더한 수다'
+onein "team 검수 걸음의 qg" "$TQB" '담당자가 돌아오면 `next` 를 부르기 전에 그 worktree 에서 `git fetch origin` 뒤 `git merge --ff-only origin/<과제 브랜치>` 로 과제 브랜치를 가져온다'
+assert_not_contains "$TQB" '처리 파일은 그 시도의 구현 결과 파일의 절대경로' "team 검수 걸음의 qg: 어느 자리 · 어느 시도인지 없던 옛 처리 파일 글이 없다(양성 짝: worktree 안 다음 시도 파일)"
+rp_shape() {  # rp_shape <글> — 글이 인용한 처리 파일 이름이 결과 파일 이름 꼴(team_layout._RESULT_RE)의 implement 계획 결과면 yes
+  PYTHONDONTWRITEBYTECODE=1 PYTHONIOENCODING=utf-8 python3 -I -c 'import re, sys
+sys.path.insert(0, sys.argv[2])
+import team_layout as L
+m = re.search(r"`<과제 폴더>/results/([^`]+)` 절대경로", sys.argv[1])
+name = m.group(1).replace("<n>", "1").replace("<시도>", "2") if m else ""
+r = L._RESULT_RE.fullmatch(name)
+print("yes" if r and r.group(1) == "implement" and r.group(2) == "1" and r.group(3) == "2" else "no")' "$1" "$ROOT/plugins/spec-distill/scripts"
+}
+assert_eq "$(rp_shape "$TQB")" "yes" "team 검수 걸음의 qg: 처리 파일 이름이 결과 파일 이름 꼴(team_layout)의 implement 계획 결과다"
+assert_eq "$(rp_shape '`<과제 폴더>/results/implement-<시도>-plan-<n>.md` 절대경로')" "no" "양성 대조: 칸 차례가 틀린 이름은 no"
+assert_eq "$(rp_shape '`<과제 폴더>/results/review-plan-<n>-<시도>.md` 절대경로')" "no" "양성 대조: 검수 결과 파일 이름은 no"
+# team-handling-number(fix 1 m2) — 결정 기록 한 줄이 처리를 펜스가 보인 막는 지적 번호로 적게 한다(스크립트가 펜스에 짓는 꼴)
+assert_contains "$DLINE" '`막는 지적 <n>` 번호마다' "team-handling-number: 결정 기록 한 줄이 막는 지적 번호마다 처리를 쓰라고 싣는다"
+assert_eq "$(grep -cF '"- 막는 지적 %d"' "$ROOT/plugins/spec-distill/scripts/qg_review_state.py")" "1" "team-handling-number: 펜스가 「- 막는 지적 <n>」 꼴로 번호를 보인다(스크립트)"
+# gate-rc-pointer(fix 1 m1) — 「그 밖이면 next」 뒤에 종료 코드의 뜻을 가리킨다(2 · 3 은 next 로 가지 않는다)
+RCP='종료 코드의 뜻(2 부른 꼴을 고친다 · 3 사유를 보이고 멈춘다)은 `qg-review.md` 의 `## 머지 앞 리뷰 상태` 다.'
+for w in "걸음 5:$(step 5)" "손 절차 8:$M8B" "team PR 전 확인:$TPR"; do onein "${w%%:*}" "${w#*:}" "$RCP"; done
+# step1-resource(fix 1 m3) — 보관 폴더를 자원에 적는 것은 두 형식 모두
+once 1 '두 형식 모두 그 보관 폴더는 `open` 이 `## 자원` 에 적는다'
 # mark-timing-step3 — 설계 대화로 돌아간 에픽은 고친 설계의 구현이 돌아오면 mark 「다시 구현됨」(AC9)
 once 3 '고친 설계의 구현 담당자가 돌아오면 `qg_review_state.py record` 의 `mark` 「다시 구현됨」 을 적고 `next` 를 부른다'
 assert_not_contains "$(step 5)" '(team 형식은 검수 결과 파일의 펜스 안)' "걸음 5: qg 답 자리가 옛 형식 문장 안 괄호에만 있지 않다"
