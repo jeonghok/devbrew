@@ -229,7 +229,7 @@ class TestPrepareHanded(unittest.TestCase):
         self._prep(self._handed_file(_doc(_yaml_entry(e2))))
         self.assertIn("질문: - · 관찰: 관찰 하나", tic._read(self.rd, "intent-answered.md"))
 
-    def test_stale_copy_removed_without_evidence_and_on_kill_switch(self):
+    def test_stale_copy_removed_without_evidence(self):
         h = self._handed_file(_doc(_yaml_entry(_entry())))
         copy = os.path.join(self.rd, "intent-handed.yaml")
         self._prep(h)
@@ -237,16 +237,6 @@ class TestPrepareHanded(unittest.TestCase):
         os.remove(os.path.join(self.rd, "e2e-record.md"))
         p = self._prep(h)
         self.assertEqual(tic._last(p), "intent-call: none")
-        self.assertFalse(os.path.exists(copy))
-        tic._write("관찰\n", self.rd, "e2e-record.md")
-        self._prep(h)
-        self.assertTrue(os.path.exists(copy))
-        sp = os.path.join(self.rd, "intent-specs.json")
-        p = tic._cli("prepare", "--rd", self.rd, "--repo", self.R, "--tree-root", self.R,
-                     "--mode", "pr", "--head", "HEAD", "--review-commit", "HEAD",
-                     "--specs-json", sp, "--answered", h,
-                     env=tic._env(**{tic.KILL: "1"}))
-        self.assertEqual(p.returncode, 0, p.stderr)
         self.assertFalse(os.path.exists(copy))
 
     def test_no_answered_arg_unchanged(self):

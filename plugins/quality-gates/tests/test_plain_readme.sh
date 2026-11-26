@@ -115,10 +115,6 @@ case_readme_rows_10_26_32() {
   assert_contains "$(sed -n '1,40p' "$PLUGIN_ROOT/scripts/review-diff.sh")" "stdout 11줄" "review-diff.sh 머리 주석이 stdout 11줄이라 말한다(실제 출력과 같은 수)"
   # 행 26 — 범위로 부른 리뷰에서 문서만 바뀐 범위는 바뀐 의도 문서의 머리 줄을 따라간다.
   assert_eq "$(printf '%s' "$flat" | grep -oF '범위로 부른 리뷰에서 문서만 바뀐 범위면 바뀐 의도 문서의 머리 줄을 따라간다' | wc -l | tr -d ' ')" "1" "범위 호출이 바뀐 의도 문서의 머리 줄을 따라간다는 문장이 한 번 있다"
-  # 행 32 — 단계 스위치 행이 record 도 말한다.
-  row="$(grep -F '| `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC=1` |' "$RM")"
-  assert_contains "$row" '`record` 도 이 스위치를 읽어 답 파일을 쓰지 않는다' "단계 스위치 행이 record 도 이 스위치를 읽는다고 말한다"
-  assert_contains "$row" '`prepare` 도 스위치를 스스로 읽어' "같은 행이 prepare 도 말한다(양의 짝)"
 }
 
 for c in case_readme_one_pass case_readme_limits_one_pass case_readme_rows_10_26_32; do

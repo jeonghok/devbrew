@@ -94,7 +94,7 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
    쌓아 둔 것을 옮기고, 비었으면 절을 쓰지 않는다. 그 뒤 `## Publish` 의 게시 펜스가 끝에 `## 게시` 를 덧붙인다. `## 게시` 는 하나뿐이다 —
    이미 있으면 펜스는 덧붙이지 않고 `게시 안 함 — 이 실행은 이미 게시 단계를 돌았다` 만 출력한다. 그 뒤 intent-critic 단계가 끝에 `## intent-critic` 을 덧붙인다(하나뿐 — 이미 있으면 덧붙이지 않는다).
    이미 덧붙였는지는 세션 폴더의 `intent-rendered.txt` 로 정하고, 그때는 `intent-critic — 이 실행은 이미 intent-critic 단계를 돌았다` 만 출력한다.
-   단계를 건너뛴 실행(kill switch · 멈춘 실행 · trivia · 빈 diff · 리뷰 트리를 만들지 못함)에는 이 절이 없다 — 건너뜀 줄은 출력과 `intent-return.md` 에만 있다.
+   단계를 건너뛴 실행(멈춘 실행 · trivia · 빈 diff · 리뷰 트리를 만들지 못함)에는 이 절이 없다 — 건너뜀 줄은 출력과 `intent-return.md` 에만 있다.
 3. **지운다** — 세션 폴더는 같은 세션의 다음 qg 시작에 지워진다(`scripts/setup-qg.sh`). 그 세션이 qg 를 다시 부르지 않으면, 폴더가 정리 기한(기본 24시간)보다 오래된 뒤 어느 세션이든 qg 를 시작할 때 지워진다(`scripts/qg-gc.py`). `result.md` 가 세션 폴더의 표지다.
 
 같은 폴더의 다른 파일 — `intent.md`(의도 출처 본문) ·
@@ -111,14 +111,14 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 
 ## 돌려주는 꼴 — `intent-return.md` (3판)
 
-쓰는 쪽은 `intent_critic.py` 의 `gate`(건너뜀 줄) · `prepare`(꺼짐 줄 · 건너뜀) · `render`(실행 끝) 이다. 파일은 펜스 `qg-intent-return` 하나로 이루어진다. 읽는 쪽은 `contract` 가 모르는 판이면 읽지 않고 그 사실을 알린다. `contract` 칸이 없는 파일은 1판이다. 글 칸은 한 줄로 접혀 따옴표에 싸이고, 닫힌 어휘 칸은 따옴표 없이 쓴다. 펜스 안은 YAML 이다 — 없음 표지 `-` 는 따옴표에 싸여 나간다(`reason: "-"`).
+쓰는 쪽은 `intent_critic.py` 의 `gate`(건너뜀 줄) · `prepare`(건너뜀) · `render`(실행 끝) 이다. 파일은 펜스 `qg-intent-return` 하나로 이루어진다. 읽는 쪽은 `contract` 가 모르는 판이면 읽지 않고 그 사실을 알린다. `contract` 칸이 없는 파일은 1판이다. 글 칸은 한 줄로 접혀 따옴표에 싸이고, 닫힌 어휘 칸은 따옴표 없이 쓴다. 펜스 안은 YAML 이다 — 없음 표지 `-` 는 따옴표에 싸여 나간다(`reason: "-"`).
 
 부르는 쪽은 이 파일에서 시작해 `session_dir` 로, 거기서 `other_teams` 로 내려간다. 내부 파일(`intent-questions.yaml`)은 읽지 않는다. 나중에 쓸 부르는 쪽이 가져갈 것은 이 파일과(다른 팀 기록이 필요하면) `session_dir` 아래 `other_teams` 값의 파일 둘이다.
 
 - 머리 칸(차례대로): `contract` · `status` · `reason` · `reason_text` · `outcome` · `result_line` · `none_reason` · `mode` · `reviewed_head` · `reviewed_base` · `session_dir` · `answers_dir` · `answers_dir_source` · `commit` · `breadth` · `other_teams` · `overlaps` · `answered_filtered` · `questions`
 - 질문 칸(차례대로): `n` · `id` · `state` · `answer` · `answer_text` · `wrong_choice` · `failure` · `file` · `evidence` · `question` · `target_source` · `target_id` · `label` · `quote` · `observation` · `why` · `asked_before` · `changed_observation`
 - 칸 `status` 의 값: `ran` · `uncountable` · `skipped` · `failed`
-- 칸 `reason` 의 값(skipped): `kill-switch` · `halted` · `trivia` · `empty-diff` · `no-evidence`
+- 칸 `reason` 의 값(skipped): `kill-switch`(옛 판이 남긴 값) · `halted` · `trivia` · `empty-diff` · `no-evidence`
 - 칸 `reason` 의 값(failed): `tree-failed`
 - 칸 `outcome` 의 값(ran): `questions` · `none` · `no-evidence` · `all-filtered`
 - 질문 칸 `state` 의 값: `답함` · `답 기록 실패` · `답하지 않음` · `묻지 않음` · `상한 넘어 남김`

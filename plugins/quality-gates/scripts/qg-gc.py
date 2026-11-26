@@ -9,14 +9,6 @@ Race guard: 3-layer (state root 디렉토리 fd 락 + double-stat ns + rename-th
 루트가 심볼릭 링크를 거쳐 제자리 밖으로 풀리면 락을 잡기 전에 거부하고, 루트 안의 링크
 자식은 세션 폴더로 보지 않는다. 두 검사는 `gc_common` 정본의 `root_escapes` · `locked_root` 다.
 
-Kill switches:
-  DEVBREW_QUALITY_GATES_DISABLE=1        → no-op.
-  DEVBREW_SKIP_HOOKS=quality-gates:qg-gc → no-op (이 스크립트 하나만).
-
-훅이 아니지만 `DEVBREW_SKIP_HOOKS` 토큰으로 지목할 이름을 갖는다 — 이관 전에는
-전역 스위치 하나뿐이라 "이 GC만 끈다"가 불가능했다. kill switch 는 opt-out
-컨트롤이므로 **더 잘 꺼지는** 방향이고, 회귀는 반대 방향(덜 꺼짐)뿐이다.
-
 TTL override: DEVBREW_QUALITY_GATES_TTL_HOURS (positive int, default 24).
 Verbose: DEVBREW_QUALITY_GATES_GC_VERBOSE=1 → print summary line on stdout.
 """
@@ -29,7 +21,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from gc_common import gc_one, locked_root, root_escapes, ttl_ns  # noqa: E402
-from kill_switch_active import kill_switch_active  # noqa: E402
 
 ROOT = Path(".claude/quality-gates")
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
@@ -85,8 +76,6 @@ def _verbose() -> bool:
 
 
 def gc(self_session_id: str | None = None) -> int:
-    if kill_switch_active("quality-gates", "qg-gc"):
-        return 0
     # 탈출 판정이 존재 검사보다 먼저다 — 매달린 루트 링크나 밖에 루트가 아직 없는 `.claude`
     # 링크에서 조용히 끝나면, 뒤이은 `setup-qg.sh` 의 `mkdir -p` 가 링크 너머에 폴더를 만드는
     # 동안 아무도 모른다. realpath 는 없는 경로도 풀므로 `.claude` 가 없는 저장소는 거부되지 않는다.

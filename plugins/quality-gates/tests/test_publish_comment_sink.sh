@@ -163,14 +163,12 @@ case_AC13_kill_switch_AC14_zero_network() {
   DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "skipped: kill-switch" "AC13 kill-switch: 마지막 줄"
   assert_eq "$GHCALLS" "" "AC14: DISABLE_PUBLISH=1 이면 gh 호출이 0"
+  # 은퇴한 통째 끄기는 더 듣지 않는다 — 켜도 sink 가 게시한다(짝: 위 DISABLE_PUBLISH=1 은 gh 호출 0).
   DEVBREW_QUALITY_GATES_DISABLE=1 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
-  assert_eq "$LAST" "skipped: kill-switch" "AC13 kill-switch(전역): 마지막 줄"
-  assert_eq "$GHCALLS" "" "AC14: 전역 DISABLE=1 이면 gh 호출이 0"
+  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "은퇴한 전역 DISABLE=1 은 sink 를 끄지 않는다"
   # 전체 토큰 일치(E5) — 「1」 밖의 값은 스위치가 아니다.
   DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=10 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
   assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "E5: DISABLE_PUBLISH=10 은 스위치가 아니다"
-  DEVBREW_QUALITY_GATES_DISABLE=10 GH_PR="$OPEN_PR" run_sink "$WITH_GH" --body-file "$BODY"
-  assert_eq "$LAST" "posted: https://github.com/o/r/pull/7#issuecomment-1" "E5: 전역 DISABLE=10 도 스위치가 아니다"
 }
 case_AC13_scan_failed() {
   local bad="$T/bad.md"

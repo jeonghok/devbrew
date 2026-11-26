@@ -7,6 +7,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -20,7 +21,6 @@ ic = tic._load("intent_critic")
 
 GLOBAL = "DEVBREW_QUALITY_GATES_DISABLE"
 STAGE = tic.KILL
-KILL_RESULT = "intent-critic 꺼짐(kill switch)"
 HEX40 = set("0123456789abcdef")
 
 
@@ -89,65 +89,32 @@ class TestReturnHead(unittest.TestCase):
                 self.assertEqual(block["result_line"], tic._last(p))
                 self.assertEqual(block["mode"], "range")
 
-    def test_stage_and_global_switch(self):
-        for path, env in (("final", {STAGE: "1"}), ("trivia", {GLOBAL: "1"})):
-            with self.subTest(path=path):
-                self._gate(path, **env)
-                _t, block = self._head()
-                self.assertEqual((block["status"], block["reason"], block["outcome"],
-                                  block["result_line"]),
-                                 ("skipped", "kill-switch", "-", KILL_RESULT))
-                var = next(iter(env))
-                self.assertEqual(block["reason_text"], "intent-critic 꺼짐(kill switch — %s=1)" % var)
-
-    def test_both_switches_named(self):
-        self._gate("final", **{GLOBAL: "1", STAGE: "1"})
+    def test_retired_switches_do_not_skip_gate(self):
+        # 은퇴한 의도 점검 끄기 · 통째 끄기는 더 듣지 않는다 — 켜도 gate 가 실행 줄을 낸다.
+        # 짝: 건너뛰는 길(trivia)은 같은 환경에서도 건너뜀 블록을 쓴다.
+        for env in ({STAGE: "1"}, {GLOBAL: "1"}, {GLOBAL: "1", STAGE: "1"}):
+            with self.subTest(env=env):
+                p = self._gate("final", **env)
+                self.assertEqual(p.stdout, "intent-gate: run\n")
+                self.assertFalse(os.path.exists(os.path.join(self.rd, "intent-return.md")))
+        p = self._gate("trivia", **{GLOBAL: "1", STAGE: "1"})
         _t, block = self._head()
-        self.assertEqual(block["reason_text"],
-                         "intent-critic 꺼짐(kill switch — DEVBREW_QUALITY_GATES_DISABLE=1 · "
-                         "DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC=1)")
+        self.assertEqual((block["status"], block["reason"]), ("skipped", "trivia"))
+        self.assertEqual(block["result_line"], tic._last(p))
 
-    def test_switch_value_must_be_one(self):
-        self._gate("final", **{GLOBAL: "0", STAGE: "yes"})
-        self.assertFalse(os.path.exists(os.path.join(self.rd, "intent-return.md")))
-
-    def test_prepare_global_switch_reads_nothing(self):
+    def test_retired_switches_do_not_stop_prepare(self):
+        # prepare 도 은퇴한 두 변수를 읽지 않는다 — 다른 팀 기록 · scope 칸을 평소대로 쓴다.
         tic._write(tic._config_text(), self.rd, "intent-config.txt")
         sp = os.path.join(self.rd, "specs.json")
         tic._write(json.dumps({"intent_source": "spec-trailer", "specs": []}), sp)
-        env = tic._env(**{GLOBAL: "1"})
+        env = tic._env(**{GLOBAL: "1", STAGE: "1"})
         p = tic._cli("prepare", "--rd", self.rd, "--repo", self.rd, "--tree-root", self.rd,
                      "--mode", "pr", "--head", "HEAD", "--review-commit", "HEAD",
                      "--specs-json", sp, env=env)
-        self.assertEqual((p.returncode, tic._last(p)), (0, KILL_RESULT))
-        for name in (ic.OTHER_TEAMS, ic.SCOPE):
-            self.assertFalse(os.path.lexists(os.path.join(self.rd, name)), name)
-        _t, block = self._head()
-        self.assertEqual((block["status"], block["reason"], block["result_line"]),
-                         ("skipped", "kill-switch", KILL_RESULT))
-        self.assertEqual(block["reason_text"],
-                         "intent-critic 꺼짐(kill switch — %s=1)" % GLOBAL)
-
-        def boom(*_a, **_k):
-            raise AssertionError("다른 팀 읽기가 불렸다")
-
-        saved = ic._teams
-        ic._teams = boom
-        try:
-            ns = ic._parser().parse_args(
-                ["prepare", "--rd", self.rd, "--repo", self.rd, "--tree-root", self.rd,
-                 "--mode", "pr", "--head", "HEAD", "--review-commit", "HEAD",
-                 "--specs-json", sp])
-            old = dict(os.environ)
-            os.environ[GLOBAL] = "1"
-            try:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    self.assertEqual(ic.cmd_prepare(ns), 0)
-            finally:
-                os.environ.clear()
-                os.environ.update(old)
-        finally:
-            ic._teams = saved
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertTrue(tic._last(p).startswith("intent-call: "), p.stdout)
+        self.assertNotIn("꺼짐", p.stdout)
+        self.assertFalse(os.path.exists(os.path.join(self.rd, "intent-return.md")))
 
     # ---- render 의 갈래
 
@@ -249,7 +216,7 @@ class TestReturnHead(unittest.TestCase):
         for path in ("aborted", "tree-failed"):
             self._gate(path)
             self._head()
-        self._gate("final", **{GLOBAL: "1"})
+        self._gate("trivia")
         self._head()
         tic._filter_rd(self.rd, call="none")
         self._render()
@@ -503,8 +470,6 @@ class TestQuestionRows(unittest.TestCase):
 ANS_DIR = tic.ANS_DIR
 BLOCKED = "거르기 결과 · 설정 · 답 입력 중 읽지 못한 것이 있다"
 MISMATCH = "정체가 맞지 않는 답 머리"
-KILL_RECORD = "intent-critic 꺼짐(kill switch — %s=1) — 답 파일을 쓰지 않고 커밋하지 않았다"
-KILL_FAILURE = "kill switch(%s=1)가 켜져 있어 기록하지 않음"
 
 
 class TestAnswerInput(unittest.TestCase):
@@ -755,68 +720,20 @@ class TestAnswerInput(unittest.TestCase):
             self.assertEqual((rows[q[0]]["state"], rows[q[0]]["answer"]), ("답 기록 실패", "-"))
         self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개)")
 
-    def _switch_case(self, var, other):
-        qs = self._two()
-        head = tic._git(self.repo, "rev-parse", "HEAD").stdout
-        env = tic._env(**{var: "1"})
-        env.pop(other, None)
-        p = self._record(self._head(qs[0], "잘못 골랐다"), env=env)
-        lines = p.stdout.splitlines()
-        self.assertEqual(lines[0], KILL_RECORD % var)
-        self.assertEqual(p.stdout.count("intent-critic 꺼짐"), 1)
-        self.assertEqual(lines[-1], "record: 0")
-        self.assertFalse(os.path.lexists(os.path.join(self.repo, ANS_DIR)))
-        self.assertFalse(os.path.lexists(os.path.join(self.repo, "docs")))
-        self.assertEqual(tic._git(self.repo, "rev-parse", "HEAD").stdout, head)
-        self.assertEqual(tic._git(self.repo, "status", "--porcelain").stdout, "")
-        self.assertFalse(os.path.lexists(os.path.join(self.rd, "intent-return.md")))
-        self.assertIs(tic._questions(self.rd)["record_ran"], True)
-        line, rows, _t = self._render()
-        first, second = rows[qs[0][0]], rows[qs[1][0]]
-        self.assertEqual((first["state"], first["answer"], first["wrong_choice"], first["failure"]),
-                         ("답 기록 실패", "잘못 골랐다", True, KILL_FAILURE % var))
-        self.assertEqual(second["state"], "답하지 않음")
-        self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개) · 답하지 않음 1개")
-
-    def _switch_unreadable_case(self, var):
-        """스위치가 켜져 있고 답 입력 파일을 읽지 못하면 묻는 질문 모두가 스위치 사유의 답 기록 실패다(답은 `-`)."""
-        qs = self._two()
-        env = tic._env(**{var: "1"})
-        p = self._record(None, env=env, answers=os.path.join(self.tmp.name, "none.txt"))
-        self.assertEqual(p.stdout.splitlines()[0], KILL_RECORD % var)
-        self.assertIn("답 기록 실패 2개 — " + KILL_FAILURE % var, p.stdout.splitlines())
-        self.assertEqual(tic._last(p), "record: 0")
-        line, rows, _t = self._render()
-        for q in qs:
-            row = rows[q[0]]
-            self.assertEqual((row["state"], row["answer"], row["failure"]),
-                             ("답 기록 실패", "-", KILL_FAILURE % var))
-        self.assertEqual(line, "intent-critic — 질문 2개를 물었다 · 답 0개(잘못 골랐다 0개)")
-
-    def test_stage_switch_with_unreadable_input_fails_all_asked(self):
-        self._switch_unreadable_case(STAGE)
-
-    def test_global_switch_with_unreadable_input_fails_all_asked(self):
-        self._switch_unreadable_case(GLOBAL)
-
-    def test_switch_with_identity_wrong_header_fails_that_question(self):
-        """스위치가 켜져 있으면 번호만 맞은 머리의 질문도 스위치 사유의 답 기록 실패다 — 읽힌 고른 답을 싣는다."""
-        qs = self._two()
-        env = tic._env(**{STAGE: "1"})
-        text = "=== n: %d · id: 틀린#정체#방향 · pick: 잘못 골랐다\n" % qs[0][0]
-        p = self._record(text, env=env)
-        self.assertEqual(tic._last(p), "record: 0")
-        _line, rows, _t = self._render()
-        first, second = rows[qs[0][0]], rows[qs[1][0]]
-        self.assertEqual((first["state"], first["answer"], first["wrong_choice"], first["failure"]),
-                         ("답 기록 실패", "잘못 골랐다", True, KILL_FAILURE % STAGE))
-        self.assertEqual(second["state"], "답하지 않음")
-
-    def test_record_stage_switch_writes_nothing(self):
-        self._switch_case(STAGE, GLOBAL)
-
-    def test_record_global_switch_writes_nothing(self):
-        self._switch_case(GLOBAL, STAGE)
+    def test_retired_switches_do_not_stop_record(self):
+        # 은퇴한 두 변수는 record 를 막지 않는다 — 켜도 답 파일을 쓰고 커밋한다.
+        # 짝: 같은 입력이 끄기 변수 없이도 같은 파일 수를 쓴다(test_second_of_same_identity 의 꼴).
+        for var in (STAGE, GLOBAL):
+            with self.subTest(var=var):
+                qs = self._two()
+                env = tic._env(**{var: "1"})
+                p = self._record(self._head(qs[0], "의도다"), env=env)
+                self.assertEqual(tic._last(p), "record: 1")
+                self.assertNotIn("꺼짐", p.stdout)
+                self.assertEqual(len(self._files()), 1)
+                self.assertEqual(tic._git(self.repo, "status", "--porcelain").stdout, "")
+                shutil.rmtree(os.path.join(self.repo, "docs"))
+                tic._git(self.repo, "reset", "--hard", "-q", "HEAD~1")
 
 
 STATE_DOC = tic.REFERENCE.parent / "state-file-format.md"
@@ -993,22 +910,6 @@ class TestReturnDoc(unittest.TestCase):
         carry = ("나중에 쓸 부르는 쪽은 qg 를 다시 부르기 전에 `intent-return.md`(완결)와, 다른 팀 기록이 필요하면 "
                  "`session_dir` 아래 `other_teams` 값의 파일을 가져간다.")
         self.assertEqual(i7.count(carry), 1)
-
-    def test_kill_row_and_tree_removal_agree(self):
-        """꺼짐 줄로 온 범위 모드 실행이 리뷰 트리 지우기 펜스를 지난다고 두 자리가 같이 말한다(12a)."""
-        i5 = self._section("I5 거르기 · 묻기 · 답 기록")
-        para = [l for l in i5.split("\n") if l.startswith("**리뷰 트리 지우기")]
-        self.assertEqual(len(para), 1)
-        self.assertEqual(para[0].count("`prepare` 가 꺼짐 줄을 낸 실행"), 1)
-        self.assertEqual(para[0].count("꺼짐 줄로 온 실행은 `render` 를 돌지 않는다 — 이 펜스의 출력이 꺼짐 줄 뒤에 오고, "
-                                       "I7 에서 꺼짐 줄을 다시 보인다"), 1)
-        i2 = self._section("I2 설정 · 준비")
-        rows = [l for l in i2.split("\n") if l.startswith("| `intent-critic 꺼짐(kill switch)`")]
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].count("돌려주는 꼴은 `prepare` 가 썼다"), 1)
-        self.assertEqual(rows[0].count("범위 모드면 [I5](#i5-거르기--묻기--답-기록) 끝의 리뷰 트리 지우기를 지나 "
-                                       "[I7](#i7-돌려주기)"), 1)
-        self.assertEqual(rows[0].count("render` 도 돌리지 않는다"), 1)
 
     def test_i7_decides_from_fields(self):
         """I7 의 할 일은 꼴의 칸에서 정한다 — 옛 칸 값 · 공시 줄 판독이 없다(AC9)."""

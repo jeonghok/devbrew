@@ -220,10 +220,8 @@ case_preflight_clears_walk_files_but_keeps_the_pgid() {
   assert_not_contains "$rm_line" 'e2e-app.pgid' "X4: P2 가 남은 앱의 pgid 파일을 지우지 않는다"
 }
 
-case_kill_switch_index_names_both() {
+case_kill_switch_index_names_differential_test() {
   local s; s=$(section "$SKILL" "## kill switch")
-  assert_eq "$(printf '%s\n' "$s" | grep -cxF -- '- `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` — e2e 만 끈다. `## e2e` E0 의 지문이 exit 3 으로 끝나 질문이 뜨지 않고, e2e 칸이 `꺼짐(kill switch)` 이다. 집행은 `e2e-state.sh` 다.')" "1" \
-    "kill switch 색인의 DISABLE_E2E 항목이 줄 전체 그대로다(뒤에 덧붙인 말이 없다)"
   assert_grep "$s" 'DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1.*e2e' "kill switch 색인의 DISABLE_DIFFERENTIAL_TEST 줄이 e2e 를 말한다"
   assert_eq "$(printf '%s\n' "$s" | grep -c '^- `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1`')" "1" \
     "kill switch 색인에 DISABLE_DIFFERENTIAL_TEST 항목은 하나다(제자리 확장)"
@@ -263,7 +261,6 @@ case_AC26_P4_sentence_replaced() {
 }
 
 case_readme_documents_the_switches() {
-  assert_file_grep "$README" '^\| `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` \| .*\(지문 · 비교 · 부팅이 exit 3\)\. \|$' "README 표에 DISABLE_E2E 줄이 있다"
   assert_file_grep "$README" '^\| `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` \|.*e2e 부팅' \
     "README 의 DISABLE_DIFFERENTIAL_TEST 줄이 e2e 부팅도 막는다고 말한다"
   assert_file_grep "$README" '^- `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT`: 90 \(' "README 에 부팅 상한 노브가 기본값 90 으로 있다"
@@ -304,10 +301,6 @@ case_readme_security_paragraph_and_principle() {
   assert_file_absent "$README" '주장만 거뒀다' "README: 옛 「주장만 거뒀다」 문장이 없다"
   assert_file_grep "$README" '부팅되는 앱의 런타임 행위는 e2e 걷기가 본다\(아래 P4 줄\)\.$' "README: LD3 의 새 문장이 줄 끝에 있다"
   assert_file_grep "$README" '^- \*\*e2e\*\* — `curl`\(API 시나리오를 걸을 때' "README 사전 요건: curl 은 API 시나리오용"
-}
-
-case_readme_has_disable_e2e_line() {
-  assert_file_grep "$README" '`DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 은 e2e 를 끈다\(판정 줄의 e2e 칸이 `꺼짐\(kill switch\)`\)' "README 범위 절에 DISABLE_E2E 줄이 있다"
 }
 
 case_AC24_more_than_three_candidates_are_disclosed() {

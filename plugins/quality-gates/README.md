@@ -21,7 +21,7 @@
 - **P21 (Secret이 prompt context에 들어가지 않음)** — 결정 도구는 결정과 포인터만 묻고 secret 값은 받지 않는다(SKILL Rules R4). regression test: `tests/test_no_secret_prompts.py`.
 - **P2 (Categorical signal, no numeric scoring)** (v1.9.0; 13.0.0 에서 차등 귀속으로) — 차등 테스트는 unit 마다 범주 여덟(`STILL_GREEN` · `NEW_REGRESSION` · `PRE_EXISTING` · `FIXED` · `NEW_TEST_GREEN` · `NEW_TEST_RED` · `SILENT_DROP` · `BASELINE_UNRUNNABLE`) 중 하나만 낸다(`scripts/diff-test-results.py`). 점수 · 확신도 · 비율은 없다. 범주별 개수는 허용. devbrew P2 "수치 스코어링 ban" instantiation.
 - **Law 2 (codex 격리)** — codex 리뷰(`scripts/run_codex_reviewer.sh`)의 격리는 `codex exec -s read-only` OS-level 샌드박스 + 별도 프로세스 · 모델 패밀리다. agent 파일이 아니라 스크립트라 frontmatter 가 없다(`tests/test_codex_reviewer_frontmatter.sh` 가 agent 파일 부재를 잰다).
-- **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `tools: Read, Grep, Glob` fail-closed allowlist 선언. 보안 각도 구성원이며, kill switch `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능). 디스패치는 `quality-pipeline` SKILL의 보안 각도 지점에 있다.
+- **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `tools: Read, Grep, Glob` fail-closed allowlist 선언. 보안 각도 구성원이다. 디스패치는 `quality-pipeline` SKILL의 보안 각도 지점에 있다.
 - **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — C1 종류 (kebab-case 잘못된 키) frontmatter drift를 자동 차단. "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation.
 - **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
 - **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — 플러그인이 스스로 만드는 일회용 worktree 는 작업 트리 꼭대기의 `.claude/worktrees/` 에 플러그인이 드러나는 이름(`qg-base-<sid 8자>`)으로 만든다 — CLAUDE.md 상태 글머리 ②.
@@ -72,7 +72,7 @@ quality-gates/
 │   └── plugin.json
 ├── agents/                 # 리뷰어 agent (leaf agent; 파이프라인이 dispatch — 쓰기 권한 있는 agent 는 없다)
 │   ├── code-recritic.md         # ① 재비판(Step 3.5) — 출처를 가린 지적 목록을 다시 판정 (read-only)
-│   ├── security-reviewer.md     # ① 보안 각도 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
+│   ├── security-reviewer.md     # ① 보안 각도 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest).
 │   ├── artifact-critic.md       # `/quality-gates:artifact-critique` 게이트 — tier-unpinned critic; 비-코드 산출물의 논리 갭·미기술 전제·불완전·근거 없는 주장·모호성 (read-only)
 │   ├── artifact-adversarial.md  # `/quality-gates:artifact-critique` 게이트 — tier-unpinned 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
 │   ├── intent-critic.md         # intent-critic 단계(판정 · 게시 뒤) — 사용자가 고른 의도 자체가 맞는지 근거 줄을 인용해 묻는다 (read-only · 판정 밖)
@@ -345,7 +345,7 @@ git 이 바이너리로 보는 파일(이미지 · 폰트 같은 진짜 바이�
 
 판정은 `clean` · `defect` · `not-certified (<사유>)` 중 하나다. 판정 줄은 `qg: <판정> · 막는 지적 B · 선택 O · 차등 새 실패 F[ · e2e E] · <sha>` 꼴이다 — `B` 는 막는 지적(CRITICAL · IMPORTANT) 수, `O` 는 선택 사항(SUGGESTION) 수, `F` 는 차등 테스트의 새 실패 수다. e2e 칸은 걷기 직후 게이트의 결과(`pass` · `fail` · `미확인` · `무효`)이거나 걷지 않은 까닭(`안 함` · `걸을 것 없음` · `걸을 도구 없음` · `꺼짐(kill switch)`)이다. 막는 지적이나 차등 defect 가 있어도 qg 는 코드를 고치지 않는다. 고칠 것은 `result.md` 의 `## 고칠 목록`(`### 막는 지적` · `### 제안` · `### 차등 회귀`)에 남고, 사용자가 고친 뒤 qg 를 다시 부른다.
 
-차단 스위치: `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 은 차등 테스트를 건너뛴다(판정은 `not-certified (kill-switch)`). `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 은 e2e 를 끈다(판정 줄의 e2e 칸이 `꺼짐(kill switch)`). `DEVBREW_QUALITY_GATES_DISABLE=1` 은 전부를 끈다.
+차단 스위치: `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 은 차등 테스트를 건너뛴다(판정은 `not-certified (kill-switch)`).
 
 ## Recipes
 
@@ -524,8 +524,8 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 테스트 스위트가 **기본으로, 별도 동의 질문 없이** 호스트 권한으로 돈다 — 이전에는 게이트
 범위 질문에서 "Run both gates" 를 골라야만 닿던 표면이다. 그 실행(setup · 러너 · 테스트)을
 끄는 스위치는 아래 `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이다. e2e 는 사람이 고른 시나리오의 부팅
-명령을 호스트 권한으로 실행한다 — 시나리오를 고르는 것이 그 실행의 승인이고, 같은 스위치와
-`DEVBREW_QUALITY_GATES_DISABLE_E2E=1` 이 그 실행을 막는다(`e2e-state.sh` — CLI 직접 걷기에서는 그 게이트가 명령마다의
+명령을 호스트 권한으로 실행한다 — 시나리오를 고르는 것이 그 실행의 승인이고, 같은 스위치가
+그 실행을 막는다(`e2e-state.sh` — CLI 직접 걷기에서는 그 게이트가 명령마다의
 코드가 아니라 오케스트레이터가 읽는 지문 rc 다). 선언 경로의
 봉인 · 합치기(`topic-head.sh`)는 스위치와 무관하게 돌되 저장소 git 훅을 끈 채 돈다. **범위
 밖(부채)** — 스위치도 훅 끄기도 qg 가 부르는 git 전체를 덮지 않는다: HEAD 축 · 기준선
@@ -543,19 +543,11 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 - e2e `stop` 과 다른 사용자의 프로세스: 승인된 명령이 다른 사용자 권한의 프로세스(`sudo` 류)를 그룹에 띄우면 그 프로세스는 내리지 못하고 `stop` 이 `stop-failed` 로 끝난다.
 - e2e 부팅 정리 실패: 부팅이 실패한 뒤 boot 자신의 정리(stop)까지 실패하면 boot 는 `boot-failed:` 줄 없이 exit 5 로 끝나고 앱이 남을 수 있다 — 그 앱은 사람이 직접 내려야 한다.
 
-**전역 (모든 reviewer + GC 비활성화):**
-
-| Env var | 효과 |
-|---|---|
-| `DEVBREW_QUALITY_GATES_DISABLE=1` | `qg-gc.py` no-op. `/quality-gates:quality-pipeline` 은 맨 앞 사전 검사가 `[devbrew-entry] disabled` 줄을 내고 거기서 멈춘다 — setup 도 파이프라인 본문(Preflight P2)도 부르지 않고 세션 폴더도 쓰지 않으며 agent 도 부르지 않는다(판정 자체가 나지 않는다 — `not-certified` 도 아니다). 본문이 직접 불려도 Preflight P1 이 즉시 리턴한다. `/quality-gates:artifact-critique` 도 사전 검사가 같은 줄로 먼저 멈추고, 그 skill 의 E0 가 같은 스위치를 한 번 더 본다. |
-
 **각도 · 리뷰어 단위 disable:**
 
 | Env var | 효과 |
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` | codex 리뷰(`scripts/run_codex_reviewer.sh`) 완전 skip (model-family diversity layer off). `scripts/detect_codex.sh`가 우선 검사. |
-| `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` | 보안 각도의 `security-reviewer`만 skip. 재비판 · codex · 추가 리뷰어는 여전히 fire. **판정이 `not-certified (angle-absent)` 가 된다** — 탐지 0 이어도. 형제 `DISABLE_CODEX`는 다른 전제 각도라 부재를 공시만 한다. |
-| `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC=1` | intent-critic 단계만 끈다 — 넓게 보기와 다른 팀 읽기도 함께 끈다(둘 다 이 단계 안에서만 돈다). 판정에 닿지 않는다. 결과 줄은 「intent-critic 꺼짐(kill switch)」 한 줄이다. 집행 `intent_critic.py gate` — `prepare` 도 스위치를 스스로 읽어, `gate` 를 거치지 않고 불려도 넓이 판정 · 다른 팀 읽기 · 열린 PR 조회를 하지 않는다. `record` 도 이 스위치를 읽어 답 파일을 쓰지 않는다. |
 
 **차등 테스트 · 스코프 단위 disable:**
 
@@ -563,7 +555,6 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE` | **제거됨(13.0.0)** — 의도 입력은 언제나 codex 에 실린다. codex 를 끄려면 `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` 을 쓴다. 이 변수를 `1` 로 두면 codex 러너가 그 사실을 stderr 한 줄로 알리고 그대로 진행한다. |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` | ② 차등 테스트를 통째로 건너뛴다(리뷰 대상 저장소의 코드를 호스트 권한으로 돌리지 않는다). 판정은 `not-certified (kill-switch)` 다 — `clean` 도 실패도 아니다. `run-test-selection.sh` 도 집행한다(`run` 이 저장소 코드를 돌리지 않는다). 같은 약속으로 e2e 부팅도 막는다 — `e2e-state.sh` 가 지문 · 부팅을 거부하고 판정 줄의 e2e 칸이 `꺼짐(kill switch)` 이다. |
-| `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` | e2e 만 끈다. 질문이 뜨지 않고 판정 줄의 e2e 칸이 `꺼짐(kill switch)` 이다 — 판정은 다른 축이 정한 그대로다. 집행은 `e2e-state.sh` 다(지문 · 비교 · 부팅이 exit 3). |
 
 자체 테스트 격리용 샌드박스(`create-sandbox` · `mutation-guard`)와 그 스위치는 v10.0.0 에서
 `plugins/plugin-audit` 로 옮겨 갔다(`DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX`).
@@ -573,15 +564,6 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 | Env var | 효과 |
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` | 게시만 끈다. 집행은 sink `publish-comment.sh` 의 첫 검사다 — gh 를 한 번도 부르지 않고 `skipped: kill-switch` 를 낸다. 판정 · 로컬 결과는 그대로다. 플러그인 전체를 끄는 `DEVBREW_QUALITY_GATES_DISABLE=1` 도 같은 검사에서 게시를 멈춘다. |
-
-**GC 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:qg-gc`):
-
-| 키 | 위치 | 기능 |
-|---|---|---|
-| `quality-gates:qg-gc` | `scripts/qg-gc.py` | TTL-GC 스크립트. 훅이 아니지만 지목할 이름을 갖는다 — 전역 스위치 없이 "이 GC만 끈다"를 위한 자리다. `.claude` 나 state root 가 링크인 경우의 해법이 아니다 — 그때는 setup 이 `/quality-gates:quality-pipeline` 을 거부하므로 실제 디렉토리로 바꾼다(「파이프라인 state」 절) |
-
-대조는 **전체 토큰**이다(앞뒤 공백은 떼고, 쉼표로 여럿을 준다) — 이름의 앞부분만 준 값 같은 부분 일치나
-`quality-gates:qg-gc:x` 같은 더 긴 토큰은 끄지 않는다(`tests/test_entry_safety_e1_e6.sh` E5).
 
 ## 한계
 
@@ -610,7 +592,7 @@ stale sibling 폴더(mtime이 `DEVBREW_QUALITY_GATES_TTL_HOURS`(기본 24h)보�
 
 **`.claude` 나 `.claude/quality-gates` 가 심볼릭 링크면 `/quality-gates:quality-pipeline` 은 돌지 않는다** — 링크가 리포 안을
 가리켜도 setup 이 거부 줄 하나를 내고 exit 1 로 멈춘다(링크 너머를 지울 수 있어서다). 해법은 그 자리를
-실제 디렉토리로 바꾸는 것이다. 아래 GC 키(`quality-gates:qg-gc`)로 GC 를 꺼도 이 거부는 그대로다.
+실제 디렉토리로 바꾸는 것이다.
 
 이 파일들은 `*.local.md` 가 아니라 따로 무시되지 않는다. 리포의 `.gitignore` 가 `.claude/` 를 무시하지 않으면
 세션 폴더가 untracked 로 보인다 — 커밋하지 말고 무시 줄(`.claude/quality-gates/`)을 더하라. 게시 sink 는 이

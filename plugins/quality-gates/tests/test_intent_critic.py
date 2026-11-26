@@ -1145,16 +1145,19 @@ ID1 = SRC + "#D1#방향"
 
 
 class TestGate(unittest.TestCase):
-    def test_kill_switch_first(self):
-        for path in ("trivia", "final"):
-            with tempfile.TemporaryDirectory() as rd:
-                p = _cli("gate", "--rd", rd, "--path", path, env=_env(**{KILL: "1"}))
-                self.assertEqual(p.returncode, 0, p.stderr)
-                self.assertEqual(_last(p), "intent-critic 꺼짐(kill switch)")
-                text, block = _return_block(rd)
-                self.assertEqual((block["status"], block["reason"]), ("skipped", "kill-switch"))
-                self.assertEqual(block["questions"], [])
-                self.assertFalse(os.path.exists(os.path.join(rd, "result.md")))
+    def test_retired_switches_do_not_skip(self):
+        # 은퇴한 의도 점검 끄기 · 통째 끄기는 더 듣지 않는다 — 켜도 final 이면 실행 줄을 낸다.
+        # 짝: 같은 환경에서 건너뛰는 길(trivia)은 평소의 건너뜀 줄을 낸다.
+        for env in ({KILL: "1"}, {GLOBAL_KILL: "1"}):
+            with self.subTest(env=env):
+                with tempfile.TemporaryDirectory() as rd:
+                    p = _cli("gate", "--rd", rd, "--path", "final", env=_env(**env))
+                    self.assertEqual(p.returncode, 0, p.stderr)
+                    self.assertEqual(p.stdout, "intent-gate: run\n")
+                    self.assertFalse(os.path.exists(os.path.join(rd, "intent-return.md")))
+                with tempfile.TemporaryDirectory() as rd:
+                    p = _cli("gate", "--rd", rd, "--path", "trivia", env=_env(**env))
+                    self.assertEqual(_last(p), "intent-critic — 건너뜀(작은 수정 — trivia)")
 
     def test_paths(self):
         cases = {"aborted": "intent-critic — 건너뜀(멈춘 실행)",
@@ -3287,11 +3290,8 @@ class TestProcedureDoc(unittest.TestCase):
         self.assertEqual(section.count("\n=== n: <첫 질문의 n> · id: <첫 질문의 id> · pick: "), 1)
         self.assertNotIn("=== id: <", section)
         self.assertNotIn("<k>` — 이 질문의 차례", section)
-        self.assertEqual(section.count(
-            "| `intent-critic 꺼짐(kill switch — …) — 답 파일을 쓰지 않고 커밋하지 않았다` | 그대로 보이고 "
-            "[I6](#i6-렌더) — 답이 있던 질문은 `답 기록 실패` 로 남는다 |"), 1)
         self.assertEqual(section.count("| 범위 모드 | 묻지 않는다 — 질문은 모두 `묻지 않음` 으로 돌려준다."), 1)
-        self.assertEqual(section.count("답 파일을 쓰지 못했거나 · 스위치로 막혔거나 · 머리가 맞지 않은 답이다"), 1)
+        self.assertEqual(section.count("답 파일을 쓰지 못했거나 · 머리가 맞지 않은 답이다"), 1)
         # 문서의 머리 꼴이 스크립트가 받는 꼴과 같다.
         self.assertTrue(ic.HEADER.startswith("=== n: ") and ic.ID_SEP == " · id: "
                         and ic.PICK_SEP == " · pick: ")
@@ -3318,7 +3318,7 @@ class TestProcedureDoc(unittest.TestCase):
         i7 = self._section("I7 돌려주기")
         lead = ("- `render` 가 돈 실행이면 `result.md` 의 `## intent-critic` 의 「다른 팀과 겹치는 곳:」 · "
                 "「다른 팀 확인 못 함:」 목록")
-        skipped = "단계를 건너뛴 실행(kill switch · 멈춘 실행 · trivia · 빈 diff · 리뷰 트리를 만들지 못함)에는 이 절이 없다"
+        skipped = "단계를 건너뛴 실행(멈춘 실행 · trivia · 빈 diff · 리뷰 트리를 만들지 못함)에는 이 절이 없다"
         self.assertEqual(text.count(lead), 1)
         self.assertEqual(i7.count(lead), 1)
         line = [l for l in i7.split("\n") if l.startswith(lead)][0]

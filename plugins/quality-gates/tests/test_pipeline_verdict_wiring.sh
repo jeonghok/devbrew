@@ -247,43 +247,6 @@ added: []'
 
 
 
-case_security_kill_switch_routes_to_absent() {
-  # Fix round 1, Important 3(a)(plan-mandated) — Review Focus 5 의 A2 변이(각도
-  # 표 :499 를 `filled` 로, IF item 4 :287 를 `security: filled` 로 바꿔치기)가
-  # 기존 락 전부를 GREEN 인 채로 통과시켰다: 옛 락은 한 번도 «이 kill switch 가
-  # absent 로 간다» 는 라우팅 자체를 재지 않았다(합성기 행동만 rf_synth 픽스처로
-  # 쟀지, SKILL 문서가 그 경로로 실제로 매핑하는지는 안 쟀다). 이제 세 지점을
-  # 각각 같은-줄/같은-문단으로 고정한다.
-  local got
-  got=$(python3 - "$SKILL" <<'PY'
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-lines = text.splitlines()
-
-# (i) 각도 표의 kill-switch 행 — `| | `absent` | `DEVBREW_...SECURITY_REVIEWER=1` |`
-tbl = [l for l in lines if l.lstrip().startswith("|") and "DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1" in l]
-print(f"TBL_ROWS:{len(tbl)}")
-tbl_ok = sum(1 for l in tbl if "absent" in l and "filled" not in l)
-print(f"TBL_OK:{tbl_ok}")
-
-# (ii) IF item 4 — "각도 파일(Step 4)에" 와 같은 줄에 `security: absent`
-item4 = [l for l in lines if "각도 파일(Step 4)에" in l]
-print(f"ITEM4_ROWS:{len(item4)}")
-item4_ok = sum(1 for l in item4 if "security: absent" in l and "security: filled" not in l)
-print(f"ITEM4_OK:{item4_ok}")
-
-# (iii) fail-closed 문단 — "absent(source-failed)" 를 담는다(문단 창, 다음 빈 줄까지)
-m = re.search(r'\*\*fail-closed 의 뜻\*\*.*?(?=\n\s*\n)', text, re.S)
-print(f"FC_OK:{1 if (m and 'absent(source-failed)' in m.group(0)) else 0}")
-PY
-)
-  assert_grep "$got" '^TBL_ROWS:1$'  "각도 표의 보안 kill-switch 행이 정확히 하나 있다"
-  assert_grep "$got" '^TBL_OK:1$'    "그 행이 absent 이고 filled 가 아니다(A2 가 filled 로 바꾸면 RED)"
-  assert_grep "$got" '^ITEM4_ROWS:1$' "IF item 4(각도 파일(Step 4)에 쓰는 줄)가 정확히 하나 있다"
-  assert_grep "$got" '^ITEM4_OK:1$'   "그 줄이 security: absent 를 쓰고 security: filled 가 아니다"
-  assert_grep "$got" '^FC_OK:1$'      "fail-closed 문단이 absent(source-failed) 로 매핑한다"
-}
-
 case_differential_kill_switch_env_name_is_pinned() {
   # Fix round 1, Important 3(b) — KS 변이(SKILL 의 세 자리 모두에서
   # DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST 를 오탈자로 바꿔치기)가 R-V 의
@@ -429,7 +392,7 @@ for c in case_every_synth_call_emits_verdict_and_angles case_blocking_angle_disp
          case_differential_runs_once_before_verdict \
          case_security_switch_is_not_certified_even_with_zero_findings \
          case_different_premise_absent_is_disclosed_not_blocked case_caller_reasons_reach_the_verdict \
-         case_security_kill_switch_routes_to_absent case_differential_kill_switch_env_name_is_pinned \
+         case_differential_kill_switch_env_name_is_pinned \
          case_differential_defect_goes_to_fix_list \
          case_one_pass_routing_has_no_cap \
          case_recritic_findings_stamp_agent_and_drop_confidence \

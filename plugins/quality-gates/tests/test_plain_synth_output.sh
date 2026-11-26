@@ -161,6 +161,4 @@ assert_contains "$err" "세션 ID(session ID)가 비어 있어 상태 폴더를 
 assert_not_contains "$err" "cannot create pipeline state" "R10: 옛 영어 세션 ID 없음 오류가 없다"
 err="$(cd "$T/w" && bash "$SETUP" --session-id 'bad id' 2>&1 >/dev/null)"
 assert_contains "$err" "가 허용 모양([A-Za-z0-9_-]{8,})이 아니다(fails pattern guard)." "R10: 세션 ID 모양 오류"
-err="$(cd "$T/w" && DEVBREW_QUALITY_GATES_DISABLE=1 bash "$SETUP" 2>&1 >/dev/null)"
-assert_contains "$err" "DEVBREW_QUALITY_GATES_DISABLE=1 이 켜져 있어 /quality-gates:quality-pipeline 을 시작하지 않는다(setup-qg disabled)." "R10: kill switch 거부 줄"
 finish

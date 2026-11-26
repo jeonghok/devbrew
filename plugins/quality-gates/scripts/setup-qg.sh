@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Quality Gates — 진입 setup. 세 가지만 한다: kill switch · 세션 폴더(SID 가드) · 인자 거부.
+# Quality Gates — 진입 setup. 두 가지만 한다: 세션 폴더(SID 가드) · 인자 거부.
 # 파일 I/O 는 여기(bash)에서 한다 — SKILL 의 Write 도구를 거치지 않아 권한 질문이 뜨지 않는다.
 
 set -euo pipefail
@@ -10,12 +10,6 @@ critique_notice() {
   echo "> [quality-gates] 문서 비평은 이제 /quality-gates:artifact-critique <경로> 로 부른다 — 파이프라인은 실행하지 않는다."
   exit 2
 }
-
-# --- kill switch (SKILL Preflight P1 도 같은 스위치를 본다 — 직접 호출도 막는다) ---
-if [[ "${DEVBREW_QUALITY_GATES_DISABLE:-}" == "1" ]]; then
-  echo "[quality-gates] DEVBREW_QUALITY_GATES_DISABLE=1 이 켜져 있어 /quality-gates:quality-pipeline 을 시작하지 않는다(setup-qg disabled)." >&2
-  exit 1
-fi
 
 # --- 인자 ---
 REMOVED_ARGS=""   # v9 에서 없앤 게이트 인자 — 공지 후 진행

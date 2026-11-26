@@ -96,10 +96,6 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 **Expected**: scope is git-derived fresh at invocation time (branch diff against base, unioned with the worktree's own changed files), not cached from a prior turn or session file — `/quality-gates:quality-pipeline` on `main` reviews `main`'s own diff against its base, not the leftover `feature/qg-cost-reduction` diff. No explicit reset step is needed; there is no session-scope file to go stale.
 
 
-### L — `DEVBREW_QUALITY_GATES_DISABLE=1`
-**Run**: set env var, then start a new Claude Code session AND attempt `/quality-gates:quality-pipeline`.
-**Expected**: the `/quality-gates:quality-pipeline` skill's setup fence calls `setup-qg.sh`, which refuses with one line (`[quality-gates] DEVBREW_QUALITY_GATES_DISABLE=1 이 켜져 있어 /quality-gates:quality-pipeline 을 시작하지 않는다(setup-qg disabled).`) and exit 1 before writing anything (`tests/test_entry_safety_e1_e6.sh`); `/quality-gates:quality-pipeline` shows that line and stops — the pipeline skill is not invoked. If the skill is reached anyway, SKILL Preflight P1 returns immediately.
-
 ## Static Wiring Checks (automated)
 
 > **제거된 표면 — 역사 기록으로 남긴다.** 오늘의 파이프라인에는 대응 경로가 없다.
@@ -176,14 +172,6 @@ fcntl.flock(fd, fcntl.LOCK_EX); print("holding"); time.sleep(600)'
 ```
 2. In another terminal, run `/quality-gates:quality-pipeline`. The GC step inside setup should silently skip (no error).
 3. Stale folders preserved.
-
-### V6 — Kill switch globally disables
-
-```bash
-DEVBREW_QUALITY_GATES_DISABLE=1 /quality-gates:quality-pipeline
-```
-1. Verify no `.claude/quality-gates/` folder created.
-2. Verify `qg-gc.py` exits 0 without action.
 
 ### T-1 — 토픽 스코프: 형제 브랜치 둘 + 미커밋 변경
 
