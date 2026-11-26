@@ -291,8 +291,8 @@ for f, txt in entries:
     if sum(1 for x in sec if g1(plug) in x) == 1 and ln.count(g1(plug)) == 1 and after.startswith(" " + g1(plug)): ok(name + " G1 이 첫 판 문장 뒤 같은 줄에 한 번 있다")
     else: no(name + " G1 이 첫 판 문장 뒤 같은 줄에 정확히 한 번 있지 않다")
     g2 = after.split(g1(plug), 1)[1] if g1(plug) in after else ""
-    if Q in g2 and OPT1 in g2 and OPT2 in g2 and g2.index(OPT1) < g2.index(OPT2): ok(name + " 같은 줄에 질문과 두 선택지가 차례대로 있다")
-    else: no(name + " 같은 줄에 질문 · 선택지 두 개(계속한다 → 멈춘다)가 다 있지 않다")
+    if g2 == " 질문 `" + Q + "` · 선택지 " + OPT1 + " · " + OPT2 + ". " + G8: ok(name + " G1 뒤 같은 줄에 질문 · 선택지 두 개(계속한다 → 멈춘다) · 추천 없음 구절만 이어진다")
+    else: no(name + " G1 뒤 같은 줄이 질문 · 선택지 두 개(계속한다 → 멈춘다) · 추천 없음 구절 그대로가 아니다")
     if ln.count(G8) == 1 and ln.endswith(G8) and "(권장)" not in ln: ok(name + " 같은 줄 끝에 추천 없음 구절이 한 번 있다")
     else: no(name + " 같은 줄 끝에 추천 없음 구절이 정확히 한 번 있지 않다")
     try: rows = rd(plug)

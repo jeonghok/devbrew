@@ -44,7 +44,7 @@ allowed-tools:
 | 그 자리의 내용 | 동작 |
 |---|---|
 | `[devbrew-entry] ok …` | 아래 의존 확인 펜스로 간다. 그 줄의 `root=` 값을 `## 입력` 에서 쓴다 |
-| `[devbrew-entry] error …` | `[spec-distill] spec-review 사전 검사 실패 — <reason= 값>.` 과 위 복귀 문장을 내고 멈춘다 |
+| `[devbrew-entry] error …` | `[spec-distill] spec-review 사전 검사 실패 — <reason= 값>.` 과 `[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 이 설계문서 점검을 마친 뒤 문서를 승인받는 자리).` 를 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[spec-distill] spec-review 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다.` 와 위 복귀 문장을 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[spec-distill] spec-review 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다.` 와 위 복귀 문장을 내고 멈춘다 |
 
