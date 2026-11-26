@@ -49,7 +49,7 @@ for lit in 'superpowers:systematic-debugging' 'superpowers:verification-before-c
 done
 for lit in '직접 merge 하지 않는다' '다음 task 경계에서 merge 하라고' '그 에픽만 멈추고 알린다' '`redecompose.md`' '브랜치는 지우지 않는다' 'ledger pending' '맡을 에픽을 제안하고' '이슈를 새로 만드는 것은 그때마다 묻는다'; do once 6 "$lit"; done
 for lit in '끝에서 끝 확인' 'qg-review.md` 를 읽고 그 자리(「로드맵 끝」)' '`qg-review.md` 의 `## 호출 줄` 대로 한다' 'ledger release'; do once 7 "$lit"; done
-for lit in 'qg-review.md` 를 읽고 그 자리(「머지 앞」)' '머지 앞 qg 리뷰와 되돌리기 → 스위트 대조'; do once 5 "$lit"; done
+for lit in 'qg-review.md` 를 읽고 그 자리(「머지 앞」)' '머지 앞 qg 리뷰와 되돌리기 → 관문(`gate`) → 스위트 대조'; do once 5 "$lit"; done
 # 병렬 — 보내거나 거둘 때마다 동시 가능한 일을 훑어 바로 보낸다(사용자 「일단 더 병렬진행 안한 이유는 3개 진행중이어서인거야?」)
 PAR='agent 를 보내거나 거둘 때마다 상태 계산의 동시 가능 목록과 승인된 설계의 남은 계획을 훑어, 의존 · 같은 파일 겹침 · 기다리는 답이 없는 일은 규모를 알리고 바로 보낸다 — 동시에 돌리는 큰 작업의 권장 수는 기본 3(레포 설정 파일이나 로드맵 머리말의 `parallel_default` 로 바꾼다)이고 상한이 아니다(사용자가 늘린다).'
 once 1 "$PAR"
@@ -245,8 +245,120 @@ once 5 'team 형식이면 표시 없는 `conductor_branch.py confirm` 이 낸 �
 once 5 '사용자가 머지를 정하면 그 출력의 「확인할 끝」 으로 `conductor_branch.py confirm --confirmed <확인할 끝>` 을 불러 확인한 끝을 기록한다 — 1 로 끝나면 끝이 옮겨진 것이니 새로 낸 목록을 다시 보이고 묻는다. 그 전에는 `sync` 가 그 목록을 접지 않는다.'
 assert_not_contains "$(step 5)" '`conductor_status.py show` 가 내는 「이 기계가 쓴 것으로 적힌 고침」 목록' "걸음 5: 접기 전에 싣는 목록은 끝을 찍지 않는 show 의 것이 아니다"
 once 7 '표지를 풀기 전에 내가 띄운 살아 있는 터미널이 0 인지 본다'
-once 5 '두 형식 모두 머지 앞 qg 의 사용자 답도 싣는다 — PR 본문 `## qg 리뷰` 의 사용자 답(team 형식은 PR 이 열릴 때 검수 결과 파일의 펜스 내용을 그 절로 옮겨 두었다)'
-once 5 '그 PR 의 머지 앞 리뷰 기록 파일(자리 글자 `premerge-pr<번호>` · `recheck-pr<번호>`, team 형식은 `premerge-<과제>-plan<n>` · `recheck-<과제>-plan<n>`)의 `- 답:` 줄'
+# ── R9 Task 11 — 다시 들어오기 · 머지 관문 · team 형식이 리뷰 상태 스크립트를 부른다(설계 §3 · §4 · §5 · §9 · AC1 · AC6 · AC8 · AC9 · AC10 · AC20 · AC23)
+QRS="$ROOT/plugins/spec-distill/skills/epic-conductor/references/qg-review.md"
+TEAMS="$(awk '$0=="## team 형식 로드맵"{f=1;next} f&&/^## /{exit} f' "$CD")"
+MANS="$(awk '$0=="## 손으로 따르는 절차"{f=1;next} f' "$CD")"
+mstep() { printf '%s\n' "$MANS" | awk -v n="$1" 'index($0, n ". ")==1{f=1;print;next} f&&/^[1-9]\. /{exit} f'; }
+tbul() { printf '%s\n' "$TEAMS" | awk -v h="$1" 'index($0, h)==1'; }
+TQB="$(tbul '- **검수 걸음의 qg.**')"; TPR="$(tbul '- **PR 전 확인.**')"; M8B="$(mstep 8 | grep -F -- '- **머지 앞 qg 리뷰.**')"
+[ -n "$TQB" ] && [ -n "$TPR" ] && [ -n "$M8B" ] && [ -n "$(mstep 1)" ] && ok "R9: team 절 · 손 절차의 불릿을 읽었다" || no "R9: team 절 · 손 절차의 불릿이 비었다 — 아래 단언이 공허하다"
+onein() { assert_eq "$(printf '%s\n' "$2" | grep -oF -- "$3" | wc -l | tr -d ' ')" "1" "${1}: 「${3}」 정확히 한 번"; }
+# 인용한 이름이 스크립트에 실재한다 — 명령 · 글 짓기 종류 · 답 적기 종류 · 표시 값 · 처리 머리(재도출: 스크립트에서 읽는다)
+SNAMES="$(PYTHONDONTWRITEBYTECODE=1 python3 -I -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import qg_review_state as S
+print("cmd", "|".join(S.COMMANDS)); print("kind", "|".join(S.RENDER_KINDS)); print("item", "|".join(sorted(S.ITEM_FIELDS)))
+print("mark", "|".join(sorted(S.F.MARK_FOR_REASON))); print("head", S.HANDLING_HEAD)' "$ROOT/plugins/spec-distill/scripts")"
+[ -n "$SNAMES" ] && ok "R9: qg_review_state 의 이름들을 읽었다" || no "R9: qg_review_state 의 이름들을 읽지 못했다"
+unknown_state_names() {  # unknown_state_names <글> — 스크립트에 없는 명령 · 종류를 한 줄씩
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import re, sys
+names = dict(l.split(" ", 1) for l in sys.argv[2].splitlines() if " " in l)
+cmds, kinds = names["cmd"].split("|"), names["kind"].split("|")
+items, marks = names["item"].split("|"), names["mark"].split("|")
+t = sys.argv[1]
+seen = 0
+for m in re.finditer(r"qg_review_state\.py`? ([a-z][a-z-]*)", t):
+    seen += 1
+    if m.group(1) not in cmds: print("cmd:" + m.group(1))
+for m in re.finditer(r"render --kind ([a-z][a-z-]*)", t):
+    if m.group(1) not in kinds: print("kind:" + m.group(1))
+for m in re.finditer(r"`record` 의 `([a-z_]+)`", t):
+    if m.group(1) not in items: print("item:" + m.group(1))
+for m in re.finditer(r"`mark` 「([^」]+)」", t):
+    if m.group(1) not in marks: print("mark:" + m.group(1))
+if seen == 0: print("none")' "$1" "$SNAMES"
+}
+assert_eq "$(unknown_state_names "$WHOLE")" "" "R9: conducting.md 가 인용한 qg_review_state 명령 · 종류 · 표시는 스크립트에 있다"
+assert_eq "$(unknown_state_names '`python3 "<SD>"/scripts/qg_review_state.py nosuch` 를 부른다')" "cmd:nosuch" "양성 대조: 없는 명령을 잡는다"
+assert_eq "$(unknown_state_names 'qg_review_state.py render --kind nosuch-kind · `record` 의 `nosuch_item` · `mark` 「없는 표시」')" "$(printf 'kind:nosuch-kind\nitem:nosuch_item\nmark:없는 표시')" "양성 대조: 없는 종류 · 답 적기 · 표시를 잡는다"
+assert_eq "$(unknown_state_names '스크립트 이름이 없는 글')" "none" "양성 대조: 인용이 하나도 없으면 공허하지 않게 none"
+assert_eq "$(grep -cxF -- '## 머지 앞 리뷰 상태' "$QRS")" "1" "R9: 가리키는 qg-review.md 의 \`## 머지 앞 리뷰 상태\` 절이 실재한다"
+# step1-calls-next — 다시 들어오면 머지 앞 리뷰가 있는 PR 마다 next 를 부르고, 살아 있는 이름은 걸음 1 의 원천으로 센다(AC8 · §4)
+NEXT_CALL='`python3 "<SD>"/scripts/qg_review_state.py next` 를 부르고 그 할 일대로 한다'
+NEXT_ALIVE='살아 있는 담당자(그 PR 의 qg 담당자와 돌려보낸 구현 담당자 가운데 아직 끝나지 않은 것)'
+once 1 "$NEXT_CALL"
+once 1 "${NEXT_ALIVE}는 위 「원천」 · 「세션 담당자의 원천」 으로 센다"
+onein "손 절차 1" "$(mstep 1)" "$NEXT_CALL"
+onein "손 절차 1" "$(mstep 1)" "${NEXT_ALIVE}는 지휘 순환 걸음 1 의 「원천」 · 「세션 담당자의 원천」 으로 센다"
+s1_order="$(PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+t = sys.argv[1]
+a, b, c = t.find("\n  - 원천:"), t.find("\n  - 세션 담당자의 원천:"), t.find(sys.argv[2])
+print("yes" if 0 <= a < b < c else "no")' "$(step 1)" "$NEXT_CALL")"
+assert_eq "$s1_order" "yes" "걸음 1: next 를 부르는 불릿은 「원천」 · 「세션 담당자의 원천」 불릿 뒤(「위」 가 가리키는 자리)"
+assert_contains "$(step 1)" '`<SD>/skills/epic-conductor/references/qg-review.md` 의 `## 머지 앞 리뷰 상태`' "걸음 1: next 의 꼴과 표는 qg-review.md 의 머지 앞 리뷰 상태 절"
+# step5-gate — 스위트 대조 앞에서 gate, rc 0 일 때만 머지 준비, 그 밖이면 next(AC6 · §3) — 옛 형식(걸음 5 · 손 절차 8) · team 형식(PR 전 확인)
+GATE_GO='qg_review_state.py gate` 를 부르고 rc 0 일 때만 머지 준비로 간다 — 그 밖이면 `next` 를 부르고 걸린 까닭의 할 일을 한다'
+once 5 "에픽 PR 이면 스위트 대조 앞에서 \`python3 \"<SD>\"/scripts/${GATE_GO}"
+onein "손 절차 8 머지 앞 qg 리뷰" "$M8B" "$GATE_GO"
+onein "team PR 전 확인" "$TPR" "$GATE_GO"
+gate_rc1() {  # gate_rc1 <글> — 관문 문장 가운데 닫힘 하나(rc 1)만 적어 다른 rc 가 지나가게 하는 문장을 한 줄씩
+  PYTHONIOENCODING=utf-8 python3 -I -c 'import re, sys
+ONE = re.compile(r"(rc|종료 코드)\s*(가\s*|이\s*)?1\s*(\(|이면|일 때|이 나오면|로 끝나면)|관문(\(`gate`\))?이 닫히면|닫힘이면")
+for sent in re.split(r"(?<=[.。])\s+|\n", sys.argv[1]):
+    if ("`gate`" in sent or "qg_review_state.py gate" in sent) and ONE.search(sent):
+        print(sent.strip()[:160])' "$1"
+}
+for w in "걸음 5:$(step 5)" "손 절차 8:$(mstep 8)" "team 절:$TEAMS"; do
+  assert_eq "$(gate_rc1 "${w#*:}")" "" "${w%%:*}: 관문의 닫힘 하나만 적어 다른 rc 가 지나가는 문장이 없다(양성 짝: rc 0 일 때만)"
+done
+for lit in '`gate` 를 부르고 rc 1 이면 `next` 로 돌아간다.' '관문(`gate`)이 종료 코드 1(닫힘)이면 머지하지 않는다.' '관문(`gate`)이 닫히면 `next` 를 부른다.' '`gate` 가 rc 가 1 로 끝나면 멈춘다.'; do
+  [ -n "$(gate_rc1 "$lit")" ] && ok "양성 대조: 「${lit}」 를 잡는다" || no "양성 대조: 「${lit}」 를 못 잡는다"
+done
+assert_eq "$(gate_rc1 "$GATE_GO")" "" "양성 짝: rc 0 일 때만 문장은 허용"
+assert_eq "$(gate_rc1 '종료 코드 1(새 실패)이면 고친다.')" "" "양성 짝: 관문이 아닌 문장의 종료 코드 1 은 보지 않는다"
+for w in "걸음 5:$(step 5)" "손 절차 8:$(mstep 8)"; do
+  assert_not_contains "${w#*:}" '고쳐졌거나 사용자가 남기기로 한 뒤에 스위트 대조로 간다' "${w%%:*}: 관문의 조건을 다시 적던 옛 문장이 없다(양성 짝: gate)"
+done
+# step5-approval — 승인 기록 다시 보이기의 qg 몫은 render --kind approval 의 글(AC10 · §5)
+APPR="$(step 5 | awk 'index($0, "  - 승인 기록 다시 보이기:")==1{f=1;print;next} f&&index($0, "  - ")==1{exit} f')"
+[ -n "$APPR" ] && ok "걸음 5: 승인 기록 다시 보이기 불릿을 읽었다" || no "걸음 5: 승인 기록 다시 보이기 불릿이 비었다 — 아래 단언이 공허하다"
+onein "걸음 5 승인 기록 다시 보이기" "$APPR" '두 형식 모두 머지 앞 qg 몫은 `python3 "<SD>"/scripts/qg_review_state.py render --kind approval` 이 낸 글을 그대로 싣는다'
+for old in '`- 답:`' '`## qg 리뷰` 의 사용자 답' '리뷰 기록 파일'; do
+  assert_not_contains "$APPR" "$old" "걸음 5 승인 기록 다시 보이기: 「${old}」 에서 qg 답을 읽던 옛 문장이 없다(양성 짝: render --kind approval)"
+done
+assert_not_contains "$WHOLE" '`- 답:` 줄' "conducting.md: 기록 파일의 \`- 답:\` 줄을 읽으라는 문장이 없다(AC1)"
+# lock-users-qg — 공유 스위트 잠금을 쓰는 쪽에 qg 를 더한다(R7 이 넘긴 한 줄 · D47 · D58)
+once 1 '공유 스위트 잠금(지휘자의 스위트 대조 · 하위 agent 의 전체 스위트 · qg 가 같이 쓰는 잠금)'
+assert_not_contains "$(step 1)" '지휘자의 스위트 대조와 하위 agent 의 전체 스위트가 같이 쓰는 잠금' "걸음 1: 쓰는 쪽을 둘로 적던 옛 잠금 문장이 없다(양성 짝: 셋)"
+# team-review-qg — 검수 걸음의 qg 는 같은 스크립트 · 대상 <과제>-plan<n> · 펜스는 표시(AC1 · AC20 · AC23 · §9)
+for lit in '같은 스크립트(`qg_review_state.py`)와 상태 파일을 쓴다 — 대상은 `<과제>-plan<n>`, 뺄 파일은 `--job-dir <과제 폴더>`' \
+           '`open` 의 `--epic` 은 그 과제가 속한 에픽 번호' '자리 글자는 `premerge-<과제>-plan<n>` · `recheck-<과제>-plan<n>`' \
+           '`render --kind team-fence` 가 지은 글(바깥 펜스까지)을 싣는다 — 그 펜스는 표시이고 리더는 거기서 읽지 않는다' \
+           '「두 번까지」 는 옛 형식과 같고' '검수 반려로 다시 보낸 시도가 돌아온 때에는 걸음 4 의 기본 브랜치 합치기를 하지 않는다' \
+           '다음 시도를 보낸 즉시 `record` 의 `return`' '시작 묶음과 과제 결정 기록에 싣는 글에는 리뷰 보관 폴더 · 상태 파일의 경로를 싣지 않는다'; do
+  onein "team 검수 걸음의 qg" "$TQB" "$lit"
+done
+for old in '펜스 하나 안에 적고 거기서 센다' '거기서 센다' '펜스 안 줄은 결과 파일의 기계 줄로 읽히지 않는다'; do
+  assert_not_contains "$TEAMS" "$old" "team 절: 펜스에 적고 거기서 세던 옛 문장 「${old}」 이 없다(양성 짝: 펜스는 표시)"
+done
+# team-handling-header — 결정 기록에 싣는 한 줄이 처리 머리(스크립트가 처리 파일을 알아보는 머리)를 쓴다(D74)
+DLINE="$(PYTHONIOENCODING=utf-8 python3 -I -c 'import sys
+t = sys.argv[1]
+k = "과제 결정 기록의 한 줄(「"
+s = t.find(k)
+e = t.find("」)", s)
+print(t[s + len(k):e] if 0 <= s < e else "")' "$TQB")"
+[ -n "$DLINE" ] && ok "team 검수 걸음의 qg: 결정 기록에 싣는 한 줄을 읽었다" || no "team 검수 걸음의 qg: 결정 기록에 싣는 한 줄(「…」)이 없다 — 아래 단언이 공허하다"
+HEAD_T="$(printf '%s\n' "$SNAMES" | sed -n 's/^head //p')"
+assert_eq "$HEAD_T" "## 지적마다의 처리" "R9: 스크립트의 처리 머리를 읽었다"
+assert_contains "$DLINE" "구현 결과 파일의 \`${HEAD_T}\` 머리 아래에" "team-handling-header: 결정 기록 한 줄이 구현 결과 파일의 처리 머리(스크립트 값) 아래에 쓰라고 싣는다"
+onein "team 검수 걸음의 qg" "$TQB" "다음 시도의 구현 결과 파일의 \`${HEAD_T}\` 머리 아래에 적게 한다"
+for tok in '보관 폴더' '상태 파일' 'qg-' 'state' 'resource-dir'; do
+  assert_not_contains "$DLINE" "$tok" "AC23: 결정 기록에 싣는 한 줄에 「${tok}」 가 없다(보관 폴더 · 상태 파일 경로를 싣지 않는다)"
+done
+# mark-timing-step3 — 설계 대화로 돌아간 에픽은 고친 설계의 구현이 돌아오면 mark 「다시 구현됨」(AC9)
+once 3 '고친 설계의 구현 담당자가 돌아오면 `qg_review_state.py record` 의 `mark` 「다시 구현됨」 을 적고 `next` 를 부른다'
 assert_not_contains "$(step 5)" '(team 형식은 검수 결과 파일의 펜스 안)' "걸음 5: qg 답 자리가 옛 형식 문장 안 괄호에만 있지 않다"
 assert_contains "$(sed -n '/^- \*\*PR 전 확인.\*\*/p' "$CD")" '머지 앞 qg 의 사용자 답(`human-check` 은 사람 줄만 낸다)은 걸음 5 「승인 기록 다시 보이기」 의 두 형식 공통 문장대로 함께 보인다' "team PR 전 확인: qg 답을 걸음 5 공통 문장으로 가리킨다"
 assert_not_contains "$(step 4)" 'hc keys' "걸음 4: 리더가 키를 넣는 길을 적지 않는다"

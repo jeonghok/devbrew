@@ -232,7 +232,7 @@ assert_contains "$(cyc 1)" "→ ${REFRESH}\` 으로 기계 상태의 PR 캐시�
 assert_contains "$(cyc 1)" '`ledger claim` · `ledger takeover` · `ledger pr-refresh` 가 옛 판이 쓴 PR 캐시 줄이라고 멈추면(claim · takeover 는 표지를 잡은 뒤 멈춘다) 그 줄이 보인 `--reset` 명령으로' "지휘 걸음 1(판단): 옛 판 PR 줄에서 claim · takeover · pr-refresh 가 멈추면 --reset"
 assert_contains "$(cyc 4)" "${REFRESH} --epic <에픽>\` 으로 PR 캐시를 채운다" "지휘 걸음 4: PR 을 연 뒤 pr-refresh"
 assert_contains "$(cyc 4)" '`gh pr create -R "$(python3 "<SD>"/scripts/gh_repo.py slug)"`' "지휘 걸음 4: gh pr create 에 -R origin"
-assert_contains "$(cyc 5)" "${REFRESH} --epic <에픽>\` 으로 PR 캐시를 새로 채운 뒤 머지 앞 qg 리뷰와 되돌리기 → 스위트 대조" "지휘 걸음 5(머지 전 확인): 머지 앞 qg 리뷰와 스위트 대조 직전에 pr-refresh(R4)"
+assert_contains "$(cyc 5)" "${REFRESH} --epic <에픽>\` 으로 PR 캐시를 새로 채운 뒤 머지 앞 qg 리뷰와 되돌리기 → 관문(\`gate\`) → 스위트 대조" "지휘 걸음 5(머지 전 확인): 머지 앞 qg 리뷰 · 관문(R9) · 스위트 대조 직전에 pr-refresh(R4)"
 assert_contains "$(cyc 5)" '그 답을 인자로 붙여 이 대조를 다시 돌리고(`… --keep-merged --test-command "<명령>"`' "지휘 걸음 5(rc 6): 사용자 답은 merge_check 의 --test-command 인자로 그 호출에만 넘긴다"
 assert_contains "$(cyc 5)" "답은 기계 상태에 적지 않는다" "지휘 걸음 5(rc 6): 답을 기계 상태에 적지 않는다"
 assert_contains "$(cyc 5)" "압축 · 새 세션 뒤에는 그 답을 기억하지 못하니 다시 묻는다" "지휘 걸음 5(rc 6): 압축 · 새 세션 뒤에는 답을 다시 묻는다"

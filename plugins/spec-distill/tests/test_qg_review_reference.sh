@@ -743,7 +743,7 @@ for n in 6; do
   assert_eq "$(cnt "$(mstep "$n")" '머지 앞 리뷰를 보낸 뒤 그 PR 의 되돌리기가 끝나지 않은 브랜치는 끝난 뒤로 미룬다')" "1" "AC11: 손 절차 ${n} — 되돌리기가 끝나지 않은 브랜치는 합치기를 미룬다"
 done
 assert_eq "$(cnt "$CDALL0" '에픽 머지 뒤')" "0" "AC9 음성: conducting.md 에 「에픽 머지 뒤」 자리 이름이 없다(양성 짝: 머지 앞 들어가는 문장)"
-assert_eq "$(cnt "$(lstep 5)" '머지 앞 qg 리뷰와 되돌리기 → 스위트 대조 → 통합 리뷰 → 리뷰 뒤 반영 → 완료 전 확인')" "1" "AC9: 걸음 5 기본값의 차례 — 머지 앞 qg 리뷰가 스위트 대조 앞"
+assert_eq "$(cnt "$(lstep 5)" '머지 앞 qg 리뷰와 되돌리기 → 관문(`gate`) → 스위트 대조 → 통합 리뷰 → 리뷰 뒤 반영 → 완료 전 확인')" "1" "AC9: 걸음 5 기본값의 차례 — 머지 앞 qg 리뷰 → 관문이 스위트 대조 앞(R9 §3)"
 assert_not_contains "$(lstep 5)" '새로 채운 뒤 스위트 대조 → 통합 리뷰' "AC9 음성: qg 없이 스위트 대조부터 하던 옛 차례가 없다(양성 짝: 새 차례)"
 S6J="$(lstep 6 | awk 'index($0, "- 판단:")==1')"
 assert_eq "$(cnt "$S6J" '되돌리기가 끝나지 않은 브랜치에는 전하지 않는다')" "1" "fix 2: 걸음 6 판단 — 되돌리기 중인 브랜치에는 task 경계 merge 를 전하지 않는다"
@@ -759,7 +759,8 @@ m8s="$(printf '%s\n' "$M8" | grep -nF -- '- **스위트 대조.**' | head -1 | c
 assert_contains "$(printf '%s\n' "$M8" | grep -F -- '- **머지 앞 qg 리뷰.**')" "${QE}「머지 앞」)" "AC9: 손 절차 8 의 머지 앞 qg 리뷰 불릿이 들어가는 문장을 가진다"
 assert_eq "$(cnt "$(printf '%s\n' "$M8" | grep -F -- '- **머지 앞 qg 리뷰.**')" '에픽 PR 이면 스위트 대조 앞에 품질 게이트 리뷰는')" "1" "AC9: 손 절차 8 의 머지 앞 qg 리뷰 불릿이 「스위트 대조 앞에」 를 낱말로 말한다"
 assert_eq "$(cnt "$(printf '%s\n' "$M8" | head -1)" 'PR 마다 아래 스위트 대조 · 통합 리뷰 · 리뷰 뒤 반영 셋을 한다')" "1" "손 절차 8 머리: 「아래 셋」 이 어느 셋인지 이름으로 말한다(qg 불릿은 그 앞에 따로)"
-assert_eq "$(cnt "$(lstep 5)" '머지 앞 qg 리뷰 → PR 본문 `## qg 리뷰`')" "1" "AC9: 걸음 5 기록 줄이 머지 앞 qg 리뷰를 PR 본문 \`## qg 리뷰\` 에 적는다"
+assert_eq "$(cnt "$(lstep 5 | grep -F -- '- 기록:')" '머지 앞 qg 리뷰 → 상태 파일(`qg_review_state.py` 만 쓴다) · PR 본문 `## qg 리뷰` 는 `render --kind pr-body` 의 글 · 의도 점검 답의 기록 파일은 로드맵의 기록 브랜치')" "1" "AC9(R9 §5 · §6): 걸음 5 기록 줄 — 상태 파일 · PR 본문은 render 의 글 · 기록 파일은 기록 브랜치"
+assert_not_contains "$(lstep 5 | grep -F -- '- 기록:')" '머지 앞 qg 리뷰 → PR 본문 `## qg 리뷰`.' "AC9 음성(R9): 기록 줄이 PR 본문 절을 qg 리뷰의 기록 자리로 적던 옛 글이 없다(양성 짝: 상태 파일)"
 assert_contains "$RET" '`## qg 리뷰`' "AC9 결합: qg-review.md 되돌리기가 같은 PR 본문 절 이름 \`## qg 리뷰\` 을 쓴다"
 # 걸음 1 행 22 · 걸음 7 행 21 · 23 (AC16)
 assert_eq "$(cnt "$(lstep 1)" '(에픽 줄은 `control_plane.py show <로드맵> <에픽>` 의 `기다리는 질문:` 칸, 로드맵 단위 줄은 기계 상태 파일 `machine.md` 의 `## 기다리는 질문` 절)')" "1" "행 22: 걸음 1 이 기다리는 질문 줄을 읽는 길을 가리킨다"
@@ -772,7 +773,7 @@ team_sec="$(awk '$0=="## team 형식 로드맵"{f=1;next} f&&/^## /{exit} f' "$C
 TQ="$(printf '%s\n' "$team_sec" | awk 'index($0, "- **검수 걸음의 qg.**")==1')"
 assert_eq "$(starts "$team_sec" '- **검수 걸음의 qg.**')" "1" "team 형식: 「검수 걸음의 qg」 불릿이 줄 첫머리에 한 번"
 for lit in '`quality-gates:quality-pipeline`' '다음 시도의 구현 결과 파일' '과제 결정 기록의 한 줄' '연속 실패 멈춤을 상한으로 쓰지 않는다' \
-           '지적 목록 아래 펜스 하나 안에' 'PR 이 열리면 그 내용을 본문 `## qg 리뷰` 로 옮긴다'; do
+           '지적 목록 아래 펜스에는 `render --kind team-fence` 가 지은 글' 'PR 이 열리면 그 내용을 본문 `## qg 리뷰` 로 옮긴다'; do
   once "$team_sec" "$lit" "team 형식: ${lit}"
   assert_contains "$TQ" "$lit" "team 형식: 「검수 걸음의 qg」 불릿 안에 ${lit}"
 done
