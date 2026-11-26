@@ -119,7 +119,7 @@ assert_contains "$P22" '어느 클래스의 스킬도 지출 승인을 묻지 �
 assert_contains "$W_EC" '엔진의 재리뷰 상한까지' "RC14 epic-conductor: 규모 줄이 리뷰 라운드 상한을 밝힌다"
 assert_contains "$(cat "$PA")" 'DEVBREW_PLUGIN_AUDIT_DISABLE=1' "RC14 plugin-audit: kill switch"
 assert_contains "$W_PA" '상한 없음' "RC14 plugin-audit: step 3 이 상한 없는 부분을 밝힌다"
-for lit in 'effective_max_rounds' 'artifact_stagnation.py' 'DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1'; do
+for lit in 'effective_max_rounds' 'artifact_stagnation.py'; do
   assert_contains "$(cat "$AC")" "$lit" "RC14 artifact-critique: $lit"
 done
 

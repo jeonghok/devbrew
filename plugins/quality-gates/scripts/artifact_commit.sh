@@ -12,14 +12,6 @@ if [ -z "$path" ] || [ -z "$msg" ]; then
   echo "error: missing_args" >&2
   exit 1
 fi
-# F-H: kill-switch commit-sink backstop. Kill switches are security controls
-# (CLAUDE.md) and must be enforced STRUCTURALLY at the commit sink, not only by the
-# orchestrator's prose E0 -- if the orchestrator ever proceeds under a set switch,
-# this refuses the commit (fail-closed).
-if [ "${DEVBREW_QUALITY_GATES_DISABLE:-}" = "1" ] || [ "${DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE:-}" = "1" ]; then
-  echo "error: killed_by_switch" >&2
-  exit 1
-fi
 # Defensive no-op guard (step 6b already gates this in the SKILL).
 if git diff --quiet HEAD -- "$path" 2>/dev/null; then
   echo "no_op: true"

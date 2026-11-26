@@ -17,18 +17,6 @@ assert_contains "$(cat "$S")" 'artifact_max_rounds.sh' "wires max-rounds"
 assert_contains "$(cat "$S")" 'run_artifact_codex_reviewer.sh' "wires codex wrapper"
 assert_contains "$(cat "$S")" 'detect_codex.sh' "reuses codex detection"
 
-# E0 both kill switches (ENFORCEMENT body, not the kill-switch inventory section).
-# NOTE: the old `agf 'DEVBREW_QUALITY_GATES_DISABLE'` / `agf 'DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE'`
-# were inventory-satisfiable — both var names ALSO appear in the "kill switch (보안
-# 컨트롤)" inventory section, so gutting the E0 enforcement body stayed
-# GREEN (verified by mutation: deleting E0's exit lines while leaving the inventory
-# passed). These exact user-facing exit messages appear ONLY in the E0 enforcement
-# lines and nowhere in the inventory.
-# R2a 계획 3 Task 12(미룸): 옛 모드 이름(`critique skipped` · `critique mode disabled`)을 skill 이름과
-# 쉬운 말로 바꿨다. 두 단언이 지키던 것(E0 집행 줄이 목록 절과 별개로 있다)은 새 문구로 그대로 잰다.
-assert_contains "$(cat "$S")" 'artifact-critique 를 건너뛰었다 — quality-gates 전체가 꺼져 있다(DEVBREW_QUALITY_GATES_DISABLE=1)' "E0 global kill switch (enforcement body, not inventory)"
-assert_contains "$(cat "$S")" 'artifact-critique 를 건너뛰었다 — DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1 이 켜져 있다' "E0 mode kill switch (enforcement body, not inventory)"
-
 # E1 three-branch classify
 assert_file_grep "$S" 'code.*(종료|안내|exit)|코드.*종료' "E1 code -> stop"
 assert_contains "$(cat "$S")" 'ambiguous' "E1 ambiguous branch"

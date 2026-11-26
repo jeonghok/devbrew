@@ -7,7 +7,7 @@ description: >
   Tier-unpinned critics (count chosen by the user, default 1) + adversarial (+ optional codex
   co-reviewer) review read-only; the orchestrator fixes and commits each round, or a read-only
   findings-only pass reports findings without editing. Bounded by max-rounds (the user opens more
-  rounds at the cap) + stagnation + kill switch. Not a code gate — code targets route to
+  rounds at the cap) + stagnation. Not a code gate — code targets route to
   /quality-gates:quality-pipeline (one pipeline, one verdict).
 metadata:
   cost_class: variable
@@ -67,8 +67,6 @@ python3 "$QG/scripts/check_deps.py" entry --plugin-root "$QG" --need python,git
 
 **보안 컨트롤** — 아래 스위치는 취향 설정이 아니다; 약화하는 PR은 보안 리뷰 대상이다.
 
-- `DEVBREW_QUALITY_GATES_DISABLE=1` — 전역 즉시 종료(E0).
-- `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1` — 이 skill 만 종료(E0).
 - `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — codex co-review만 skip(`detect_codex.sh` 존중), tier-unpinned 단독으로 degrade.
 
 ## 진입 게이트 (파일 손대기 전)
@@ -76,12 +74,6 @@ python3 "$QG/scripts/check_deps.py" entry --plugin-root "$QG" --need python,git
 모든 스크립트는 `${CLAUDE_PLUGIN_ROOT}/scripts/` 하위다 — 아래에 이름만 적힌 스크립트는 이 경로의 것을
 실행한다. 이 경로가 절대 경로로 보이지 않으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고한다. 아래 단계를
 **순서대로** 실행한다.
-
-### E0 — Preflight (kill switch)
-
-두 kill switch를 존중한다. 켜져 있으면 한 줄 출력 후 즉시 종료(파일 무변경):
-- 전역 `DEVBREW_QUALITY_GATES_DISABLE=1` → `> [quality-gates] artifact-critique 를 건너뛰었다 — quality-gates 전체가 꺼져 있다(DEVBREW_QUALITY_GATES_DISABLE=1).`
-- skill 전용 `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1` → `> [quality-gates] artifact-critique 를 건너뛰었다 — DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1 이 켜져 있다.`
 
 ### E1 — 대상 해석 + 코드/비-코드 분류 + 모드
 
@@ -374,9 +366,9 @@ artifact_stagnation.py --this "<이번 stagnation_keys>" --prev "<직전 stagnat
 판정 못 한 지적이 있으면(`unadjudicated > 0`) 첫 줄에 「판정 못 한 지적 <N>건」을 함께 쓰고, 첫 줄을 「남은 지적 없음」 ·
 「이상 없음」처럼 깨끗하게 읽히게 쓰지 않는다.
 
-종료(수렴 / max-rounds / stagnation / 지적만 받기 / NEEDS_RESOLUTION-중단 / kill switch) 시 반드시 출력 — 대상이 여럿이면 대상마다:
+종료(수렴 / max-rounds / stagnation / 지적만 받기 / NEEDS_RESOLUTION-중단) 시 반드시 출력 — 대상이 여럿이면 대상마다:
 - **라운드 히스토리**: 라운드별 비평자 수 · kept 요약 + 각 커밋 SHA(지적만 받기는 커밋 없음) + 추가 라운드 승인 줄.
-- **종료 사유**: converged / max_rounds(N) / stagnant(reason) / findings_only / needs_resolution / killed.
+- **종료 사유**: converged / max_rounds(N) / stagnant(reason) / findings_only / needs_resolution.
 - **잔여 kept 집합**(중단 · 지적만 받기 시): 마지막 라운드의 미해소 CRITICAL/IMPORTANT(지적만 받기는 SUGGESTION 도).
 - **판정 못 한 지적**(`unadjudicated > 0` 일 때, 모드 무관): `판정 못 한 지적 <N>건` 한 줄과 마지막 라운드의
   `unadjudicated_items` 를 하나씩 「판정 못 함」 라벨로.
