@@ -280,7 +280,8 @@ class Rig:
 
     # ------------------------------------------------------------ 스크립트
 
-    def run(self, *args) -> subprocess.CompletedProcess:
-        """`qg_review_state.py <args>` 를 `sys.executable` 로 리포 안에서 부른다."""
+    def run(self, *args, env=None) -> subprocess.CompletedProcess:
+        """`qg_review_state.py <args>` 를 `sys.executable` 로 리포 안에서 부른다. `env` 는 더할 환경 변수."""
         return subprocess.run([sys.executable, str(SCRIPT), *args], cwd=str(self.repo),
-                              env=dict(os.environ, **GIT_ENV), capture_output=True, encoding="utf-8")
+                              env=dict(os.environ, **GIT_ENV, **(env or {})), capture_output=True,
+                              encoding="utf-8")

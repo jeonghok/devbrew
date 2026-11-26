@@ -28,6 +28,7 @@ from typing import List, Optional, Tuple
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import conductor_ledger as L  # noqa: E402
+import qg_review_archive as A  # noqa: E402
 import qg_review_file as F  # noqa: E402
 
 RC_OK, RC_CLOSED, RC_USAGE, RC_FILE, RC_REFUSED = 0, 1, 2, 3, 4
@@ -55,6 +56,9 @@ LEGACY_NOTICE = "알림 · 옛 흔적이 있다 — PR 전체를 처음부터 �
 LEGACY_PR_BODY = "할 일 · 사용자 차례 · 옛 PR 본문의 막는 지적과 사용자 답을 한 번 보인다"
 GLOB_SPECIALS = "\\*?["
 OLD_TARGET_RE = re.compile("pr[1-9][0-9]*")
+ASK_FAILED_ID = "q-failed"
+ASK_TWO_MAX_ID = "q-cap"
+WRONG_CHOICE = "잘못 골랐다"
 
 
 class GitError(Exception):
@@ -326,6 +330,31 @@ class Ctx:
         except F.Unreadable as exc:
             raise Stop(RC_FILE, ["까닭 · 상태 파일을 읽지 못했다 — " + exc.reason])
 
+    def last(self) -> Tuple[List[F.Review], Path]:
+        """그 대상의 리뷰들과 마지막 리뷰의 상태 파일 경로 — 쓰기 명령은 이 파일에만 쓴다."""
+        reviews = self.reviews()
+        if not reviews:
+            raise Stop(RC_REFUSED, ["까닭 · 대상 %s 의 상태 파일이 없다 — 먼저 open 으로 연다" % self.a.target])
+        bad = inconsistency(reviews)
+        if bad:
+            raise Stop(RC_REFUSED, ["까닭 · 상태 파일의 칸끼리 맞지 않는다 — " + bad])
+        last = reviews[-1]
+        for path in sorted(self.report_root.glob("*/" + F.STATE_NAME)):
+            try:
+                found = F.read_review(path)
+            except F.Unreadable:
+                continue
+            if found.target == last.target and found.order == last.order:
+                return reviews, path
+        raise Stop(RC_FILE, ["까닭 · 마지막 리뷰(차례 %d)의 상태 파일을 다시 찾지 못했다" % last.order])
+
+
+def _write(path: Path, review: F.Review) -> None:
+    try:
+        F.write_review(path, review)
+    except (ValueError, OSError) as exc:
+        raise Stop(RC_FILE, ["까닭 · 상태 파일을 쓰지 못했다 — %s" % exc])
+
 
 def _ledger(fn, *args):
     """conductor_ledger 의 쓰기 — 그쪽 알림은 표준 오류로 보내고, 실패는 Stop 으로."""
@@ -371,12 +400,97 @@ def c_open(ctx: Ctx) -> int:
     return RC_OK
 
 
+def c_send(ctx: Ctx) -> int:
+    """보내기 직전 `--phase start`(열림 → 보내는 중) · 보낸 뒤 `--phase done --worker`(보내는 중 → 보냄)."""
+    a = ctx.a
+    reviews, path = ctx.last()
+    review = reviews[-1]
+    want = "열림" if a.phase == "start" else "보내는 중"
+    if review.stage != want:
+        raise Stop(RC_REFUSED, ["까닭 · 마지막 리뷰(차례 %d)의 단계가 %s 이다 — send --phase %s 는 %s 에서만 받는다"
+                                % (review.order, review.stage, a.phase, want)])
+    if a.phase == "start":
+        review.stage = "보내는 중"
+    else:
+        review.stage, review.worker = "보냄", "%s · %s" % (a.worker, a.at)
+    _write(path, review)
+    lines = ["단계 · " + review.stage]
+    if review.worker:
+        lines.append("담당자 · " + review.worker)
+    print("\n".join(lines))
+    return RC_OK
+
+
+def _two_max_text(limit: int, count: int) -> str:
+    return ("세는 재리뷰가 상한(%d)에 닿았는데 막는 지적 %d개가 돌아왔다 — "
+            "한 번 더 돌려보낼지, 남은 지적을 적고 머지 준비로 갈지" % (limit, count))
+
+
+def apply_outcome(reviews: List[F.Review], out: A.Outcome) -> F.Review:
+    """돌아온 결과를 마지막 리뷰에 옮기고, 닫을 수 있으면 「막는 지적 없음」 으로 닫는다."""
+    review = reviews[-1]
+    r = review.result
+    r.kind, r.reason, r.seen_range = out.kind, out.reason, out.seen_range
+    r.verdict_line, r.intent_line = out.verdict_line, out.intent_line
+    if out.kind == A.NOT_OBTAINED:
+        review.asks.append(F.Ask(kind="지적 목록을 얻지 못함", id=ASK_FAILED_ID, text=out.reason))
+        review.stage = "돌아옴"
+        return review
+    review.blocking += out.blocking
+    review.filtered_wrong += out.filtered_wrong
+    review.filtered_other += out.filtered_other
+    review.asks += out.asks
+    wrong = review.filtered_wrong or any(a.kind == ASK_INTENT and a.answer == WRONG_CHOICE
+                                         for a in review.answers)
+    if out.blocking and not wrong and counted_rechecks(reviews) >= cap(reviews):
+        review.asks.append(F.Ask(kind=ASK_TWO_MAX, id=ASK_TWO_MAX_ID,
+                                 text=_two_max_text(cap(reviews), len(out.blocking))))
+    pending_record = any(a.kind == ASK_INTENT and a.record == "" for a in review.answers)
+    if not review.blocking and not review.asks and not pending_record:
+        review.stage, review.close_reason = "닫힘", "막는 지적 없음"
+    else:
+        review.stage = "돌아옴"
+    return review
+
+
+def back_todo(reviews: List[F.Review]) -> str:
+    """「돌아옴」 뒤의 할 일 한 줄 — `next` 가 짓기 전까지 쓰는 최소의 꼴(Task 7 이 `next_lines` 로 바꾼다)."""
+    review = reviews[-1]
+    if review.result.kind == A.NOT_OBTAINED:
+        return "할 일 · 사용자 차례 · 지적 목록을 얻지 못했다 — %s" % review.result.reason
+    if review.asks:
+        return "할 일 · 사용자 차례 · 물을 것 %d개 — 먼저 「%s」" % (len(review.asks), review.asks[0].kind)
+    if review.stage != "닫힘":
+        return "할 일 · 돌려보낸다 · 막는 지적 %d개를 구현 담당자에게 돌려보낸다" % len(review.blocking)
+    if review.filtered_wrong:
+        return "할 일 · 답 적기 · 거른 「잘못 골랐다」 목록 %d개의 행선을 적는다" % len(review.filtered_wrong)
+    if not any(r.site == "premerge" for r in counting_from(reviews)):
+        return "할 일 · 열기 · 머지 앞 첫 리뷰(PR 전체)를 연다"
+    return "할 일 · 머지 준비 · 막는 지적 없이 닫혔다"
+
+
+def c_back(ctx: Ctx) -> int:
+    """보내는 중 · 보냄 → 돌아옴(또는 바로 닫힘). 보관 폴더의 파일만 본다."""
+    reviews, path = ctx.last()
+    review = reviews[-1]
+    if review.stage not in ("보내는 중", "보냄"):
+        raise Stop(RC_REFUSED, ["까닭 · 마지막 리뷰(차례 %d)의 단계가 %s 이다 — back 은 보내는 중 · 보냄에서만 받는다"
+                                % (review.order, review.stage)])
+    out = A.read_archive(path.parent, review)
+    apply_outcome(reviews, out)
+    _write(path, review)
+    gs = GitState(ctx.root, review.range_end, [], recheck_start(reviews) or "")
+    lines = next_lines(reviews, gs)[:1] or [back_todo(reviews)]
+    print("\n".join(lines + out.notices))
+    return RC_OK
+
+
 def c_unbuilt(ctx: Ctx) -> int:
     print("[spec-distill] %s 명령은 아직 받지 않는다" % ctx.a.cmd, file=sys.stderr)
     return RC_USAGE
 
 
-HANDLERS = {"open": c_open}
+HANDLERS = {"open": c_open, "send": c_send, "back": c_back}
 
 
 # ---------------------------------------------------------------- 명령줄
@@ -435,6 +549,14 @@ def _usage(a) -> Optional[str]:
         team = not OLD_TARGET_RE.fullmatch(a.target)
         if team != (a.job_dir is not None):
             return "옛 형식 대상(pr<번호>)은 --spec, team 형식 대상(<과제>-plan<n>)은 --job-dir 을 받는다"
+    if a.cmd == "send":
+        if a.phase == "done" and not a.worker:
+            return "send --phase done 은 --worker <담당자 이름> 을 받는다"
+        if a.phase == "start" and a.worker is not None:
+            return "send --phase start 는 --worker 를 받지 않는다"
+        if a.worker is not None and (" · " in a.worker or a.worker != a.worker.strip()
+                                     or any(ch in a.worker for ch in "\n\r")):
+            return "담당자 이름에 ` · ` · 줄바꿈 · 앞뒤 빈칸을 쓰지 않는다: %r" % a.worker
     if a.cmd == "open":
         if not a.epic or not set(a.epic) <= L.NAME_CHARS or a.epic in (".", ".."):
             return "에픽은 영숫자 · . · _ · - 만 쓴다: %r" % a.epic

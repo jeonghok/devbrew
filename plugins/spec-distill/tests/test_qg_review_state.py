@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""qg_review_state.py — 기준 커밋 · 범위 · 세는 수와 상한 · 「열기」(AC4 · AC5 · AC9 · AC19 · AC33).
+"""qg_review_state.py — 기준 커밋 · 범위 · 세는 수와 상한 · 「열기」 · 「보냄」 · 「돌아옴」
+(AC2 · AC3 · AC4 · AC5 · AC8 · AC9 · AC19 · AC32 · AC33).
 
 Run: cd plugins/spec-distill/tests && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_qg_review_state -v
 """
@@ -26,6 +27,10 @@ RECORD = "docs/qg-intent-answers/A1-q1.md"
 NO_VERDICT = "qg 가 끝까지 돌지 못했다 — 보관한 결과에 판정이 없다"
 NOTICE = "알림 · 옛 흔적이 있다 — PR 전체를 처음부터 리뷰한다"
 PR_BODY_TODO = "할 일 · 사용자 차례 · 옛 PR 본문의 막는 지적과 사용자 답을 한 번 보인다"
+OTHER_RANGE = "결과가 보낸 범위의 것이 아니다"
+UNCOUNTABLE = "의도 점검은 셀 수 없음"
+ASK_KIND_TWO = "두 번까지"
+NO_YAML = "알림 · PyYAML 이 없다 — 합치기 전 지적 목록 대신 결과 파일의 고칠 목록에서 옮겼다"
 
 
 def review(site, order, start, end, target=TARGET, **kw) -> F.Review:
@@ -357,6 +362,306 @@ class TestQgReviewState(unittest.TestCase):
                     lines = self.refused(self.open(site))
                     self.assertIn("칸끼리 맞지 않는다", lines[0])
                 self.assertEqual(self.count(), before)
+
+    # ------------------------------------------------------------ 보냄 · 돌아옴
+
+    def sent(self, site="premerge", order=1, start=None, end=None, stage="보냄", **kw) -> Path:
+        """보낸 리뷰 하나를 짓고 그 보관 폴더를 낸다 — 기본은 첫 리뷰(PR 전체 base..c1)."""
+        start = self.base_sha if start is None else start
+        end = self.c1 if end is None else end
+        worker = "qg-w%d · %s" % (order, AT) if stage == "보냄" else ""
+        return self.put(review(site, order, start, end, stage=stage, worker=worker, **kw))
+
+    def back(self, env=None):
+        return self.rig.run("back", "--roadmap", ROADMAP, "--target", TARGET, "--repo", str(self.rig.repo),
+                            "--at", LATER, env=env)
+
+    def send(self, phase, worker=None):
+        extra = () if worker is None else ("--worker", worker)
+        return self.rig.run("send", "--roadmap", ROADMAP, "--target", TARGET, "--repo", str(self.rig.repo),
+                            "--at", AT, "--phase", phase, *extra)
+
+    def came_back(self, env=None):
+        lines = self.ok(self.back(env))
+        self.assertTrue(lines and lines[0].startswith("할 일 · "), lines)
+        return self.reviews()[-1], lines
+
+    def test_back_obtained(self):
+        folder = self.sent()
+        fix = "IMPORTANT src/a.py:1 — 값이 틀렸다 · 고칠 방법: 1 로 되돌린다"
+        broken = "tests/test_a.py::test_x · NEW_REGRESSION — 고칠 방법: 값을 맞춘다"
+        self.rig.write_result(folder, "defect", self.base_sha, self.c1, blocking=[fix], regress=[broken])
+        self.rig.write_pre_merge(folder, [
+            {"file": "src/a.py", "line": 1, "severity": "IMPORTANT", "summary": "값이 틀렸다",
+             "proposed_fix": "1 로 되돌린다"},
+            {"file": "src/a.py", "line": 2, "severity": "SUGGESTION", "summary": "이름을 바꾼다",
+             "proposed_fix": "b 를 c 로"}])
+        self.rig.write_intent_return(folder, [])
+        rv, _lines = self.came_back()
+        self.assertEqual((rv.stage, rv.close_reason, rv.worker), ("돌아옴", "", "qg-w1 · " + AT))
+        self.assertEqual((rv.result.kind, rv.result.reason), ("얻음", ""))
+        self.assertEqual(rv.result.seen_range, "%s..%s" % (self.base_sha, self.c1))
+        self.assertTrue(rv.result.verdict_line.startswith("qg: defect · 막는 지적 1 "), rv.result.verdict_line)
+        self.assertEqual(rv.result.intent_line, "intent-critic — 질문 0개")
+        self.assertEqual([(f.kind, f.text, f.handling) for f in rv.blocking],
+                         [("막는 지적", fix, F.NO_HANDLING), ("새로 깨진 테스트", broken, F.NO_HANDLING)])
+        self.assertEqual((rv.asks, rv.filtered_wrong, rv.filtered_other), ([], [], []))
+
+    def test_back_no_result_md(self):
+        for stage in ("보냄", "보내는 중"):
+            with self.subTest(stage=stage):
+                self.setUp()
+                folder = self.sent(stage=stage)
+                (folder / "handler-report.md").write_text("# 담당자 보고\n", encoding="utf-8")
+                rv, _lines = self.came_back()
+                self.assertEqual((rv.stage, rv.result.kind, rv.result.reason), ("돌아옴", "얻지 못함", NO_VERDICT))
+                self.assertEqual(rv.asks, [F.Ask(kind="지적 목록을 얻지 못함", id="q-failed", text=NO_VERDICT)])
+                self.assertEqual(rv.blocking, [])
+
+    def test_back_no_verdict(self):
+        folder = self.sent()
+        self.rig.write_result(folder, None, self.base_sha, self.c1, blocking=["IMPORTANT src/a.py:1 — 값"])
+        self.rig.write_pre_merge(folder, [{"file": "src/a.py", "line": 1, "severity": "IMPORTANT",
+                                           "summary": "값"}])
+        self.rig.write_intent_return(folder, [{"id": "q1", "state": "묻지 않음", "question": "이것이 맞나"}])
+        rv, _lines = self.came_back()
+        self.assertEqual((rv.stage, rv.result.kind, rv.result.reason), ("돌아옴", "얻지 못함", NO_VERDICT))
+        self.assertEqual((rv.blocking, [a.kind for a in rv.asks]), ([], ["지적 목록을 얻지 못함"]))
+
+    def test_back_range_mismatch(self):
+        for label in ("끝이 다르다", "시작이 다르다", "범위 절이 없다", "범위가 비었다"):
+            with self.subTest(case=label):
+                self.setUp()
+                tip = self.code()
+                folder = self.sent(end=tip)  # 보낸 범위 base..tip
+                start, end = {"끝이 다르다": (self.base_sha, self.c1), "시작이 다르다": (self.c1, tip),
+                              "범위 절이 없다": (None, None), "범위가 비었다": ("-", "-")}[label]
+                self.rig.write_result(folder, "defect", start, end, blocking=["IMPORTANT src/a.py:1 — 값"],
+                                      filtered=[("q9", "방향")], wrong=[("q9", "방향")])
+                self.rig.write_intent_return(folder, [{"id": "q1", "state": "묻지 않음", "question": "맞나"}])
+                rv, _lines = self.came_back()
+                self.assertEqual((rv.stage, rv.result.kind, rv.result.reason),
+                                 ("돌아옴", "얻지 못함", OTHER_RANGE))
+                self.assertEqual((rv.blocking, rv.filtered_wrong, rv.filtered_other), ([], [], []))
+                self.assertEqual([a.kind for a in rv.asks], ["지적 목록을 얻지 못함"])
+                self.assertEqual(rv.asks[0].text, OTHER_RANGE)
+
+    def test_back_trivia_closes_zero(self):
+        for verdict in ("not-certified (trivia)", "not-certified (scope-empty)"):
+            with self.subTest(verdict=verdict):
+                self.setUp()
+                folder = self.sent()
+                self.rig.write_result(folder, verdict, self.base_sha, self.c1)
+                self.rig.write_intent_return(folder, [], status="skipped", reason="trivia", outcome="-")
+                rv, _lines = self.came_back()
+                self.assertEqual((rv.stage, rv.close_reason, rv.result.kind),
+                                 ("닫힘", "막는 지적 없음", "리뷰할 것 없음"))
+                self.assertEqual((rv.blocking, rv.asks), ([], []))
+                self.assertTrue(rv.result.verdict_line.startswith("qg: " + verdict), rv.result.verdict_line)
+        with self.subTest(verdict="not-certified (kill-switch) 는 리뷰할 것 없음이 아니다"):
+            self.setUp()
+            folder = self.sent()
+            self.rig.write_result(folder, "not-certified (kill-switch)", self.base_sha, self.c1)
+            self.rig.write_intent_return(folder, [])
+            rv, _lines = self.came_back()
+            self.assertEqual((rv.result.kind, rv.stage, rv.close_reason), ("얻음", "닫힘", "막는 지적 없음"))
+
+    def test_back_range_from_result_scope_when_intent_blank(self):
+        heads = {"비었다": ("-", "-"), "다른 커밋을 말한다": (self.base_sha, self.base_sha)}
+        for label, (head, base) in heads.items():
+            with self.subTest(intent=label):
+                self.setUp()
+                folder = self.sent()
+                self.rig.write_result(folder, "defect", self.base_sha, self.c1,
+                                      blocking=["IMPORTANT src/a.py:1 — 값"])
+                self.rig.write_intent_return(folder, [], reviewed_head=head, reviewed_base=base)
+                rv, _lines = self.came_back()
+                self.assertEqual((rv.result.kind, rv.stage), ("얻음", "돌아옴"))
+                self.assertEqual([f.text for f in rv.blocking], ["IMPORTANT src/a.py:1 — 값"])
+
+    def test_back_moves_originals_without_pr_body(self):
+        rows = [("src/a.py", 3, "CRITICAL", "## 머리 줄처럼 보이는 요약 · 가운뎃점", "``` 펜스를 닫는다"),
+                ("src/b.py", 7, "IMPORTANT", "- 맨 앞 줄표로 시작하는 요약", None)]
+        fixes = ["%s %s:%d — %s · 고칠 방법: %s" % (sev, path, line, summary, fix or "(없음)")
+                 for path, line, sev, summary, fix in rows]
+        broken = ["tests/test_b.py::test_y · NEW_TEST_RED — 고칠 방법: 기대값"]
+        findings = [dict({"agent": "security-reviewer", "file": path, "line": line, "severity": sev,
+                          "summary": summary}, **({"proposed_fix": fix} if fix else {}))
+                    for path, line, sev, summary, fix in rows]
+        findings.append({"file": "src/c.py", "line": 1, "severity": "SUGGESTION", "summary": "제안"})
+        got = {}
+        for source in ("합치기 전 지적 목록", "고칠 목록"):
+            with self.subTest(source=source):
+                self.setUp()
+                folder = self.sent()
+                self.rig.write_result(folder, "defect", self.base_sha, self.c1, blocking=fixes, regress=broken)
+                self.rig.write_intent_return(folder, [])
+                if source == "합치기 전 지적 목록":
+                    self.rig.write_pre_merge(folder, findings)
+                rv, lines = self.came_back()
+                self.assertNotIn(NO_YAML, lines)
+                got[source] = [(f.kind, f.text) for f in rv.blocking]
+                self.assertEqual(got[source], [("막는 지적", t) for t in fixes] + [("새로 깨진 테스트", broken[0])])
+        with self.subTest(source="합치기 전 목록의 겹친 지적은 합치지 않는다"):
+            self.setUp()
+            folder = self.sent()
+            self.rig.write_result(folder, "defect", self.base_sha, self.c1, blocking=fixes[:1])
+            self.rig.write_pre_merge(folder, findings[:1] * 2)
+            self.rig.write_intent_return(folder, [])
+            rv, _lines = self.came_back()
+            self.assertEqual([f.text for f in rv.blocking], fixes[:1] * 2)
+        with self.subTest(source="합치기 전 목록의 꼴이 틀렸다"):
+            self.setUp()
+            folder = self.sent()
+            self.rig.write_result(folder, "defect", self.base_sha, self.c1, blocking=fixes[1:])
+            (folder / "findings-pre-merge.yaml").write_text("findings: {not: [a list\n", encoding="utf-8")
+            self.rig.write_intent_return(folder, [])
+            rv, _lines = self.came_back()
+            self.assertEqual([f.text for f in rv.blocking], fixes[1:])
+
+    def test_back_filtered_lists_split(self):
+        folder = self.sent()
+        self.rig.write_result(folder, "clean", self.base_sha, self.c1,
+                              filtered=[("q1", "가가"), ("q2", "나나"), ("q3", "다다")], wrong=[("q2", "나나")])
+        self.rig.write_intent_return(folder, [], answered_filtered=3)
+        rv, _lines = self.came_back()
+        self.assertEqual([(x.id, x.text, x.dest) for x in rv.filtered_wrong], [("q2", "나나", "")])
+        self.assertEqual([(x.id, x.text) for x in rv.filtered_other],
+                         [("q1", "의도다 · docs/qg-intent-answers/q1.md — 가가"),
+                          ("q3", "의도다 · docs/qg-intent-answers/q3.md — 다다")])
+
+    def test_back_intent_only_unasked(self):
+        folder = self.sent()
+        self.rig.write_result(folder, "clean", self.base_sha, self.c1, over=[("q2", "상한 넘은 질문")])
+        self.rig.write_intent_return(folder, [
+            {"id": "q1", "state": "묻지 않음", "question": "이 기능이 정말 필요한가"},
+            {"id": "q2", "state": "상한 넘어 남김", "question": "상한 넘은 질문"},
+            {"id": "q3", "state": "답함", "question": "답한 질문", "answer": "의도다"},
+            {"id": "q4", "state": "묻지 않음", "question": "이름이 맞나"}])
+        rv, _lines = self.came_back()
+        self.assertEqual(rv.asks, [F.Ask(kind="의도 점검", id="q1", text="이 기능이 정말 필요한가"),
+                                   F.Ask(kind="의도 점검", id="q4", text="이름이 맞나")])
+        self.assertEqual((rv.stage, rv.result.intent_line), ("돌아옴", "intent-critic — 질문 4개"))
+
+    def test_back_intent_unreadable_does_not_block(self):
+        cases = ("없다", "판이 2", "펜스가 없다", "YAML 이 깨졌다")
+        for label in cases:
+            for blocking in ((), ("IMPORTANT src/a.py:1 — 값",)):
+                with self.subTest(case=label, blocking=bool(blocking)):
+                    self.setUp()
+                    folder = self.sent()
+                    self.rig.write_result(folder, "defect" if blocking else "clean", self.base_sha, self.c1,
+                                          blocking=blocking)
+                    path = folder / "intent-return.md"
+                    if label == "판이 2":
+                        self.rig.write_intent_return(folder, [{"id": "q1", "state": "묻지 않음", "question": "가"}],
+                                                     contract=2)
+                    elif label == "펜스가 없다":
+                        path.write_text("contract: 3\nquestions: []\n", encoding="utf-8")
+                    elif label == "YAML 이 깨졌다":
+                        path.write_text("```qg-intent-return\ncontract: 3\nquestions: [\n```\n", encoding="utf-8")
+                    rv, lines = self.came_back()
+                    self.assertEqual((rv.result.kind, rv.result.intent_line), ("얻음", UNCOUNTABLE))
+                    self.assertTrue(any(UNCOUNTABLE in x for x in lines), lines)
+                    self.assertEqual(rv.asks, [])
+                    want = ("돌아옴", "") if blocking else ("닫힘", "막는 지적 없음")
+                    self.assertEqual((rv.stage, rv.close_reason), want)
+                    self.assertEqual([f.text for f in rv.blocking], list(blocking))
+
+    def test_back_closes_when_nothing(self):
+        folder = self.sent()
+        self.rig.write_result(folder, "clean", self.base_sha, self.c1,
+                              filtered=[("q9", "방향이 맞나")], wrong=[("q9", "방향이 맞나")])
+        self.rig.write_intent_return(folder, [], answered_filtered=1)
+        rv, _lines = self.came_back()
+        self.assertEqual((rv.stage, rv.close_reason, rv.result.kind), ("닫힘", "막는 지적 없음", "얻음"))
+        self.assertEqual([x.id for x in rv.filtered_wrong], ["q9"])
+        self.assertEqual(rv.filtered_other, [])
+        with self.subTest(case="담당자가 옮긴 질문이 남았다 — 지우지 않고 닫지 않는다"):
+            self.setUp()
+            moved = F.Ask(kind="담당자가 옮긴 질문", id="w1", text="담당자가 멈춘 질문 — 이 파일을 지워도 되나")
+            folder = self.sent(asks=[moved])
+            self.rig.write_result(folder, "clean", self.base_sha, self.c1)
+            self.rig.write_intent_return(folder, [])
+            rv, _lines = self.came_back()
+            self.assertEqual((rv.stage, rv.close_reason, rv.asks), ("돌아옴", "", [moved]))
+
+    def at_cap_rechecks(self):
+        """차례 1(첫 리뷰) · 2(좁은 재리뷰 하나) — 재리뷰로 이어짐으로 닫힘. (c2, c3) 를 낸다."""
+        c2 = self.code()
+        self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="재리뷰로 이어짐",
+                        worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1),
+                        blocking=[finding("지적 1", "고친 커밋 " + c2)]))
+        c3 = self.code()
+        self.put(review("recheck", 2, self.c1, c2, stage="닫힘", close_reason="재리뷰로 이어짐",
+                        worker="qg-w2 · " + AT, result=obtained(self.c1, c2),
+                        blocking=[finding("지적 2", "고친 커밋 " + c3)]))
+        return c2, c3
+
+    def test_back_at_cap_adds_two_max(self):
+        cases = {"상한에 닿음": ("defect", (), True), "거른 「잘못 골랐다」 목록": ("defect", ("q9",), False),
+                 "막는 지적 없음": ("clean", (), False)}
+        for label, (verdict, wrong, asked) in cases.items():
+            with self.subTest(case=label):
+                self.setUp()
+                c2, c3 = self.at_cap_rechecks()
+                folder = self.sent("recheck", 3, c2, c3)
+                blocking = ["IMPORTANT src/a.py:1 — 값"] if verdict == "defect" else []
+                self.rig.write_result(folder, verdict, c2, c3, blocking=blocking,
+                                      filtered=[(x, "방향") for x in wrong], wrong=[(x, "방향") for x in wrong])
+                self.rig.write_intent_return(folder, [])
+                rv, _lines = self.came_back()
+                self.assertEqual(Q.counted_rechecks(self.reviews()), 2)
+                self.assertEqual(ASK_KIND_TWO in [a.kind for a in rv.asks], asked, rv.asks)
+                if asked:
+                    self.assertEqual(rv.stage, "돌아옴")
+                    self.assertEqual([a.id for a in rv.asks if a.kind == ASK_KIND_TWO], ["q-cap"])
+        with self.subTest(case="상한 안 — 좁은 재리뷰 첫째"):
+            self.setUp()
+            c2 = self.code()
+            self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="재리뷰로 이어짐",
+                            worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1),
+                            blocking=[finding("지적 1", "고친 커밋 " + c2)]))
+            folder = self.sent("recheck", 2, self.c1, c2)
+            self.rig.write_result(folder, "defect", self.c1, c2, blocking=["IMPORTANT src/a.py:1 — 값"])
+            self.rig.write_intent_return(folder, [])
+            rv, _lines = self.came_back()
+            self.assertNotIn(ASK_KIND_TWO, [a.kind for a in rv.asks])
+
+    def test_send_phases(self):
+        self.refused(self.send("start"))  # 상태 파일이 없다
+        self.put(review("premerge", 1, self.base_sha, self.c1))
+        self.refused(self.send("done", "qg-w1"))
+        self.refused(self.back())
+        self.assertEqual(self.reviews()[-1].stage, "열림")
+        self.ok(self.send("start"))
+        self.assertEqual((self.reviews()[-1].stage, self.reviews()[-1].worker), ("보내는 중", ""))
+        self.refused(self.send("start"))
+        self.assertEqual(self.send("done").returncode, 2)
+        self.assertEqual(self.send("done", "qg · w1").returncode, 2)
+        self.ok(self.send("done", "qg-w1"))
+        rv = self.reviews()[-1]
+        self.assertEqual((rv.stage, rv.worker), ("보냄", "qg-w1 · " + AT))
+        self.refused(self.send("start"))
+        self.refused(self.send("done", "qg-w2"))
+        self.assertEqual(self.send("start", "qg-w2").returncode, 2)
+        self.assertEqual(self.reviews()[-1], rv)
+
+    def test_back_without_pyyaml(self):
+        blocker = self.rig.t / "no-yaml"
+        blocker.mkdir()
+        (blocker / "yaml.py").write_text('raise ImportError("PyYAML 을 막았다")\n', encoding="utf-8")
+        folder = self.sent()
+        fix = "IMPORTANT src/a.py:1 — 결과 파일의 글 · 고칠 방법: 되돌린다"
+        self.rig.write_result(folder, "defect", self.base_sha, self.c1, blocking=[fix])
+        self.rig.write_pre_merge(folder, [{"file": "src/a.py", "line": 9, "severity": "IMPORTANT",
+                                           "summary": "합치기 전 목록의 글"}])
+        self.rig.write_intent_return(folder, [{"id": "q1", "state": "묻지 않음", "question": "가"}])
+        rv, lines = self.came_back(env={"PYTHONPATH": str(blocker)})
+        self.assertIn(NO_YAML, lines)
+        self.assertTrue(any(UNCOUNTABLE in x for x in lines), lines)
+        self.assertEqual([f.text for f in rv.blocking], [fix])
+        self.assertEqual((rv.result.kind, rv.result.intent_line, rv.asks), ("얻음", UNCOUNTABLE, []))
 
 
 if __name__ == "__main__":
