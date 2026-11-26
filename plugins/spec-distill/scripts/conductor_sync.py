@@ -158,11 +158,12 @@ def task_view(roadmap):
 
 
 def work_items(report, lines):
-    """[(작업 목록의 제목, 단계, 끝인가, 블록 | None)] — tasks_output 이 탭 있는 줄을 낸 차례(블록 · 과제 · 로드맵 밖 줄) 그대로."""
+    """[(작업 목록의 제목, 걸음을 고를 단계, 끝인가, 블록 | None)] — tasks_output 이 탭 있는 줄을 낸 차례(블록 · 과제 · 로드맵
+    밖 줄) 그대로. 일부 머지 블록은 지금 브랜치의 단계로 걸음을 고르고, 지금 브랜치가 없을 때만 「일부 머지」 그대로다."""
     blocks = report.get("blocks") or []
     jobs = report.get("jobs") or []
     outside = [w for w in (report.get("machine") or {}).get("작업") or [] if w["에픽"] == CP.OUTSIDE]
-    sources = ([(b.get("stage"), b.get("stage") in RS.DONE, b) for b in blocks]
+    sources = ([(CP.active_stage(b) or b.get("stage"), b.get("stage") in RS.DONE, b) for b in blocks]
                + [(j.get("stage"), j.get("stage") in RS.DONE, None) for j in jobs]
                + [(w["단계"], w["단계"] in cs.WORK_DONE, None) for w in outside])
     titles = [ln.split("\t", 1)[0] for ln in lines if "\t" in ln]

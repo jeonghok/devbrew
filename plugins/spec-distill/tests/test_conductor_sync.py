@@ -25,6 +25,9 @@ SYNC = SCRIPTS / "conductor_sync.py"
 FX = PLUGIN / "tests" / "fixtures" / "conductor-e2e"   # 버릴 brief(C1 · S1 · OQ1)
 sys.path.insert(0, str(SCRIPTS))
 import conductor_state as cs  # noqa: E402
+import conductor_sync as SY  # noqa: E402
+import conductor_toc as TOC  # noqa: E402
+import control_plane as CP  # noqa: E402
 
 SID, OTHER = "session-sync0001", "session-sync0002"
 RD = "docs/superpowers/roadmaps/"
@@ -546,6 +549,40 @@ class Steps(SyncRepo):
             if tail is not None:
                 self.assertTrue(e3[0].endswith(" · 남은 줄: " + tail), e3[0])
             self.assertEqual(self.ledger("drop", "--roadmap", RM, "--session", SID, "--section", sec, "--where", where)[0], 0)
+
+    def partial_tail(self, reason, tip="abcdef12", pr=None):
+        """일부 머지 블록 하나(첫 브랜치 머지 · 둘째 브랜치 끝 tip)를 PR 캐시와 함께 덧씌우고, 끝 묶음이 그 일에 낼 걸음 꼬리."""
+        b = {"id": "E4", "title": "라", "kind": "bundle", "stage": "일부 머지 1/2", "reason": reason,
+             "task_status": "in_progress", "deps": [], "warnings": [], "notes": [],
+             "branch_states": [{"branch": "feature/e4a", "tip": None, "merged": "머지 커밋 #4"},
+                               {"branch": "feature/e4b", "tip": tip, "merged": None}]}
+        report = {"roadmap": RM, "blocks": [b], "exit": 0}
+        machine = cs.empty()
+        if pr:
+            machine["PR"].append({"브랜치": "feature/e4b", "번호": "#7", "상태": pr, "확인한 때": "2026-11-26 10:00",
+                                  "headRefOid": "a" * 40, "교차 레포": "아니오", "baseRefName": "trunk", "mergeCommit": "-",
+                                  "쓴 세션": SID})
+        CP.overlay([(RM, report)], lambda _p: (machine, None), True, default_short="trunk")
+        lines, err, rc = CP.tasks_output([(RM, report)])
+        self.assertEqual(rc, 0, err)
+        items = SY.work_items(report, lines)
+        self.assertEqual([it[0] for it in items], ["E4 라 — 일부 머지 1/2"], lines)
+        return SY.step_tail(TOC.load(PLUGIN), items[0][1])
+
+    def test_partial_merge_steps_by_the_active_branch(self):   # 머지 앞 리뷰 지적 1 — 일부 머지는 지금 브랜치의 단계로 걸음을 고른다
+        guide = lambda n: str(PLUGIN / "references" / ("conducting-step-%d.md" % n))
+        tail = self.partial_tail("feature/e4b — 구현 중 · Spec: 트레일러 커밋 있음: docs/p2.md")
+        self.assertTrue(tail.startswith(" → 걸음 4 돌아오기 · ") and tail.endswith(guide(4)), tail)
+        tail = self.partial_tail("feature/e4b — 계획 · 계획 있음")
+        self.assertTrue(tail.startswith(" → 걸음 4 ") and tail.endswith(guide(4)), tail)
+        tail = self.partial_tail("feature/e4b — 구현 끝 · 구현 대조 절 있음: docs/p2.md", pr="열림")   # 열린 PR → 걸음 5
+        self.assertTrue(tail.startswith(" → 걸음 5 머지 전 확인 · ") and tail.endswith(guide(5)), tail)
+        tail = self.partial_tail("feature/e4b — 구현 끝 · 구현 대조 절 있음: docs/p2.md", pr="닫힘")   # 열리지 않은 PR → 구현 끝 그대로
+        self.assertTrue(tail.startswith(" → 걸음 4 ") and tail.endswith(guide(4)), tail)
+        tail = self.partial_tail("feature/e4b — 설계 중 · 브랜치 있음 · spec 없음")
+        self.assertTrue(tail.startswith(" → 걸음 3 ") and tail.endswith(guide(3)), tail)
+        tail = self.partial_tail("다음 브랜치 없음: feature/e4b", tip=None)   # 양성 짝 — 다음 브랜치가 없으면 표의 「일부 머지」 행
+        self.assertTrue(tail.startswith(" → 걸음 3 다음 일 고르기와 보내기 · ") and tail.endswith(guide(3)), tail)
 
     def test_toc_broken_does_not_stop(self):   # Review Focus 1
         copy = self.t / "plugin-copy"
