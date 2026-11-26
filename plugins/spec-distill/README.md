@@ -372,7 +372,7 @@ state_branch: 켬
 
 ### 먼저 — 설계문서 리뷰를 끄는 법
 
-설계문서 리뷰를 끄려면 `/spec-distill:spec-review` 를 부르지 않는다. 플러그인 전체는 Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`)다. `spec-review` 가 엔진 라운드 전에 도는 진입 검사(`scripts/review_entry.py` + 리터럴 펜스)는 은퇴한 이름이 켜져 있으면 알릴 뿐 리뷰를 끄지 않는다. 진입 검사 자신이 실패하면(모듈 부재 · rc≠0 · 출력 계약 위반) 끔으로 친다 — 그 사실이 advisory 로 나오고 brainstorming 의 문서 승인 자리로 돌아간다. 전부 세션 스코프 env var 라 재시작이 필요하다.
+설계문서 리뷰를 끄려면 `/spec-distill:spec-review` 를 부르지 않는다. 플러그인 전체는 Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`)다. 진입 검사 자신이 실패하면(모듈 부재 · rc≠0 · 출력 계약 위반) 끔으로 친다 — 그 사실이 advisory 로 나오고 brainstorming 의 문서 승인 자리로 돌아간다.
 
 ### 스위치 목록
 

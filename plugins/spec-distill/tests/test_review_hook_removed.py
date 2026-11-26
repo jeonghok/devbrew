@@ -23,6 +23,9 @@ S2·S4·S5 에서는 **살아 있는 어휘**를 뺀다: base 에서 삭제도 �
       토큰을 환경변수 값으로 쥔다) · README 「은퇴한 스위치」 절(절 헤딩부터 다음 `## ` 까지).
       그 안의 다른 삭제 식별자는 RED.
   (c) 이 파일 자신.
+  (d) 도출에서 뺀 이름 `TABLE_OWNED` — 설계 모드 끄기 변수. 읽던 코드(`review_entry.py`)가 사라져 삭제
+      코드의 환경변수로 도출되지만, 이 이름은 끄기 변수 표의 은퇴 행 · README 은퇴 표 · CHANGELOG 에
+      남는 것이 설계이고 그 잔존은 과제 15 의 절 F 가 잰다.
 면제를 넓힐 때는 이 docstring 에 이유를 함께 적는다.
 
 개념 별칭(`ALIASES`)은 일반어라 리포 전체에 걸면 무관한 파일이 걸린다 — spec-distill 배포 파일
@@ -124,7 +127,7 @@ LITERAL_EXEMPT_FILES = (
     f"{SD}/tests/test_reviewing_spec_entry_fence.sh",
 )
 #: 끄기 변수 표의 `은퇴` 행이 이름을 갖는 변수 — 읽던 코드가 없어져 「삭제된 코드의 환경변수」 로 도출되지만
-#: 그 이름이 어디에 남는지는 `shared/tests/test_switch_tables.sh` 가 문다(AC18).
+#: 그 이름이 어디에 남는지는 과제 15 의 절 F 가 문다.
 TABLE_OWNED = frozenset({"DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE"})
 README = f"{SD}/README.md"
 README_RETIRED_HEADING = re.compile(r"^### 은퇴한 스위치")

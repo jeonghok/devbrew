@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import unittest
 from pathlib import Path
@@ -43,6 +44,12 @@ def run_entry(**env_extra: str) -> dict:
     if len(lines) != 1:
         raise AssertionError(f"stdout 이 JSON 한 줄이 아니다: {cp.stdout!r}")
     return json.loads(lines[0])
+
+
+def suggested_names(text: str) -> set:
+    """알림이 «권하는» 끄기 이름 꼴. 사용자 자신의 `SKIP_AUTOREVIEW=1` 되읽기는 권유가 아니라 먼저 걷는다."""
+    text = text.replace(f"{AUTOREVIEW_VAR}=1 은 읽는 곳이 없어", "")
+    return set(re.findall(r"DEVBREW_SKIP_HOOKS=spec-distill:[A-Za-z-]+|DEVBREW_[A-Z_]+=1", text))
 
 
 class TestEntryVerdict(unittest.TestCase):
@@ -120,8 +127,19 @@ class TestRetiredSwitchAdvisory(unittest.TestCase):
                 self.assertNotIn(DESIGN_VAR, msg)
                 self.assertNotIn("spec-distill:Stop", msg)
 
+    def test_name_extractor_finds_names_in_old_alternatives(self):
+        """계측기 대조 — 옛 대신할 길 문장에서 추출기가 이름 셋을 뽑는다. 못 뽑으면 아래 빈 집합 단언은 공허하다."""
+        old = ("설계문서 리뷰를 끄려면 DEVBREW_SKIP_HOOKS=spec-distill:review-entry 또는 "
+               "DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1, 플러그인 전체는 DEVBREW_SPEC_DISTILL_DISABLE=1.")
+        self.assertEqual(suggested_names(old), {
+            "DEVBREW_SKIP_HOOKS=spec-distill:review-entry",
+            "DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1", "DEVBREW_SPEC_DISTILL_DISABLE=1"})
+
     def test_alternatives_name_no_retired_switch(self):
-        """대신할 길 문장이 은퇴한 끄기 이름을 권하지 않는다 — 있을 때 잡히는 짝은 새 길 두 낱말이다."""
+        """대신할 길 문장이 은퇴한 끄기 이름을 하나도 권하지 않는다(스무 개 전부 — 이름 꼴로 뽑아 빈 집합을 본다).
+
+        있을 때 잡히는 짝은 새 길 두 낱말이다.
+        """
         every = ",".join(REVIEW_RETIRED + GONE_RETIRED)
         for label, env in (
             ("Stop 토큰", {"DEVBREW_SKIP_HOOKS": "spec-distill:Stop"}),
@@ -131,6 +149,7 @@ class TestRetiredSwitchAdvisory(unittest.TestCase):
                 text = " ".join(run_entry(**env)["advisories"])
                 self.assertIn("/spec-distill:spec-review", text)
                 self.assertIn("플러그인 끄기", text)
+                self.assertEqual(suggested_names(text), set())
                 for retired in (GLOBAL_VAR, DESIGN_VAR, ENTRY_TOKEN):
                     self.assertNotIn(retired, text)
 

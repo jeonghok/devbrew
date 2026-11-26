@@ -11,7 +11,7 @@ import json
 import os
 import sys
 
-#: 자동 리뷰를 끄던 토큰. 리뷰 기능은 남아 있으므로 대체 스위치를 댄다.
+#: 자동 리뷰를 끄던 토큰. 리뷰 기능은 남아 있으므로 새 길을 댄다.
 REVIEW_TOKENS = ("spec-distill:Stop", "spec-distill:review-dispatch")
 #: 구조 검사·리마인더를 끄던 토큰. 끄던 대상이 삭제돼 등가물이 없다 — 대체재를 대지 않는다.
 GONE_TOKENS = ("spec-distill:validator", "spec-distill:PostToolUse",
@@ -28,8 +28,7 @@ ALTERNATIVES = (
 def retired_advisories() -> list[str]:
     """설정된 은퇴 스위치마다 사용자의 토큰을 되읽는 문장.
 
-    `kill_switch_active` 를 쓰지 않는 이유: bool 만 내므로 어느 토큰이 설정됐는지 이름을 댈 수
-    없다. 매칭은 그 함수와 같은 규칙(콤마 분리 · 양끝 공백 제거 · 전체 토큰)이다.
+    매칭은 콤마 분리 · 양끝 공백 제거 · 전체 토큰이다.
     """
     raw = os.environ.get("DEVBREW_SKIP_HOOKS", "")
     tokens = {t.strip() for t in raw.split(",") if t.strip()}
