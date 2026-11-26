@@ -59,7 +59,7 @@ team 형식(로드맵 머리말 `layout: team` — 과제마다 과제 파일과
 
 ## Constraints
 
-- 지금 동작을 못 박은 테스트의 기대값이 바뀌는 조각은 그 테스트를 이 문서에 이름으로 적는다(§행 대조의 「뒤집히는 테스트」). 적히지 않은 테스트는 고치지 않은 채 통과한다.
+- 지금 동작을 못 박은 테스트의 기대값이 바뀌는 조각은 그 테스트를 이 문서에 이름으로 적는다([Verification Plan](#verification-plan) 의 「뒤집히는 테스트」). 적히지 않은 테스트는 고치지 않은 채 통과한다.
 - 종료 코드의 뜻은 있는 것을 쓴다 — 어긋남 1 · 사용법 2 · 검사 불가 3. 새 코드를 만들지 않는다.
 - 이 설계가 더하는 git 읽기(`log` · `cat-file --filters` · `rev-parse`)는 읽기 하위 명령이다. 허용 목록을 둔 읽기 도우미가 있는 스크립트에서는 그 도우미를 거치고 목록에 없는 하위 명령이면 목록에 더한다. 허용 목록이 없는 스크립트(`team_write.py` · `roadmap_write.py` 는 git 을 바로 부른다)에서는 그 스크립트가 이미 쓰는 길을 따른다 — 새 쓰기 하위 명령은 더하지 않는다.
 - 리뷰어 프로필(`references/docreview-profiles/design-doc.md`)과 옮김 대조 agent(`agents/relay-checker.md`)는 persona 파일이다. 고침은 강화 쪽(읽을 것을 더한다)이고 PR 본문에 보안 리뷰 대상이라고 적는다.
@@ -408,7 +408,7 @@ R2 설계 §2 는 「이 답보다 뒤에 같은 물음으로 사람이 고른 �
 | 1 | `scripts/team_check.py` · `team_write.py` · `team_files.py` · `team_layout.py` · `team_rules.py` · `job_results.py` · `conductor_ledger.py` · `roadmap_write.py`† · `roadmap_status.py`† · `roadmap_model.py`† | `references/team-files.md` · `README.md`† | `tests/test_team_write.sh` · `test_team_docs.py` · `test_job_results.sh` · `test_team_rules.sh` · `test_conductor_ledger.py` · `test_roadmap_status.sh` |
 | 2 | `scripts/human_lines.py` · `session_record.py` · `team_status.py` · `conductor_ledger.py` · `repo_defaults.py` · `start_bundle.py` · `job_results.py` · `walk_table.py` · `conductor_state.py`†(표지 세션 이력) | `references/team-files.md` · `skills/spec-review/SKILL.md` · R2 설계문서 §2 의 정의 문장† | `tests/test_human_judge.py` · `test_human_lines.py` · `test_human_record.sh` · `test_session_record.py` · `tests/fixtures/session-record/` |
 | 3 | `scripts/team_files.py` · `team_write.py` · `job_results.py` · `start_bundle.py` · `team_status.py` · `branch_tip.py` · `walk_table.py` · `conductor_ledger.py` · `merge_check.py`† · `roadmap_write.py`† | `references/team-files.md` · `conducting-team.md`†(E2 뒤 — 걸음 보기의 인자 문장 · 「기계가 읽지 않는 글로」 문장) · `templates/team/role-worker.md` + 사본† | `tests/test_team_sync.sh` · `test_team_results.py` · `test_start_bundle.sh` · `test_team_status.sh` · `test_walk_next.sh` · `test_walk_table.py` · `test_merge_check.sh` |
-| 4 | `scripts/spec_review_bundle.py` | `references/epic-handoff.md` · `conductor-dispatch.md` · `conducting-team.md`†(E2 뒤) · `docreview-profiles/design-doc.md` · `skills/spec-review/SKILL.md` · `skills/epic-conductor/SKILL.md`† · `agents/relay-checker.md`† · `README.md`† · R2 설계문서† | `tests/test_epic_handoff.sh` · `test_spec_review_bundle.sh` · `test_walk_docs.py` · `test_team_docs.py` · `test_conductor_dispatch_reference.sh` |
+| 4 | `scripts/spec_review_bundle.py` | `references/epic-handoff.md` · `conductor-dispatch.md` · `conducting-team.md`†(E2 뒤) · `docreview-profiles/design-doc.md` · `skills/spec-review/SKILL.md` · `skills/epic-conductor/SKILL.md`† · `agents/relay-checker.md`† · `README.md`† · R2 설계문서† | `tests/test_epic_handoff.sh` · `test_spec_review_bundle.sh` · `test_walk_docs.py` · `test_team_docs.py` · `test_conductor_dispatch_reference.sh` · `test_team_review_entry.sh` |
 
 계획마다 `.claude-plugin/plugin.json` 의 판과 `CHANGELOG.md` 를 고친다. 조사 보고 셋은 `docs/superpowers/roadmaps/2026-11-14-conductor-context-economy-brief/e4-research/` 에 이 문서와 함께 커밋한다.
 
@@ -424,9 +424,11 @@ R2 설계 §2 는 「이 답보다 뒤에 같은 물음으로 사람이 고른 �
   - `tests/test_walk_docs.py` — team 절의 「계획 → plan」 · 「(계획 n)」 단언(a8).
   - `tests/test_start_bundle.sh` — 검수 묶음에 `쓸 것` 이 없다고 본 단언(c2d).
   - `tests/test_team_files.py` · `tests/test_walk_docs.py` — 「기계가 읽지 않는 글로」 문장 단언(c6).
+  - `tests/test_conductor_dispatch_reference.sh` — 「옮김 기록의 「받은 원문」 은 담당자가 쓴 그 파일의 글 그대로다」 문장 락(c3a).
+  - `tests/test_team_review_entry.sh` — 「AC16: 알림 한 줄」 과 「경고 수 바로 앞 줄이 알림 전체」 단언(c2e).
 - 조용한 통과를 닫는 조각(AC1 – AC4 · AC7 · AC13 · AC14)은 닫기 전의 코드에서 그 테스트가 통과(= 구멍이 열려 있음)하는 것을 먼저 보이고, 고친 뒤 양성 대조(바른 흐름은 통과)를 함께 둔다.
 - 동작이 같아야 하는 조각(AC11 · AC15 · AC26 · AC28)은 고치기 전 커밋의 출력을 떠 두고 바이트로 견준다.
-- 임시 레포로 재는 것 — AC1(넣었다 지운 기록 · 얕은 복제) · AC2(기본 기준 없음) · AC6(줄바꿈 변환) · AC21(merge 안 손 고침) · AC14(세션 기록 자료 여럿).
+- 임시 레포로 재는 것 — AC1(넣었다 지운 기록 · 얕은 복제) · AC2(기본 기준 없음) · AC6(줄바꿈 변환) · AC7(merge 안 손 고침 — 지킬 파일 · 받은 뒤 바뀜) · AC14(세션 기록 자료 여럿).
 - 계획마다 마지막 전체 리뷰에 이 문서의 그 계획 수용 기준과 §행 대조의 그 계획 조각을 싣는다. 전체 스위트는 공유 잠금 아래에서 계획 끝에 한 번 돈다.
 - 계획 4 가 끝난 뒤 리더가 임시 레포에 team 형식 로드맵 하나를 만들어 나무 검사 · 시작 묶음 · 결과 대조 · 걸음 보기를 한 번씩 불러 본다 — 끝까지 걸어 보는 것은 E5 의 수용 기준이다.
 
