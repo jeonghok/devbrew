@@ -148,6 +148,7 @@ class Answer:
     at: str                 # 적은 때
     answer_text: str = ""   # 답 원문(여러 줄)
     record: str = ""        # "" | 기록 파일 경로 | `기록 브랜치 없음 — <사유>`
+    question: str = ""      # 답을 적을 때 물을 것에서 옮긴 질문 글(여러 줄) — 승인 기록 다시 보이기가 싣는다
 
 
 @dataclass
@@ -253,6 +254,7 @@ def check(review: Review) -> None:
     for a in review.answers:
         _one_line("정체", a.id)
         _among("종류", a.kind, ASK_KINDS)
+        _block("질문 글", a.question, required=False)
         _filled("답", a.answer)
         _block("답 원문", a.answer_text, required=False)
         _one_line("기록", a.record)
@@ -314,8 +316,8 @@ def render(review: Review) -> str:
                           for x in items]),
         "물을 것": _items([[_field("종류", a.kind), _field("정체", a.id)] + _block_lines("글", a.text)
                         for a in review.asks]),
-        "사용자 답": _items([[_field("정체", a.id), _field("종류", a.kind), _field("답", a.answer)]
-                         + _block_lines("답 원문", a.answer_text)
+        "사용자 답": _items([[_field("정체", a.id), _field("종류", a.kind)] + _block_lines("질문 글", a.question)
+                         + [_field("답", a.answer)] + _block_lines("답 원문", a.answer_text)
                          + [_field("기록", a.record), _field("적은 때", a.at)]
                          for a in review.answers]),
         "멈출 조건": _block_lines("글", review.stop_rule),
@@ -427,10 +429,12 @@ def _read_ask(c: _Cursor) -> Ask:
 
 
 def _read_answer(c: _Cursor) -> Answer:
-    ident, kind, answer = c.field("정체"), c.field("종류"), c.field("답")
+    ident, kind = c.field("정체"), c.field("종류")
+    question = c.block("질문 글")
+    answer = c.field("답")
     text = c.block("답 원문")
     return Answer(id=ident, kind=kind, answer=answer, answer_text=text, record=c.field("기록"),
-                  at=c.field("적은 때"))
+                  at=c.field("적은 때"), question=question)
 
 
 def _section(c: _Cursor, name: str) -> None:

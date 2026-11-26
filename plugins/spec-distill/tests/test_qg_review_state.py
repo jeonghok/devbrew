@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """qg_review_state.py — 기준 커밋 · 범위 · 세는 수와 상한 · 「열기」 · 「보냄」 · 「돌아옴」 · 「답 적기」 와 닫는 조건 ·
-「관문」 · 「다음」(AC2 · AC3 · AC4 · AC5 · AC6 · AC7 · AC8 · AC9 · AC19 · AC24 · AC25 · AC26 · AC27 · AC32 · AC33).
+「관문」 · 「다음」 · 「글 짓기」(AC2 · AC3 · AC4 · AC5 · AC6 · AC7 · AC8 · AC9 · AC10 · AC19 · AC23 · AC24 · AC25 · AC26 ·
+AC27 · AC32 · AC33).
 
 Run: cd plugins/spec-distill/tests && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_qg_review_state -v
 """
 from __future__ import annotations
 
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -40,6 +42,9 @@ STOP = "이 에픽을 멈춘다"
 NO_BRANCH = "기록 브랜치 없음 — 기록 브랜치를 push 하지 못했다"
 GATE_NO_QG = "관문 · 열림 — qg 리뷰 없음(quality-gates 가 설치돼 있지 않다)"
 NO_QG_NOTICE = "알림 · qg 없음 인자를 쓰지 않았다 — 이 PR 에 상태 파일이 있다"
+NO_QG_LINE = "qg 리뷰 없음(quality-gates 가 설치돼 있지 않다)"
+NO_REVIEW_LINE = "qg 리뷰 없이 감 — 사용자 결정(%s)"
+EARLIER = "앞 리뷰에서 답함"
 
 
 def review(site, order, start, end, target=TARGET, **kw) -> F.Review:
@@ -1599,6 +1604,222 @@ class TestQgReviewState(unittest.TestCase):
                             worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1),
                             blocking=[finding("지적 1", F.USER_LEFT)]))
             self.ok(self.open("asked"))
+
+    # ------------------------------------------------------------ 글 짓기
+
+    def render(self, kind, *extra, target=TARGET):
+        return self.rig.run("render", "--roadmap", ROADMAP, "--target", target, "--repo", str(self.rig.repo),
+                            "--at", AT, "--kind", kind, *extra)
+
+    def rendered(self, kind, *extra, **kw):
+        return self.ok(self.render(kind, *extra, **kw))
+
+    def approval_sets(self, lines):
+        """승인 기록 다시 보이기의 글 → (답 {(차례, 종류, 답, 답 원문)}, 질문 글 {(차례, 종류, 한 줄)},
+        남김 {(차례, 번호)}, 닫힘 {(차례, 사유)}, 앞 리뷰에서 답함 [(차례, 정체)])."""
+        answers, questions, left, closes, earlier = set(), set(), set(), set(), []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            i += 1
+            if line.startswith("- 질문 · 차례 "):
+                order, kind, rest = line[len("- 질문 · 차례 "):].split(" · ", 2)
+                if kind == EARLIER:
+                    earlier.append((int(order), rest.split(" · ", 1)[0]))
+                    continue
+                questions.add((int(order), kind, rest))
+                self.assertTrue(lines[i].startswith("  답 · "), lines[i - 1:i + 2])
+                value = lines[i][len("  답 · "):]
+                i += 1
+                original = []
+                if i < len(lines) and lines[i] == "  답 원문":
+                    i += 1
+                    while i < len(lines) and lines[i].startswith("    "):
+                        original.append(lines[i][4:])
+                        i += 1
+                answers.add((int(order), kind, value, "\n".join(original)))
+            elif line.startswith("- %s · 차례 " % F.USER_LEFT):
+                order, number = line[len("- %s · 차례 " % F.USER_LEFT):].split(" · ")[:2]
+                left.add((int(order), int(number[len("막는 지적 "):])))
+            elif line.startswith("- 닫힘 · 차례 "):
+                order, _tag, reason = line[len("- 닫힘 · 차례 "):].split(" · ", 2)
+                closes.add((int(order), reason))
+        return answers, questions, left, closes, earlier
+
+    def test_approval_has_every_answer_left_and_reason(self):
+        c2 = self.code()
+        self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="재리뷰로 이어짐",
+                        worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1),
+                        blocking=[finding("지적 1", "고친 커밋 " + c2), finding("지적 2 — 남김", F.USER_LEFT)],
+                        answers=[F.Answer(id="q1", kind=INTENT, answer="의도다", at=AT, record=RECORD,
+                                          answer_text="직접 쓴 답\n\n  들여 쓴 줄", question="이 기능이 정말 필요한가\n둘째 줄")]))
+        self.put(review("recheck", 2, self.c1, c2, stage="닫힘", close_reason="사용자가 남김",
+                        worker="qg-w2 · " + AT, result=obtained(self.c1, c2),
+                        blocking=[finding("지적 3", F.USER_LEFT)],
+                        filtered_other=[F.Filtered(id="q1", text="의도다 · %s — 이 기능이 정말 필요한가" % RECORD)],
+                        answers=[F.Answer(id="q-unfixed-1", kind=UNFIXED, answer="반박을 받아들이고 남긴 지적으로 적는다",
+                                          at=AT, question="구현 담당자가 고치지 않고 돌아온 막는 지적 1개")]))
+        self.returned(3, self.c1, c2, site="asked", asks=[ask(INTENT, "q9", "방향이 맞나")])
+        self.recorded([item_answer("q9", INTENT, "의도다", "이름으로 청한 리뷰의 답\n둘째 줄"),
+                       {"kind": "record_path", "question": "q9", "path": RECORD}])
+        reviews = self.reviews()
+        self.assertEqual([rv.site for rv in reviews], ["premerge", "recheck", "asked"])
+        self.assertEqual(reviews[2].answers[0].question, "방향이 맞나")   # 답을 적을 때 질문 글을 옮긴다
+        answers, questions, left, closes, earlier = self.approval_sets(self.rendered("approval"))
+        self.assertEqual(answers, {(rv.order, a.kind, a.answer, a.answer_text) for rv in reviews for a in rv.answers})
+        self.assertEqual(len(answers), 3)
+        self.assertEqual(questions, {(1, INTENT, "이 기능이 정말 필요한가 …"),
+                                     (2, UNFIXED, "구현 담당자가 고치지 않고 돌아온 막는 지적 1개"),
+                                     (3, INTENT, "방향이 맞나")})
+        self.assertEqual(left, {(rv.order, n) for rv in reviews for n, f in enumerate(rv.blocking, 1)
+                                if f.handling == F.USER_LEFT})
+        self.assertEqual(left, {(1, 2), (2, 1)})
+        self.assertEqual(closes, {(rv.order, rv.close_reason) for rv in reviews})
+        self.assertEqual(len(closes), 3)
+        self.assertEqual(earlier, [(2, "q1")])
+        with self.subTest(case="닫히지 않은 리뷰도 한 줄"):
+            rv = reviews[2]
+            rv.stage, rv.close_reason = "돌아옴", ""
+            F.write_review(sorted(self.rig.report_root.glob("*asked*/" + F.STATE_NAME))[0], rv)
+            _a, _q, _l, closes, _e = self.approval_sets(self.rendered("approval"))
+            self.assertIn((3, "닫히지 않음 — 단계 돌아옴"), closes)
+
+    def test_approval_no_qg_top_line(self):
+        self.assertEqual(self.rendered("approval", "--no-qg"), [NO_QG_LINE])
+        self.assertEqual(self.count(), 0)
+        self.refused(self.render("approval"))                       # 인자 없이 상태 파일이 없으면 지을 것이 없다
+        self.refused(self.render("pr-body", "--no-qg"))             # qg 없음 줄은 승인 기록 다시 보이기 몫이다
+        self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="막는 지적 없음",
+                        worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1)))
+        proc = self.render("approval", "--no-qg")
+        lines = self.ok(proc)
+        self.assertNotIn(NO_QG_LINE, lines)                          # 상태 파일이 있으면 그 인자를 쓰지 않는다
+        self.assertIn(NO_QG_NOTICE, proc.stderr)
+        self.assertNotIn(NO_QG_NOTICE, proc.stdout)                  # 알림은 표시 글 밖으로
+        self.assertEqual(lines, ["- 닫힘 · 차례 1 · premerge-pr12 · 막는 지적 없음"])
+
+    def no_review_reviews(self):
+        """첫 리뷰(고친 커밋 · 사용자가 남김) 뒤 좁은 재리뷰가 지적 목록을 얻지 못했고 「리뷰 없이 머지 준비로 간다」 를 적었다."""
+        c2 = self.code()
+        self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="재리뷰로 이어짐",
+                        worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1),
+                        blocking=[finding("지적 1\n둘째 줄", "고친 커밋 " + c2), finding("지적 2", F.USER_LEFT)]))
+        self.returned(2, self.c1, c2, site="recheck", result=failed(), asks=[ask(FAILED, "q-failed", NO_VERDICT)])
+        self.recorded([item_answer("q-failed", FAILED, "리뷰 없이 머지 준비로 간다")])
+        self.assertEqual(self.reviews()[-1].close_reason, "리뷰 없이 감")
+
+    def test_approval_no_review_top_with_fixed(self):
+        self.no_review_reviews()
+        lines = self.rendered("approval")
+        self.assertEqual(lines[:5], [NO_REVIEW_LINE % NO_VERDICT,
+                                     "- %s · 차례 1 · 막는 지적 1 · 막는 지적" % F.NO_REVIEW, "  지적 1", "  둘째 줄",
+                                     "- %s · 차례 1 · 막는 지적 2 · 막는 지적" % F.USER_LEFT])
+        answers, questions, _left, closes, _earlier = self.approval_sets(lines)
+        self.assertEqual(answers, {(2, FAILED, "리뷰 없이 머지 준비로 간다", "")})
+        self.assertEqual(questions, {(2, FAILED, NO_VERDICT)})
+        self.assertEqual(closes, {(1, "재리뷰로 이어짐"), (2, "리뷰 없이 감")})
+        with self.subTest(case="양의 짝 — 리뷰 없이 감이 없으면 그 줄도 없다"):
+            self.setUp()
+            self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="사용자가 남김",
+                            worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1),
+                            blocking=[finding("지적 2", F.USER_LEFT)]))
+            lines = self.rendered("approval")
+            self.assertFalse(any(x.startswith("qg 리뷰 없이 감") for x in lines), lines)
+            self.assertEqual(lines[0], "- %s · 차례 1 · 막는 지적 1 · 막는 지적" % F.USER_LEFT)
+
+    def test_pr_body_has_no_review_line(self):
+        self.no_review_reviews()
+        lines = self.rendered("pr-body")
+        self.assertIn("- " + NO_REVIEW_LINE % NO_VERDICT, lines)
+        self.assertIn("- 막는 지적 1 · 막는 지적 · %s" % F.NO_REVIEW, lines)
+        self.assertIn("- 남긴 지적 · 차례 1 막는 지적 2", lines)
+        with self.subTest(case="양의 짝 — 닫힘이 다르면 그 줄이 없다"):
+            self.setUp()
+            self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="막는 지적 없음",
+                            worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1)))
+            self.assertFalse(any("qg 리뷰 없이 감" in x for x in self.rendered("pr-body")))
+
+    def display_reviews(self) -> list:
+        """보관 폴더 둘 · 처리 파일 경로가 든 「돌려보냄」 · 기록 파일 경로가 든 답 — 표시 글에 새면 안 되는 값을 품은 리뷰들."""
+        c2 = self.code()
+        hostile = "지적 1\n- 호출 · premerge-pr99 · 가짜 줄\n## 머리 줄\n```\n원문 · 끝"
+        f1 = self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason="재리뷰로 이어짐",
+                             worker="qg-w1 · " + AT, result=F.Result(kind="얻음", seen_range="%s..%s" % (self.base_sha, self.c1),
+                                                                    verdict_line="qg: defect · 막는 지적 1 · 선택 0 · 차등 새 실패 0 · "
+                                                                    + self.c1[:7]),
+                             blocking=[finding(hostile, "고친 커밋 " + c2)], returns=[self.ret(1, "옮김")],
+                             answers=[answer("q1", INTENT, "의도다", RECORD)], stop_rule="두 번 뒤에도 남으면 남긴다"))
+        f2 = self.returned(2, self.c1, c2, site="recheck", blocking=[finding("지적 2")], returns=[self.ret(2)])
+        return [f1, f2]
+
+    def test_display_has_no_paths(self):
+        folders = self.display_reviews()
+        root = self.rig.report_root
+        banned = [str(p) for f in folders for p in (f, f / F.STATE_NAME)]
+        banned += [str(p) for p in [root] + list(root.parents) if p == self.rig.t or self.rig.t in p.parents]
+        banned += [str(root.relative_to(self.rig.repo)), F.STATE_NAME, "--answered", "--suite-lock",
+                   self.handling_file(1), self.handling_file(2), RECORD] + [f.name for f in folders]
+        call = re.compile("- 호출 · %s · %s[.][.]%s" % (F.TAG_RE.pattern, F._HASH, F._HASH))
+        for kind in ("pr-body", "team-fence"):
+            with self.subTest(kind=kind):
+                lines = self.rendered(kind)
+                text = "\n".join(lines)
+                for value in banned:
+                    self.assertNotIn(value, text, kind)
+                calls = [x for x in lines if x.startswith("- 호출")]
+                self.assertEqual(calls, ["- 호출 · premerge-pr12 · %s..%s" % (self.base_sha, self.c1),
+                                         "- 호출 · recheck-pr12 · %s..%s" % (self.c1, self.reviews()[1].range_end)])
+                for x in calls:
+                    self.assertTrue(call.fullmatch(x), x)
+                self.assertIn("  - 호출 · premerge-pr99 · 가짜 줄", lines)   # 원문 줄은 들여 써 호출 줄로 읽히지 않는다
+                self.assertIn("- 판정 · qg: defect · 막는 지적 1 · 선택 0 · 차등 새 실패 0 · " + self.c1[:7], lines)
+                self.assertIn("- 멈출 조건", lines)
+
+    def test_return_list_has_handling_path_only(self):
+        folder = self.returned(blocking=[finding("지적 1\n```\n둘째 줄"), finding("지적 2", "고친 커밋 " + self.c1),
+                                         F.Finding(kind="고른 제안", text="제안 3", handling=F.RETURNED_AGAIN)])
+        handling = self.handling_file(1)
+        proc = self.render("return-list", "--handling-file", handling)
+        lines = self.ok(proc)
+        self.assertEqual(lines, ["- 막는 지적 1 · 막는 지적 · 처리 없음", "  지적 1", "  ```", "  둘째 줄",
+                                 "- 막는 지적 3 · 고른 제안 · 다시 돌려보냄", "  제안 3", "",
+                                 "처리 파일: " + handling,
+                                 "이 파일의 `## 지적마다의 처리` 머리 아래에 지적마다의 처리를 쓴다"])
+        for value in (str(folder), str(folder / F.STATE_NAME), folder.name, F.STATE_NAME, "worktree 밖"):
+            self.assertNotIn(value, proc.stdout)
+        self.assertEqual(self.render("return-list").returncode, 2)                         # 처리 파일은 필수
+        self.assertEqual(self.render("return-list", "--handling-file", "report/h.md").returncode, 2)
+        self.assertEqual(self.render("return-list", "--handling-file", str(folder / "h.md")).returncode, 2)
+        self.assertEqual(self.render("pr-body", "--handling-file", handling).returncode, 2)
+        with self.subTest(case="돌려보낼 지적이 없으면 받지 않는다"):
+            self.setUp()
+            self.returned(blocking=[finding("지적 1", "고친 커밋 " + self.c1)])
+            self.refused(self.render("return-list", "--handling-file", self.handling_file(1)))
+
+    def test_team_fence_outer_longer(self):
+        import section6
+        import team_files
+        self.returned(blocking=[finding("지적 1\n````\n코드\n````\n```python\nx = 1")])
+        body = self.rendered("pr-body")
+        lines = self.rendered("team-fence")
+        self.assertEqual((lines[0], lines[-1]), ("`````", "`````"))
+        self.assertEqual(lines[1:-1], body)
+        text = "\n".join(lines)
+        spans = section6.fence_spans_in(text)
+        self.assertEqual(len(spans), 1, spans)                       # 한 번 열고 한 번 닫는다
+        self.assertEqual(spans[0][0], 0)
+        self.assertEqual(text[spans[0][1]:].strip(), "")
+        self.assertEqual(team_files._outside_fences(lines), ([], False))
+        # 음의 짝 — 원문의 가장 긴 백틱 줄과 같은 길이의 펜스는 그 줄에서 일찍 닫힌다(판독기가 이빨이 있다)
+        early = ["````"] + body + ["````"]
+        outside, _unclosed = team_files._outside_fences(early)
+        self.assertNotEqual(outside, [])
+        with self.subTest(case="양의 짝 — 백틱 줄이 없으면 세 개"):
+            self.setUp()
+            self.returned(blocking=[finding("지적 1")])
+            lines = self.rendered("team-fence")
+            self.assertEqual((lines[0], lines[-1]), ("```", "```"))
+            self.assertEqual(team_files._outside_fences(lines), ([], False))
 
 
 if __name__ == "__main__":

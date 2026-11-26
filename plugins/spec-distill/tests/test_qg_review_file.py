@@ -45,7 +45,8 @@ def full_review(target: str = "pr12", order: int = 1) -> F.Review:
         asks=[F.Ask(kind="의도 점검", id="q-new", text="이 기능이 정말 필요한가\n둘째 줄"),
               F.Ask(kind="두 번까지", text="세 번째로 돌려보낼까")],
         answers=[F.Answer(id="q-new", kind="의도 점검", answer="잘못 골랐다", at="2026-11-26 12:00",
-                          answer_text="직접 쓴 답\n여러 줄", record="docs/qg-intent-answers/x.md"),
+                          answer_text="직접 쓴 답\n여러 줄", record="docs/qg-intent-answers/x.md",
+                          question="이 기능이 정말 필요한가\n둘째 줄"),
                  F.Answer(id="", kind="두 번까지", answer="한 번 더 돌려보낸다", at="2026-11-26 12:10",
                           record="기록 브랜치 없음 — 권한이 없다")],
         stop_rule="두 번 뒤에도 남는 지적은\nPR 본문에 적고 넘긴다")
@@ -81,6 +82,9 @@ class TestQgReviewFile(unittest.TestCase):
         self.assertIn("- 닫힘 사유: 「잘못 골랐다」 — 설계 대화로", lines)
         self.assertIn("- 되돌린 커밋: dddddd1", lines)
         self.assertEqual(lines.count("- 되돌린 커밋:"), 3)   # 되돌리지 않은 지적은 빈 칸
+        at = lines.index("- 질문 글:")
+        self.assertEqual(lines[at + 1:at + 3], ["  이 기능이 정말 필요한가", "  둘째 줄"])
+        self.assertEqual(lines.count("- 질문 글:"), 2)        # 질문 글이 없는 답도 빈 칸
         # 빈 칸 · 빈 목록도 읽고 쓴 그대로다
         bare = simple("pr12", 1)
         F.write_review(self.path, bare)
@@ -94,7 +98,7 @@ class TestQgReviewFile(unittest.TestCase):
                            F.Finding(kind="막는 지적", text="\n앞뒤 빈 줄\n\n")]
         review.asks = [F.Ask(kind="담당자가 옮긴 질문", text=HOSTILE)]
         review.answers = [F.Answer(id="q · 1", kind="담당자가 옮긴 질문", answer="- 처리: 반박",
-                                   at="2026-11-26 09:00", answer_text=HOSTILE)]
+                                   at="2026-11-26 09:00", answer_text=HOSTILE, question=HOSTILE)]
         review.stop_rule = HOSTILE
         F.write_review(self.path, review)
         got = F.read_review(self.path)
@@ -102,6 +106,7 @@ class TestQgReviewFile(unittest.TestCase):
         self.assertEqual(got.blocking[1].text, "\n앞뒤 빈 줄\n\n")
         self.assertEqual(got.asks[0].text, HOSTILE)
         self.assertEqual(got.answers[0].answer_text, HOSTILE)
+        self.assertEqual(got.answers[0].question, HOSTILE)
         self.assertEqual(got.answers[0].answer, "- 처리: 반박")
         self.assertEqual(got.stop_rule, HOSTILE)
         self.assertEqual(got, review)
@@ -143,6 +148,9 @@ class TestQgReviewFile(unittest.TestCase):
             "칸 하나 지움": self._broken("- 담당자: qg premerge-pr12 1 · 2026-11-26 10:00\n", ""),
             "되돌린 커밋이 해시가 아님": self._broken("- 되돌린 커밋: dddddd1", "- 되돌린 커밋: 고쳤다"),
             "되돌린 커밋 칸 지움": self._broken("- 되돌린 커밋:\n", ""),
+            "질문 글 칸 지움": self._broken("- 질문 글:\n", ""),
+            "질문 글 들여쓰기 풀림": self._broken("  이 기능이 정말 필요한가\n  둘째 줄\n- 답:",
+                                          "  이 기능이 정말 필요한가\n둘째 줄\n- 답:"),
         }
         for name, text in cases.items():
             with self.subTest(name):

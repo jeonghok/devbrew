@@ -802,7 +802,9 @@ class Recorder:
         if rv.stage != "보냄":
             self.reopen("다른 답")
         rv.asks = [a for a in rv.asks if a.id != ident]
-        rv.answers.append(F.Answer(id=ident, kind=kind, answer=value, at=self.at, answer_text=item["original"]))
+        question = asked[0].text if asked else prior.question       # 물을 것에서 내리기 전에 질문 글을 옮긴다
+        rv.answers.append(F.Answer(id=ident, kind=kind, answer=value, at=self.at, answer_text=item["original"],
+                                   question=question))
         if kind == ASK_INTENT and value == WRONG_CHOICE:
             rv.asks = [a for a in rv.asks if a.kind != ASK_TWO_MAX]   # 거둔다 — 답으로 적지 않는다
         elif kind == ASK_UNFIXED and value in (RETURN_AGAIN, ACCEPT_REBUTTAL):
@@ -1497,7 +1499,201 @@ def c_gate(ctx: Ctx) -> int:
     return RC_CLOSED
 
 
-HANDLERS = {"open": c_open, "send": c_send, "back": c_back, "record": c_record, "next": c_next, "gate": c_gate}
+# ---------------------------------------------------------------- 글 짓기
+
+RENDER_KINDS = ("pr-body", "approval", "return-list", "team-fence")
+NO_QG_LINE = "qg 리뷰 없음(quality-gates 가 설치돼 있지 않다)"
+NO_REVIEW_LINE = "qg 리뷰 없이 감 — 사용자 결정(%s)"
+EARLIER_ANSWERED = "앞 리뷰에서 답함"
+NO_QUESTION_TEXT = "질문 글이 상태 파일에 없다"
+HANDLING_FILE_LINE = "처리 파일: %s"
+HANDLING_FILE_RULE = "이 파일의 `%s` 머리 아래에 지적마다의 처리를 쓴다" % HANDLING_HEAD
+FENCE_MIN = 3
+# 글은 상태 파일의 칸에서만 짓는다 — 경로를 담은 칸(「돌려보냄」 의 처리 파일 · 답의 기록)은 싣지 않는다.
+# 처리 파일 경로는 return-list 의 인자에서만 온다.
+
+
+def _indented(text: str, depth: int = 1) -> List[str]:
+    """여러 줄 글을 들여 써 싣는다 — 원문 줄이 목록 머리(`- 호출 · ` 등)나 맨 앞 펜스로 읽히지 않게."""
+    pad = F.INDENT * depth
+    return [pad + line for line in text.split("\n")] if text != "" else []
+
+
+def _one_line(text: str) -> str:
+    """질문 글 한 줄 — 첫 글 줄, 줄이 더 있으면 끝에 「 …」."""
+    lines = [x for x in text.split("\n") if x.strip()]
+    if not lines:
+        return ""
+    return lines[0] + (" …" if len(lines) > 1 else "")
+
+
+def _question_line(review: F.Review, a: F.Answer) -> str:
+    if a.question.strip():
+        return _one_line(a.question)
+    if a.kind == ASK_FAILED and review.result.reason:
+        return review.result.reason
+    return NO_QUESTION_TEXT
+
+
+def _closing(review: F.Review) -> str:
+    if review.stage != "닫힘":
+        return "닫히지 않음 — 단계 %s" % review.stage
+    return " · ".join(x for x in (review.close_reason, review.close_mark) if x)
+
+
+def _verdict(review: F.Review) -> str:
+    r = review.result
+    if r.kind == "":
+        return "아직 돌아오지 않았다 — 단계 %s" % review.stage
+    if r.kind == A.NOT_OBTAINED:
+        return "%s — %s" % (ASK_FAILED, r.reason)
+    return r.verdict_line or r.kind
+
+
+def _finding_head(n: int, f: F.Finding) -> str:
+    parts = ["- 막는 지적 %d" % n, f.kind, f.handling]
+    if f.reverted:
+        parts.append("되돌린 커밋 " + f.reverted)
+    if f.from_review:
+        parts.append("낸 리뷰 " + f.from_review)
+    return " · ".join(parts)
+
+
+def _answer_lines(review: F.Review, a: F.Answer, order: Optional[int] = None) -> List[str]:
+    where = "" if order is None else "차례 %d · " % order
+    lines = ["- 질문 · %s%s · %s" % (where, a.kind, _question_line(review, a)), "  답 · " + a.answer]
+    if a.answer_text != "":
+        lines += ["  답 원문"] + _indented(a.answer_text, 2)
+    return lines
+
+
+def pr_body_lines(reviews: List[F.Review]) -> List[str]:
+    """PR 본문 `## qg 리뷰` 절의 몸(머리 줄 없이) — 리뷰마다 호출 줄 · 판정 줄 · 막는 지적과 처리 · 멈출 조건 · 사용자 답,
+    끝에 남긴 지적."""
+    out: List[str] = []
+    for rv in reviews:
+        if out:
+            out.append("")
+        out += ["- 호출 · %s · %s..%s" % (rv.site_tag, rv.range_start, rv.range_end), "- 판정 · " + _verdict(rv)]
+        if rv.close_reason == "리뷰 없이 감":
+            out.append("- " + NO_REVIEW_LINE % rv.result.reason)
+        if rv.result.intent_line:
+            out.append("- 의도 점검 · " + rv.result.intent_line)
+        for n, f in enumerate(rv.blocking, 1):
+            out += [_finding_head(n, f)] + _indented(f.text)
+        if rv.stop_rule != "":
+            out += ["- 멈출 조건"] + _indented(rv.stop_rule)
+        for a in rv.answers:
+            out += _answer_lines(rv, a)
+        out.append("- 닫힘 · " + _closing(rv))
+    left = ["- 남긴 지적 · 차례 %d 막는 지적 %d" % (rv.order, n)
+            for rv in reviews for n, f in enumerate(rv.blocking, 1) if f.handling == F.USER_LEFT]
+    return out + ([""] + left if left else [])
+
+
+def _kept_lines(rv: F.Review, n: int, f: F.Finding) -> List[str]:
+    head = "- %s · 차례 %d · 막는 지적 %d · %s" % (f.handling, rv.order, n, f.kind)
+    if f.from_review:
+        head += " · 낸 리뷰 " + f.from_review
+    return [head] + _indented(f.text)
+
+
+def approval_lines(reviews: List[F.Review]) -> List[str]:
+    """승인 기록 다시 보이기의 qg 몫 — 맨 위 「qg 리뷰 없이 감」 과 그 아래 「리뷰 없이 가기로 함」 지적 · 「사용자가 남김」 지적,
+    그다음 리뷰마다 사용자 답 전부와 앞 리뷰에서 답한 질문, 끝에 리뷰마다 닫힘 사유 한 줄. 상태 파일이 없으면 qg 없음 줄."""
+    if not reviews:
+        return [NO_QG_LINE]
+    out: List[str] = []
+    shown = set()
+    no_review = [(i, rv, n, f) for i, rv in enumerate(reviews) for n, f in enumerate(rv.blocking, 1)
+                 if f.handling == F.NO_REVIEW]
+    for j, rv in enumerate(reviews):
+        if rv.close_reason != "리뷰 없이 감":
+            continue
+        out.append(NO_REVIEW_LINE % rv.result.reason)
+        for i, owner, n, f in no_review:
+            if i <= j and (i, n) not in shown:
+                shown.add((i, n))
+                out += _kept_lines(owner, n, f)
+    for i, owner, n, f in no_review:            # 「리뷰 없이 감」 리뷰 없이 남은 것도 빠뜨리지 않는다
+        if (i, n) not in shown:
+            out += _kept_lines(owner, n, f)
+    for rv in reviews:
+        out += [x for n, f in enumerate(rv.blocking, 1) if f.handling == F.USER_LEFT for x in _kept_lines(rv, n, f)]
+    for rv in reviews:
+        for a in rv.answers:
+            out += _answer_lines(rv, a, rv.order)
+        for items, wrong in ((rv.filtered_wrong, True), (rv.filtered_other, False)):
+            for x in items:
+                line = "- 질문 · 차례 %d · %s · %s" % (rv.order, EARLIER_ANSWERED, x.id)
+                line += (" · " + x.text) if x.text else ""
+                if wrong:
+                    line += " · 「%s」 · 행선 %s" % (WRONG_CHOICE, x.dest or "빔")
+                out.append(line)
+    out += ["- 닫힘 · 차례 %d · %s · %s" % (rv.order, rv.site_tag, _closing(rv)) for rv in reviews]
+    return out
+
+
+def return_list_lines(review: F.Review, handling_file: str) -> List[str]:
+    """구현 담당자에게 돌려보낼 지적 목록 — 처리 없음 · 다시 돌려보냄인 막는 지적(고른 제안 · 되올린 지적 포함)의 원문과
+    처리 파일의 절대경로. 번호는 상태 파일의 막는 지적 번호(답 적기의 `handling` 항목이 쓰는 번호)다."""
+    items = [(n, f) for n, f in enumerate(review.blocking, 1) if _open(f.handling)]
+    if not items:
+        _refuse("마지막 리뷰(차례 %d)에 돌려보낼 막는 지적(처리 없음 · 다시 돌려보냄)이 없다" % review.order)
+    out: List[str] = []
+    for n, f in items:
+        out += [_finding_head(n, f)] + _indented(f.text)
+    return out + ["", HANDLING_FILE_LINE % handling_file, HANDLING_FILE_RULE]
+
+
+def fenced(lines: List[str]) -> List[str]:
+    """바깥 펜스까지 — 길이는 글 안의 가장 긴 백틱 줄 + 1(최소 3). 백틱 펜스는 백틱 줄만 닫는다."""
+    longest = 0
+    for line in lines:
+        bare = line.lstrip(" \t")
+        longest = max(longest, len(bare) - len(bare.lstrip("`")))
+    fence = "`" * max(FENCE_MIN, longest + 1)
+    return [fence] + lines + [fence]
+
+
+def _inside_archive(ctx: Ctx, path: str) -> bool:
+    """처리 파일이 리뷰 보관 폴더(상태 파일이 있는 폴더) 안이면 참 — 그 경로를 검사받는 쪽에 보내지 않는다."""
+    target = Path(path).resolve()
+    for state in Path(ctx.report_root).glob("*/" + F.STATE_NAME):
+        folder = state.parent.resolve()
+        if target == folder or folder in target.parents:
+            return True
+    return False
+
+
+def c_render(ctx: Ctx) -> int:
+    """「글 짓기」 — 표준 출력에 그 글. 상태 파일에 경로를 담은 칸을 싣지 않는다."""
+    a = ctx.a
+    if a.kind == "return-list":
+        if _inside_archive(ctx, a.handling_file):
+            raise Usage("처리 파일이 리뷰 보관 폴더 안이다 — 그 에픽의 보고 폴더 안 경로를 준다: %s" % a.handling_file)
+        reviews, _path = ctx.last()
+    else:
+        reviews = ctx.reviews()
+        if not reviews and not (a.no_qg and a.kind == "approval"):
+            raise Stop(RC_REFUSED, ["까닭 · 대상 %s 의 상태 파일이 없다%s" % (
+                a.target, " — qg 없음이면 승인 기록 다시 보이기(--kind approval)만 짓는다" if a.no_qg else "")])
+    if reviews and a.no_qg:
+        print(NO_QG_IGNORED, file=sys.stderr)      # 표시 글에 섞지 않는다
+    if a.kind == "return-list":
+        lines = return_list_lines(reviews[-1], a.handling_file)
+    elif a.kind == "approval":
+        lines = approval_lines(reviews)
+    else:
+        lines = pr_body_lines(reviews)
+        if a.kind == "team-fence":
+            lines = fenced(lines)
+    print("\n".join(lines))
+    return RC_OK
+
+
+HANDLERS = {"open": c_open, "send": c_send, "back": c_back, "record": c_record, "next": c_next, "gate": c_gate,
+            "render": c_render}
 
 
 # ---------------------------------------------------------------- 명령줄
@@ -1534,7 +1730,7 @@ def _parser() -> argparse.ArgumentParser:
     p = sub.add_parser("gate", parents=parents["gate"])
     p.add_argument("--no-qg", dest="no_qg", action="store_true")
     p = sub.add_parser("render", parents=parents["render"])
-    p.add_argument("--kind", required=True, choices=("pr-body", "approval", "return-list", "team-fence"))
+    p.add_argument("--kind", required=True, choices=RENDER_KINDS)
     p.add_argument("--no-qg", dest="no_qg", action="store_true")
     p.add_argument("--handling-file", dest="handling_file")
     return ap
@@ -1564,6 +1760,14 @@ def _usage(a) -> Optional[str]:
         if a.worker is not None and (" · " in a.worker or a.worker != a.worker.strip()
                                      or any(ch in a.worker for ch in "\n\r")):
             return "담당자 이름에 ` · ` · 줄바꿈 · 앞뒤 빈칸을 쓰지 않는다: %r" % a.worker
+    if a.cmd == "render":
+        if a.kind != "return-list":
+            if a.handling_file is not None:
+                return "--handling-file 은 --kind return-list 만 받는다"
+        elif not a.handling_file:
+            return "render --kind return-list 는 --handling-file <처리 파일의 절대경로> 를 받는다"
+        elif not Path(a.handling_file).is_absolute() or any(ch in a.handling_file for ch in "\n\r"):
+            return "처리 파일은 한 줄 절대경로다: %r" % a.handling_file
     if a.cmd == "open":
         if not a.epic or not set(a.epic) <= L.NAME_CHARS or a.epic in (".", ".."):
             return "에픽은 영숫자 · . · _ · - 만 쓴다: %r" % a.epic
