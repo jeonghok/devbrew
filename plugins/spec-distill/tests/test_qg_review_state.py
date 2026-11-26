@@ -731,6 +731,14 @@ class TestQgReviewState(unittest.TestCase):
         self.assertEqual([f.handling for f in rv.blocking], [F.USER_LEFT, F.USER_LEFT])
         self.assertEqual((rv.stage, rv.close_reason), ("닫힘", "재리뷰로 이어짐"))
 
+    def test_close_rereview_waits_for_pending_return(self):
+        fix = self.code()
+        self.returned(blocking=[finding("지적 1", "고친 커밋 " + fix)], returns=[self.ret(1)],
+                      asks=[ask(INTENT, "q1")])
+        rv, _lines = self.recorded([item_answer("q1", INTENT, "의도다"),
+                                    {"kind": "record_path", "question": "q1", "path": RECORD}])
+        self.assertEqual((rv.stage, rv.close_reason), ("돌아옴", ""))  # 처리를 아직 옮기지 않은 「돌려보냄」 이 있다
+
     def test_close_user_left_without_base_commit(self):
         self.two_max_returned()
         self.spec_only()  # 리더 기록 파일만 바꾼 커밋은 기준 커밋이 아니다
@@ -752,6 +760,13 @@ class TestQgReviewState(unittest.TestCase):
             before = self.state_bytes(folder)
             for value in ("다시 보낸다 (권장)", "그냥 간다"):
                 self.assertEqual(self.record([item_answer("q-failed", FAILED, value)]).returncode, 2, value)
+            self.assertEqual(self.state_bytes(folder), before)
+            self.setUp()
+            folder = self.returned(asks=[ask(INTENT, "q1")])
+            before = self.state_bytes(folder)
+            proc = self.record([item_answer("q1", INTENT, "의도다 (권장)")])  # 선택지를 묶지 않는 질문에서도
+            self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+            self.assertIn("(권장)", proc.stderr)
             self.assertEqual(self.state_bytes(folder), before)
 
     def test_close_wrong_choice_routes(self):
@@ -789,6 +804,14 @@ class TestQgReviewState(unittest.TestCase):
             self.assertEqual((rv.stage, rv.close_reason), ("닫힘", F.REASON_DESIGN))
             before = self.state_bytes(folder)
             self.recorded()  # git 이 사유를 바꾸지 못하는 닫힘은 다시 가려도 그대로다
+            self.assertEqual(self.state_bytes(folder), before)
+            self.setUp()
+            folder = self.put(review("premerge", 1, self.base_sha, self.c1, stage="닫힘", close_reason=F.REASON_DESIGN,
+                                     worker="qg-w1 · " + AT, result=obtained(self.base_sha, self.c1),
+                                     blocking=[finding("지적 1", "고친 커밋 deadbeef")], returns=[self.ret(1, "옮김")],
+                                     answers=[answer("q1", INTENT, "잘못 골랐다", RECORD)]))
+            before = self.state_bytes(folder)
+            self.recorded()  # 범위 밖 고친 커밋이 있어도 그 닫힘은 되돌리지 않는다
             self.assertEqual(self.state_bytes(folder), before)
         with self.subTest(case="없는 질문의 행선"):
             self.setUp()
