@@ -146,6 +146,26 @@ class Invariant(unittest.TestCase):
         self.assertEqual(found["RC1"], later[0])
         self.assertEqual(found["ST1"], later[1])
 
+    def test_section4_head_line_beats_a_section5_mention_but_not_an_old_form(self):
+        weak = BRIEF.replace("\n".join(S5_LINES), "\n".join(S5_LINES[:3] + ["- 기각 — 근거 RC9 반증 [RC9 → OQ1]"]))
+        self.assertIn("«ext-d» — RC9 (z.py)", lines_of(weak, AUDIT)["RC9"])
+        old = BRIEF.replace("\n".join(S5_LINES), "\n".join(S5_LINES + ["- 위험 — 사실 | 옛 꼴 — RC9 (q.py)"]))
+        self.assertIn("옛 꼴 — RC9 (q.py)", lines_of(old, AUDIT)["RC9"])
+
+    def test_old_form_st_beats_a_later_st_mention(self):
+        s5 = S5_LINES + ["- 기각 — 뒤의 인용 ST1 만"]
+        self.assertEqual(lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(s5)), AUDIT)["ST1"], S5_LINES[0])
+
+    def test_link_head_with_several_numbers_and_arrow_tail(self):
+        s5 = S5_LINES + ["- 기각 — 둘 [RC20 · ST4 → OQ1]", "- 기각 — 화살표 뒤 [→ RC20 · ST4]"]
+        found = lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(s5)), AUDIT)
+        self.assertEqual(found["RC20"], "- 기각 — 둘 [RC20 · ST4 → OQ1]")
+        self.assertEqual(found["ST4"], "- 기각 — 둘 [RC20 · ST4 → OQ1]")
+
+    def test_name_glued_number_is_not_an_old_form_key(self):
+        s5 = S5_LINES + ["- 위험 — 사실 | 경로RC1 (e.py) 는 번호가 아니다"]
+        self.assertEqual(lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(s5)), AUDIT)["RC1"], S5_LINES[3])
+
     def test_paren_form_beats_a_later_link_line(self):
         s5 = S5_LINES + ["- 기각 — 뒤에 또 나온다 [RC1 → OQ2]"]
         found = lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(s5)), AUDIT)
@@ -210,7 +230,7 @@ class Create(unittest.TestCase):
         git(self.top, "fetch", "-q", "origin")
         git(self.top, "remote", "set-head", "origin", "main")
 
-    def rows(self, team: bool):
+    def rows(self):
         e1 = ("| E1 | 첫 에픽 | 묶음 | 첫 의도 | 한다 가 / 안 한다 나 | P1 | feature/e1 | a/x.py | "
               "C1 · OQ1 · RC1 · RC2 · RC4 · RC5 · K1 · «ext-a» · S1 · S2 | 없음 | E2 에 x |")
         e2 = ("| E2 | 둘째 에픽 | 묶음 | 둘째 의도 | 한다 다 / 안 한다 라 | E1 | feature/e2 | 없음 | "
@@ -219,7 +239,7 @@ class Create(unittest.TestCase):
 
     def create(self):
         table = self.tmp / "state.md"
-        table.write_text("# state\n\n## 분해안\n\n%s\n%s\n%s\n" % (HEAD, SEP, "\n".join(self.rows(False))), encoding="utf-8")
+        table.write_text("# state\n\n## 분해안\n\n%s\n%s\n%s\n" % (HEAD, SEP, "\n".join(self.rows())), encoding="utf-8")
         return run_create(self.top, "--brief", "docs/iv/brief.md", "--audit", "docs/iv/brief.audit.md",
                           "--plan-table", str(table), "--out", "docs/rm", "--title", "픽스처 일",
                           "--date", "2026-11-26", "--approval", "이대로 승인")
@@ -245,7 +265,7 @@ class Create(unittest.TestCase):
         git(self.top, "add", "--", out)
         git(self.top, "commit", "-qm", "원자료 사본")
         head = HEAD + " 지시 원문 범위 |"
-        rows = [P1 + " 없음 |"] + [r + " 2–4 |" for r in self.rows(True)[1:]]
+        rows = [P1 + " 없음 |"] + [r + " 2–4 |" for r in self.rows()[1:]]
         table = self.tmp / "tm-table.md"
         table.write_text("# state\n\n## 분해안\n\n%s\n%s---|\n%s\n" % (head, SEP, "\n".join(rows)), encoding="utf-8")
         r = run_create(self.top, "--layout", "team", "--brief", "docs/iv/brief.md", "--audit", "docs/iv/brief.audit.md",

@@ -588,10 +588,9 @@ def brief_risk_numbers(s5: str):
     return sorted(rows, key=lambda row: int(row[0][1:])), False
 
 
-def section5_lines(s5: str) -> dict:
-    """§5 의 RC · ST 번호 → 그 번호의 줄. 세는 일(`brief_universe`)과 줄을 찾는 일(`index_brief`)이 이 함수 하나로 읽는다.
-    번호가 여러 줄에 나오면 높은 꼴이 이긴다 — ① `RCn (` · ` — STn — ` 꼴 ② 줄 끝 연결 `[RCn → …]` 에 실린 번호
-    ③ 그 밖의 본문 인용. 같은 꼴 안에서는 뒤에 나온 줄이 이긴다."""
+def section5_tiers(s5: str):
+    """(약한 줄, 옛 꼴 줄) — 둘 다 §5 의 RC · ST 번호 → 줄. 옛 꼴은 `RCn (` · ` — STn — ` 줄이다. 약한 줄은 그 밖이고
+    ① 줄 끝 연결 `[RCn → …]` 에 실린 번호의 줄이 ② 본문 인용의 줄을 이긴다. 층 안에서는 뒤에 나온 줄이 이긴다."""
     legacy, link, mention = {}, {}, {}
     for line in brief_body.split_lines(s5):
         for rx in (RC_LINE_RE, ST_LINE_RE):
@@ -603,7 +602,14 @@ def section5_lines(s5: str) -> dict:
                 link[n] = line
         for n in RC_RE.findall(line) + ST_RE.findall(line):
             mention[n] = line
-    return {**mention, **link, **legacy}
+    return {**mention, **link}, legacy
+
+
+def section5_lines(s5: str) -> dict:
+    """§5 의 RC · ST 번호 → 줄. 세는 일(`brief_universe`)이 이 키를 센다 — 줄을 찾는 일(`index_brief`)은 같은
+    `section5_tiers` 를 읽고 §4 머리 줄과 겹칠 때만 순서를 달리한다(옛 꼴만 §4 를 덮는다)."""
+    weak, legacy = section5_tiers(s5)
+    return {**weak, **legacy}
 
 
 def brief_universe(brief: str, audit: str):

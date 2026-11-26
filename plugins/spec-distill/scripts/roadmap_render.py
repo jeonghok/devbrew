@@ -19,7 +19,7 @@ import team_files  # noqa: E402
 import team_layout  # noqa: E402
 from brief_body import section4_items  # noqa: E402
 from roadmap_model import (  # noqa: E402
-    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, RC_RE, FormatError, brief_risk_numbers, brief_section, brief_universe, bundle_ids, section5_lines,
+    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, RC_RE, FormatError, brief_risk_numbers, brief_section, brief_universe, bundle_ids, section5_tiers,
     field_text, id_sort_key, is_quote, is_team, parse_ids, parse_roadmap, section_body)
 
 TABLE_HEADING = "## 분해안"
@@ -328,7 +328,10 @@ def index_brief(brief: str, audit: str) -> BriefIndex:
         if oq:
             lines[oq] = line
     lines.update(_section4_index(brief))
-    lines.update(section5_lines(_body(brief, "## 5.")))   # brief_universe 와 같은 판독
+    weak, legacy = section5_tiers(_body(brief, "## 5."))   # brief_universe 와 같은 판독
+    for key, line in weak.items():
+        lines.setdefault(key, line)   # §4 머리 줄이 있는 번호는 그 줄이 이긴다 — 예전에 되던 brief 의 출력을 지킨다
+    lines.update(legacy)
     found = brief_body.audit_subset_problems(audit)   # 방어층 — brief_universe 가 먼저 같은 검사를 하지만 이 함수가 따로 불려도 막는다
     if found:
         raise FormatError("audit 에 읽는 쪽마다 다르게 읽히는 글이 있어 합칠 수 없다(%s)" % found[0][1])
