@@ -14,12 +14,13 @@
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"
+CORPUS="$(git -C "$REPO" ls-files 'plugins/quality-gates/skills/*.md' \
+  'plugins/quality-gates/skills/*/references/*.md' 'plugins/quality-gates/references/*.md')"
+# test_guards_coverage_bidirectional.sh 가 읽는다 — 이 락이 여는 파일(리포 상대)을 낸다.
+[ "${1:-}" = "--emit-scanned" ] && { printf '%s\n' "$CORPUS"; exit 0; }
 . "$REPO/shared/tests/assert.sh"
 export PYTHONDONTWRITEBYTECODE=1
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
-
-CORPUS="$(git -C "$REPO" ls-files 'plugins/quality-gates/skills/*.md' \
-  'plugins/quality-gates/skills/*/references/*.md' 'plugins/quality-gates/references/*.md')"
 
 cat > "$T/check.py" <<'PY'
 """here-doc 끝 표지 검사기. 사용: check.py <루트> <상대 경로>...
