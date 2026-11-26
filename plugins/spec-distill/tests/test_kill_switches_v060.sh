@@ -35,6 +35,7 @@ for sw in "DEVBREW_SPEC_DISTILL_DISABLE=1" \
           "DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd,quality-gates:Stop"; do
   n=$((n+1))
   plant_old 30
+  [[ -d "$OLD" ]] || no "case ${n}: 돌리기 전에 옛 세션 폴더가 없다 — 아래 단언이 공허하다"
   env "$sw" python3 "$SWEEP" --root "$ROOT" >/dev/null
   [[ ! -d "$OLD" ]] \
     && ok "case ${n}: ${sw} — 은퇴한 스위치라 원장 정리가 그대로 돈다" \

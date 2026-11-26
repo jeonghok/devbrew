@@ -248,6 +248,7 @@ class SafetyTest(Base):
         for env in envs:
             s = self.old_session("oldsess%02d" % envs.index(env))
             d = key_for(self.root, str(self.docs / "gone.md")); write_ledger(d, str(self.docs / "gone.md")); age(d)
+            self.assertTrue(s.exists() and d.exists(), env)      # 돌리기 전에 있었다
             self.sweep(env)
             self.assertFalse(s.exists(), env)
             self.assertFalse(d.exists(), env)

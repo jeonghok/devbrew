@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# control_plane.py — 캐시 · 받은 시각 · 끄기 스위치 · 읽기 전용 · 작업 목록 rc 를 버릴 git 저장소에서 잰다
-# (R6 AC3 · AC4 · AC5 · AC6 · AC7 · AC11 · AC13). 상태 계산은 대역으로 바꿔 호출 수를 센다 — 대역은
+# control_plane.py — 캐시 · 받은 시각 · 은퇴한 끄기 변수 · 읽기 전용 · 작업 목록 rc 를 버릴 git 저장소에서 잰다
+# (R6 AC3 · AC4 · AC5 · AC7 · AC11 · AC13 · 은퇴 AC18). 상태 계산은 대역으로 바꿔 호출 수를 센다 — 대역은
 # 부를 때마다 calls.log 에 인자를 적는다. 끝에서 진짜 상태 계산으로 인자 계약을 한 번 잰다.
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_control_plane.sh
 set -u
@@ -169,7 +169,7 @@ rm -f "$CACHE"
 base_show="$(show)"
 assert_contains "$base_show" "R1 하나" "양성 짝: 변수 없이 show 는 지도를 낸다"
 assert_eq "$(sl)" "$LINE" "양성 짝: 변수 없이 상태줄은 한 줄을 낸다"
-for sw in "DEVBREW_SPEC_DISTILL_DISABLE=1" "DEVBREW_SKIP_HOOKS=x:y,spec-distill:statusline"; do
+for sw in "DEVBREW_SPEC_DISTILL_DISABLE=1" "DEVBREW_SKIP_HOOKS=spec-distill:statusline" "DEVBREW_SKIP_HOOKS=x:y,spec-distill:statusline"; do
   out="$(cd "$W" && env "$sw" python3 "$S/control_plane.py" statusline </dev/null)"; rc=$?
   assert_eq "$out|$rc" "$LINE|0" "$sw — 상태줄이 빈 줄이 아니다"
   out="$(cd "$W" && env "$sw" python3 "$S/control_plane.py" show </dev/null)"; rc=$?

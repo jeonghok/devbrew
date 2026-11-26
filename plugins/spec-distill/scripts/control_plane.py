@@ -7,7 +7,7 @@
   control_plane.py show [<로드맵 경로>]           지도. rc 0.
   control_plane.py show <로드맵 경로> <에픽>   에픽 하나로 내려가는 보기. 없는 에픽이면 rc 2.
   control_plane.py show --tasks [<로드맵 경로>]   작업 목록 줄 `<제목><탭><pending|in_progress|completed|keep>`.
-                                                 검사 불가 · 로드맵 없음 · 꺼짐이면 표준 출력이 비고 표준 오류에
+                                                 검사 불가 · 로드맵 없음이면 표준 출력이 비고 표준 오류에
                                                  사유, rc 3. 기본 브랜치에 없는 로드맵이면 rc 4.
                                                  로드맵이 여럿인데 경로가 없으면 rc 2.
                                                  끝에 탭 없는 마지막 줄 `동시에 갈 수 있는 준비 에픽: …` 이 붙을 수 있다 — 작업이 아니라 병렬 판단 신호다.
