@@ -475,7 +475,7 @@ fi
 을 고르고, 그 리뷰어가 층 1(방향)의 외부 근거를 URL 로 인용한다. 재비판자 `doc-recritic` 은 웹이 없다
 (`tools: Read, Grep, Glob`). codex 쪽은 러너가 프로필 frontmatter 의 `web:` 을 읽어 codex 웹 검색을 켜고,
 호스트 스위치 `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 이
-켜져 있으면 끈다. 이 스위치는 그에 더해
+켜져 있으면 끈다. `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 은 그에 더해
 선택 펜스가 탐지 dispatch 대상으로 웹 도구 없는 `spec-distill:doc-critic` 을 **지명**하게 한다 — 스위치가 켜져
 있거나 프로필이 웹을 허용하지 않으면 펜스는 웹 사본을 지명하지 않고, dispatch 는 지명된 블록을 따른다. 그 선택을
 강제하는 훅은 없다 — 물리적인 것은 웹 없는 사본의 `tools:` 에 웹 도구가 없다는 것뿐이다(진입 게이트의

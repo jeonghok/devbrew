@@ -382,8 +382,7 @@ state_branch: 켬
 - `DEVBREW_SPEC_DISTILL_TTL_HOURS=<int>` — 리뷰 진입의 원장 정리가 두 자리에 쓰는 시간(기본 24, 0 이하이거나 정수가 아니면 24): ① 기록된 문서가 사라진 원장의 삭제 유예 — 원장 폴더에 이 시간 동안 쓰기가 없어야 지운다(다른 브랜치로 옮겨 문서가 잠시 없는 동안 원장이 남는 창이다), ② 옛 버전 세션 폴더의 정리 판정 — 이 시간을 넘은 폴더만 지운다. `state.local.md` 가 있는 옛 폴더는 이 값과 무관하게 지우지 않는다. 짧게 잡으면 다른 브랜치에 오래 있다 돌아온 문서의 원장이 사라져 리뷰가 라운드 1 부터 다시 센다(사용자 결정은 문서의 결정 절에 남는다).
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` — 이 kill switch 가
   **두 자리**의 웹 접근을 끈다: context-build 웹 리서치(landscape · 웹 agent dispatch · 만들어 보낸 조사 `open-researcher`), 그리고
-  brief 리뷰 자리의 웹 둘 — codex 웹 검색(공유 러너 `run_docreview_codex_reviewer.sh` 가 이 스위치와
-  `DEVBREW_QUALITY_GATES_DISABLE_WEB` 을 함께 본다)과 Claude 쪽 탐지(선택 펜스가 웹 사본
+  brief 리뷰 자리의 웹 둘 — codex 웹 검색과 Claude 쪽 탐지(선택 펜스가 웹 사본
   `doc-critic-web` 대신 웹 도구 없는 `doc-critic` 을 **지명**한다 — dispatch 는 지명된 블록을 따르고,
   그 선택을 강제하는 훅은 없다). 구조 게이트 `check_brief.py` 도 §4 sentinel 하나를 완화하며 자기
   advisory 로 공시한다. 어느 쪽이든 loud log(brief 자리는 degrade record 도)와 함께 생략, crash

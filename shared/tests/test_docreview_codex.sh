@@ -67,18 +67,18 @@ assert_file_absent "$TMPD/argv.txt" 'web_search="live"' \
 # ── P11 양성 대조 — brief 프로필(web: true) + 웹 끄기 변수 꺼짐 → live ──
 # 이 케이스가 없으면 "웹이 꺼졌다"는 아래 부정 케이스들이 전부 공허참이다(켠 적이
 # 없으니 항상 꺼져 보인다) — 브리프가 명시적으로 요구한 양성 대조. `env -u` 로 앰비언트
-# 환경의 오염 가능성까지 배제한다(둘 다 명시적으로 없는 상태를 만든다).
+# 환경의 오염 가능성까지 배제한다(웹 끄기 변수가 없는 상태를 만든다).
 env -u DEVBREW_SPEC_DISTILL_DISABLE_WEB -u DEVBREW_QUALITY_GATES_DISABLE_WEB \
   DOCREVIEW_CODEX_ARGV_FILE="$TMPD/bargv.txt" CLAUDE_PLUGIN_ROOT="$HOST_PLUGIN_ROOT" \
   bash "$RUNNER" "$BRIEFPROF" "$FX/brief-sample.md" "$REPO_ROOT" "$TMPD/b.yaml" 2>/dev/null
 assert_file_grep "$TMPD/bargv.txt" 'web_search="live"' \
-  "P11 양성 대조: web:true + 두 kill switch 다 꺼짐 → 웹 live"
+  "P11 양성 대조: web:true + 웹 끄기 변수 꺼짐 → 웹 live"
 assert_file_grep "$TMPD/b.yaml" 'disposition: decide' "러너: brief 프로필 경로도 정상 변환"
 
 # ── P11 음성 — 웹 끄기 변수를 켜면 닫히고, 은퇴한 qg 변수는 더 닫지 않는다 ─────
 # 은퇴한 이름만 켠 호출이 웹을 live 로 둔다 — 양성 대조(위)와 같은 꼴의 호출이라
 # 「살아 있는 변수만 닫는다」 가 재어진다.
-DEVBREW_QUALITY_GATES_DISABLE_WEB=1 DOCREVIEW_CODEX_ARGV_FILE="$TMPD/b2argv.txt" \
+env -u DEVBREW_SPEC_DISTILL_DISABLE_WEB DEVBREW_QUALITY_GATES_DISABLE_WEB=1 DOCREVIEW_CODEX_ARGV_FILE="$TMPD/b2argv.txt" \
   CLAUDE_PLUGIN_ROOT="$HOST_PLUGIN_ROOT" \
   bash "$RUNNER" "$BRIEFPROF" "$FX/brief-sample.md" "$REPO_ROOT" "$TMPD/b2.yaml" 2>/dev/null
 assert_file_grep "$TMPD/b2argv.txt" 'web_search="live"' \
