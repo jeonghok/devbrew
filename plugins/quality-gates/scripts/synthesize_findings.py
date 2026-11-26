@@ -41,6 +41,7 @@ import yaml
 from adjudication import Ledger
 from render_disposition import disposition_lines
 import angles as _angles
+import nofollow_write
 import scope_tuple as _scope_tuple
 import verdict as _verdict
 
@@ -840,7 +841,9 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
     out.append("**고칠 방법:**")
     for i, f in enumerate(findings, 1):
         fix = str(f.get("proposed_fix", "(없음)")).replace("\r", " ").replace("\n", " ")
-        out.append(f"- #{i} `{f.get('file')}:{f.get('line')}` — {fix}")
+        where = "%s:%s" % (f.get("file"), f.get("line"))
+        where = where.replace("\r", " ").replace("\n", " ")
+        out.append(f"- #{i} `{where}` — {fix}")
     return "\n".join(out) + "\n"
 
 
@@ -867,14 +870,18 @@ def _parse_restore(value):
 
 
 def _write_pre_merge(path, items):
-    """dedup 앞의 목록을 tmp 에 쓰고 `os.replace` 한다. 못 쓰면 한 줄만 내고 지나간다."""
-    tmp = path + ".tmp"
+    """dedup 앞의 목록을 같은 폴더의 임시 파일(링크를 따라가지 않는다)에 쓰고 자리를 바꾼다.
+
+    못 쓰면 옛 파일을 지우고(없으면 무시) 한 줄만 내고 지나간다 — 앞 실행의 목록이 이 실행의 것으로 읽히지 않게.
+    """
     try:
         text = yaml.safe_dump({"findings": items}, allow_unicode=True, sort_keys=False)
-        with open(tmp, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        os.replace(tmp, path)
+        nofollow_write.replace_bytes(path, text.encode("utf-8"))
     except Exception as exc:   # 판정은 이 파일에 기대지 않는다 — rc · stdout 을 바꾸지 않는다
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
         print("[synthesize_findings] 합치기 전 목록을 쓰지 못했다 — " + type(exc).__name__,
               file=sys.stderr)
 
@@ -962,8 +969,7 @@ def main(argv=None):
                          + dropped_primary + dropped_promoted)
     review_blocked = ledger.items_unaccounted() or dropped_malformed > 0
     blocking = ledger.blocks() or dropped_malformed > 0
-    if args.pre_merge_out is not None:
-        _write_pre_merge(args.pre_merge_out, sort_findings(findings + promoted))
+    pre_merge = sort_findings(findings + promoted)
     findings = sort_findings(dedup(findings + promoted, ledger=ledger))
     split = count_split(findings)
     n_block = split["CRITICAL"] + split["IMPORTANT"]   # K-4 의 blocking
@@ -1016,6 +1022,10 @@ def main(argv=None):
             args_line = _verdict.render_args(
                 blocking=n_block, optional=split["SUGGESTION"], defect=n_block >= 1,
                 review_blocked=review_blocked, angle_absent=angle_absent, reasons=review_reasons)
+
+    # 합치기 전 목록은 판정 계산이 끝난 뒤에 쓴다 — 판정에서 멈춘(rc 4) 실행에 남지 않는다.
+    if args.pre_merge_out is not None:
+        _write_pre_merge(args.pre_merge_out, pre_merge)
 
     report = ledger.report()
     raw_verdict_count = doc.get("_raw_verdict_count", 0) if isinstance(doc, dict) else 0

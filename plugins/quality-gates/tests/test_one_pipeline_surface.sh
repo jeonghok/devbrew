@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/differential-test.md
+# guards: plugins/quality-gates/skills/* plugins/quality-gates/references/* plugins/quality-gates/scripts/*
 # test_one_pipeline_surface.sh — 한 파이프라인의 표면 (설계 §6.1 · §6.4.4 · §6.5.1, AC1 · AC2).
 #
 # 음의 락(옛 게이트 · verifier 토큰 부재)은 대상을 통째로 지워도 GREEN 이다 — 그래서 양의
 # 짝(새 골격의 존재 · 스텝 집합 · 순서)을 함께 둔다. 코퍼스는 오케스트레이터가 읽는 세 파일이다.
 set -u
-# test_guards_coverage_bidirectional.sh 가 읽는다 — 이 락이 여는 파일(리포 상대)을 낸다.
-[ "${1:-}" = "--emit-scanned" ] && { printf '%s\n' \
-  plugins/quality-gates/skills/quality-pipeline/SKILL.md \
-  plugins/quality-gates/skills/quality-pipeline/references/differential-test.md; exit 0; }
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"
+# 옛 세션 파일 셋의 부재 코퍼스 — 본문 · 걷기 reference · 의도 점검 reference · 스크립트(리포 상대, 추적 파일).
+old_session_corpus() {
+  git -C "$REPO_ROOT" ls-files --cached --others --exclude-standard -- \
+    plugins/quality-gates/skills plugins/quality-gates/references plugins/quality-gates/scripts | LC_ALL=C sort -u
+}
+# test_guards_coverage_bidirectional.sh 가 읽는다 — 이 락이 여는 파일(리포 상대)을 낸다.
+[ "${1:-}" = "--emit-scanned" ] && { old_session_corpus; exit 0; }
 . "$(cd "$SCRIPT_DIR/../../.." && pwd)/shared/tests/assert.sh"
 SKILL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 REF="$PLUGIN_ROOT/skills/quality-pipeline/references/differential-test.md"
@@ -131,8 +135,40 @@ case_one_pass_flow() {
 }
 
 
+count_old_session_tokens() {  # count_old_session_tokens <루트> <목록 파일> — 옛 세션 파일 이름이 든 줄 수
+  local root="$1" list="$2" f n=0 c
+  while IFS= read -r f; do
+    [ -f "$root/$f" ] || continue
+    c=$(grep -cF -e 'excluded.md' -e 'extra-iterations.md' -e 'classification.md' -- "$root/$f")
+    n=$((n + c))
+  done < "$list"
+  printf '%s\n' "$n"
+}
+
+case_old_session_files_absent_wide() {
+  # §7 · AC23 — 옛 세션 파일 셋(excluded.md · extra-iterations.md · classification.md)이 본문만이 아니라 걷기 reference ·
+  # 의도 점검 reference · 스크립트에도 없다. 코퍼스는 git 에서 도출한다. 짝: 시험 안 사본 하나에 이름을 넣으면 잡힌다.
+  local tmp list n f
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/qg-oldsess.XXXXXX")" || { no "mktemp 실패"; return; }
+  list="$tmp/corpus.txt"
+  old_session_corpus > "$list"
+  for f in plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/references/e2e.md \
+           plugins/quality-gates/skills/quality-pipeline/references/intent-critic.md plugins/quality-gates/scripts/synthesize_findings.py; do
+    grep -qxF -- "$f" "$list" && ok "옛 세션 파일 코퍼스에 $f 가 든다" || no "옛 세션 파일 코퍼스에 $f 가 없다"
+  done
+  assert_eq "$(count_old_session_tokens "$REPO_ROOT" "$list")" "0" "옛 세션 파일 셋의 이름이 qg 본문 · reference · 스크립트 어디에도 없다"
+  # 양의 짝 — 같은 셈을 사본 위에서: 걷기 reference 사본에 extra-iterations.md 를 넣으면 1 로 잡힌다.
+  mkdir -p "$tmp/root/plugins/quality-gates/references"
+  { cat "$REPO_ROOT/plugins/quality-gates/references/e2e.md"; printf '앞 실행의 extra-iterations.md 를 읽는다.\n'; } \
+    > "$tmp/root/plugins/quality-gates/references/e2e.md"
+  printf '%s\n' plugins/quality-gates/references/e2e.md > "$tmp/one.txt"
+  assert_eq "$(count_old_session_tokens "$tmp/root" "$tmp/one.txt")" "1" "짝: 사본에 넣은 extra-iterations.md 를 같은 셈이 잡는다"
+  rm -rf "$tmp"
+}
+
 for c in case_old_surface_absent case_new_skeleton_present \
          case_pipeline_order case_no_gate_scope_question case_one_pass_flow \
+         case_old_session_files_absent_wide \
 ; do
   "$c"
 done

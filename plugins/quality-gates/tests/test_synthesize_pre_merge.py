@@ -5,8 +5,10 @@ import io
 import json
 import sys
 import tempfile
+import os
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
@@ -28,9 +30,14 @@ B = {"agent": "security-reviewer", "file": "src/b.py", "line": 7, "severity": "C
 LOWER_B = "verdicts:\n  - {f: f3, verdict: lower, evidence: \"의도 밖 처방\"}\n"
 
 
-def run_synth(findings, recritic, pre_merge=None):
-    """`pre_merge` 의 `{d}` 는 임시 폴더로 바뀐다. Returns `(rc, stdout, stderr, written)`."""
+def run_synth(findings, recritic, pre_merge=None, extra=(), prep=None, patch_replace=False, seen=None):
+    """`pre_merge` · `extra` 의 `{d}` 는 임시 폴더로 바뀐다. Returns `(rc, stdout, stderr, written)`.
+
+    `prep(d)` 는 실행 앞에 임시 폴더를 꾸민다. `patch_replace` 면 `os.replace` 가 실패한다.
+    `seen` 이 dict 면 실행 뒤 폴더의 이름 목록(`names`)과 `inspect(d)` 결과를 담는다."""
     with tempfile.TemporaryDirectory() as d:
+        if prep is not None:
+            prep(d)
         fp = Path(d) / "findings.yaml"
         fp.write_text(json.dumps(findings, ensure_ascii=False), encoding="utf-8")
         loaded, _dropped, _dead = mod.load_findings(str(fp))
@@ -42,12 +49,15 @@ def run_synth(findings, recritic, pre_merge=None):
         argv = ["--findings", str(fp), "--recritic", str(rp), "--recritic-map", str(mp)]
         if pre_merge is not None:
             argv += ["--pre-merge-out", pre_merge.replace("{d}", d)]
+        argv += [a.replace("{d}", d) for a in extra]
         out, err = io.StringIO(), io.StringIO()
         old = sys.argv
         sys.argv = ["synthesize_findings.py"] + argv
         rc = 0
         try:
-            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
+                    mock.patch("os.replace", side_effect=OSError("replace 실패")) if patch_replace \
+                    else contextlib.nullcontext():
                 mod.main()
         except SystemExit as exc:
             rc = exc.code if isinstance(exc.code, int) else 1
@@ -55,7 +65,11 @@ def run_synth(findings, recritic, pre_merge=None):
             sys.argv = old
         written = None
         target = Path(d) / "pre.yaml"
-        if target.exists():
+        if seen is not None:
+            seen["names"] = sorted(os.listdir(d))
+            if "inspect" in seen:
+                seen["result"] = seen["inspect"](d)
+        if target.exists() and not target.is_symlink():
             written = yaml.safe_load(target.read_text(encoding="utf-8"))
         return rc, out.getvalue(), err.getvalue(), written
 
@@ -85,6 +99,68 @@ class TestPreMergeOut(unittest.TestCase):
         self.assertEqual(rc2, rc1)
         self.assertEqual(out2, out1)
         self.assertIn("[synthesize_findings] 합치기 전 목록을 쓰지 못했다 — ", err2)
+
+    def test_verdict_failure_leaves_no_pre_merge(self):
+        # AC22 — 판정 계산이 멈추면(읽지 못하는 --scope → rc 4) 합치기 전 목록 파일이 생기지 않는다.
+        seen = {}
+        rc, out, _err, doc = run_synth([A1, A2, B], LOWER_B, "{d}/pre.yaml",
+                                       extra=["--emit-verdict", "--scope", "{d}/없는-scope.txt"], seen=seen)
+        self.assertEqual(rc, 4)
+        self.assertEqual(out, "")
+        self.assertIsNone(doc)
+        self.assertNotIn("pre.yaml", seen["names"])
+        # 양의 짝 — 읽지 못하는 --scope 만 뺀 같은 판정 호출은 판정이 나고 파일이 생긴다.
+        rc2, out2, err2, doc2 = run_synth([A1, A2, B], LOWER_B, "{d}/pre.yaml", extra=["--emit-verdict"])
+        self.assertIn("verdict:", out2)
+        self.assertEqual(rc2, 0, err2)
+        self.assertEqual(len(doc2["findings"]), 3)
+
+    def test_write_failure_removes_old_file(self):
+        # AC22 — 쓰기가 실패하면(임시 파일을 쓴 뒤 자리 바꾸기에서) 옛 파일도 임시 파일도 남지 않는다 · rc · stdout 그대로.
+        def old(d):
+            (Path(d) / "pre.yaml").write_text("findings: [옛 실행]\n", encoding="utf-8")
+        rc1, out1, _e1, _d1 = run_synth([A1, A2, B], LOWER_B)
+        seen = {}
+        rc2, out2, err2, doc2 = run_synth([A1, A2, B], LOWER_B, "{d}/pre.yaml", prep=old,
+                                          patch_replace=True, seen=seen)
+        self.assertEqual(rc2, rc1)
+        self.assertEqual(out2, out1)
+        self.assertIn("[synthesize_findings] 합치기 전 목록을 쓰지 못했다 — ", err2)
+        self.assertIsNone(doc2)
+        self.assertNotIn("pre.yaml", seen["names"])
+        self.assertEqual([n for n in seen["names"] if "pre.yaml" in n], [], seen["names"])
+
+    def test_tmp_not_following_symlink(self):
+        # 옛 임시 파일 이름(`<대상>.tmp`) 자리에 링크를 미리 두어도 링크 너머가 바뀌지 않고, 대상은 보통 파일이다.
+        def plant(d):
+            (Path(d) / "victim.txt").write_text("그대로\n", encoding="utf-8")
+            os.symlink(str(Path(d) / "victim.txt"), str(Path(d) / "pre.yaml.tmp"))
+        seen = {"inspect": lambda d: ((Path(d) / "victim.txt").read_text(encoding="utf-8"),
+                                      (Path(d) / "pre.yaml").is_symlink())}
+        rc, _out, err, doc = run_synth([A1, A2, B], LOWER_B, "{d}/pre.yaml", prep=plant, seen=seen)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(seen["result"], ("그대로\n", False))
+        self.assertEqual(len(doc["findings"]), 3)
+
+    def test_recritic_added_finding_in_pre_merge(self):
+        # AC23 · 제안 21 — 재비판이 더한(added) 지적이 합치기 전 목록에 실린다.
+        added = ("verdicts: []\nadded:\n  - {file: src/c.py, line: 9, severity: IMPORTANT, "
+                 "summary: \"경로를 거르지 않는다\", proposed_fix: \"경로를 거른다\"}\n")
+        rc, _out, err, doc = run_synth([A1, B], added, "{d}/pre.yaml")
+        self.assertEqual(rc, 0, err)
+        got = [f for f in doc["findings"] if f["file"] == "src/c.py"]
+        self.assertEqual(len(got), 1, doc)
+        self.assertEqual(got[0]["summary"], "경로를 거르지 않는다")
+        self.assertIs(got[0]["promoted"], True)
+        self.assertEqual(len(doc["findings"]), 3)
+
+    def test_fix_line_file_with_newline_one_line(self):
+        # AC10 — 「고칠 방법」 줄의 파일 칸에 줄바꿈이 들어도 한 줄이다.
+        f = dict(A1, file="a\nb.py", line=3)
+        rc, out, err, _doc = run_synth([f], "verdicts: []\n")
+        self.assertEqual(rc, 0, err)
+        tail = out[out.index("**고칠 방법:**"):].splitlines()
+        self.assertEqual(tail[1:], ["- #1 `a b.py:3` — 키를 검증한다"])
 
     def test_empty_is_usage(self):
         rc, _out, _err, _doc = run_synth([A1], LOWER_B, "")

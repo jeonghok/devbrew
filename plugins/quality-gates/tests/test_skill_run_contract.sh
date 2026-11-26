@@ -23,9 +23,14 @@ FENCE="$(printf '%s\n' "$P2" | awk '/^```bash$/{f=1;next} f&&/^```$/{exit} f')"
 assert_grep "$FENCE" '^"\$QG/scripts/setup-qg\.sh" --ensure \$ARGUMENTS' "P2 는 setup 을 --ensure 로 부른다 (D-6)"
 assert_grep "$FENCE" "grep -q '\^## 판정\\$' \"\\\$RD/result\.md\".*then \"\\\$QG/scripts/setup-qg\.sh\" \\\$ARGUMENTS" \
   "끝난 앞 실행(## 판정)이면 setup 을 --ensure 없이 다시 부른다"
-for f in differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do
+for f in differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt findings-pre-merge.yaml; do
   assert_grep "$FENCE" "^rm -f .*\"\\\$RD/$f\"" "P2 가 실행 단위 파일 $f 를 지운다"
 done
+# 짝(§7 · 제안 17) — 합치기 전 목록을 rm -f 에서 뺀 사본에서는 같은 검사가 실패한다.
+FENCE_NOPM="$(printf '%s\n' "$FENCE" | sed 's| "\$RD/findings-pre-merge.yaml"||')"
+[ "$FENCE_NOPM" != "$FENCE" ] && ok "짝: 합치기 전 목록을 뺀 P2 사본을 만들었다" || no "짝: 사본이 원본과 같다 — 변이가 적용되지 않았다"
+printf '%s\n' "$FENCE_NOPM" | grep -qE '^rm -f .*"\$RD/findings-pre-merge\.yaml"' \
+  && no "짝: 뺀 사본에서도 rm -f 검사가 통과한다 — 검사에 이빨이 없다" || ok "짝: 뺀 사본에서는 rm -f 검사가 실패한다"
 
 # 실행 단위 파일은 SKILL 이 \$RD 아래에 쓰는 것에서 도출한다 — 새 파일이 생기면 P2 도 지워야 한다.
 written="$(grep -oE '"\$RD/[A-Za-z0-9_.-]+"' "$SKILL" | sort -u | grep -v '"\$RD/result.md"' | grep -v '"\$RD/review-i[0-9]*[.-]')"   # review-i*(리뷰 diff · 칸 사본 review-i1-slot-*) 는 아래 (b2) 의 find 가 지운다
@@ -47,7 +52,7 @@ seed_prev() {   # <with_verdict: 1|0>
   mkdir -p "$RDIR"
   printf -- '---\nsession_id: "%s"\nstarted_at: "2000-01-01T00:00:00Z"\n---\n\n# qg result\n' "$SID" > "$RDIR/result.md"
   [ "$1" = 1 ] && printf '\n## 판정\n\nqg: clean\n\n## 지적\n\n(없음)\n' >> "$RDIR/result.md"
-  for f in differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do echo old > "$RDIR/$f"; done
+  for f in differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt findings-pre-merge.yaml; do echo old > "$RDIR/$f"; done
 }
 
 # (a) 끝난 앞 실행 — 폴더를 다시 만든다
@@ -56,7 +61,7 @@ seed_prev 1
 assert_eq "$rc" "0" "(a) P2 펜스가 끝난 앞 실행 위에서 0 으로 끝난다"
 assert_eq "$(grep -c '^## 판정$' "$RDIR/result.md" 2>/dev/null)" "0" "(a) 새 result.md 에 앞 실행의 ## 판정 이 없다"
 grep -q '2000-01-01' "$RDIR/result.md" 2>/dev/null && no "(a) result.md 가 앞 실행의 것 그대로다" || ok "(a) result.md 가 새로 만들어졌다"
-for f in differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do
+for f in differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt findings-pre-merge.yaml; do
   [ -e "$RDIR/$f" ] && no "(a) 앞 실행의 $f 가 남았다" || ok "(a) 앞 실행의 $f 가 없다"
 done
 
@@ -65,7 +70,7 @@ seed_prev 0
 ( cd "$T" && CLAUDE_PLUGIN_ROOT="$QGP" CLAUDE_CODE_SESSION_ID="$SID" bash "$RUN" ) >/dev/null 2>&1; rc=$?
 assert_eq "$rc" "0" "(b) P2 펜스가 새 폴더 위에서 0 으로 끝난다"
 grep -q '2000-01-01' "$RDIR/result.md" 2>/dev/null && ok "(b) 판정 없는 result.md 는 --ensure 가 그대로 둔다" || no "(b) 판정 없는 result.md 가 다시 만들어졌다(setup 이중 실행)"
-for f in differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt; do
+for f in differential.yaml differential-not-counted.md verdict.out intent.md topic-scope.txt findings-pre-merge.yaml; do
   [ -e "$RDIR/$f" ] && no "(b) $f 가 남았다" || ok "(b) $f 가 없다"
 done
 
