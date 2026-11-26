@@ -221,6 +221,7 @@ case_sequential_sentence() {   # AC31
   assert_contains "$(section "$REF" '## D3 HEAD 축 실행')" '`$RD/suite-lock-path.txt` 가
 있으면 테스트 명령을 나란히 돌리지 않고 하나씩 돌린다 — 러너가 둘이어도 같다.' "sequential_sentence: 잠금 자리가 있으면 하나씩 돌린다 — 러너가 둘이어도"
   assert_contains "$(section "$REF" '## D3 HEAD 축 실행')" '그대로 보인다' "sequential_sentence: 감싸개의 겹침 줄을 그대로 보인다"
+  assert_contains "$(section "$REF" '## D3 HEAD 축 실행')" '쓰지 못했다는 줄(`> [quality-gates] 겹침 기록을 쓰지 못했다 — …`)은 그대로 보인다' "sequential_sentence: 겹침 기록을 쓰지 못했다는 감싸개 줄도 그대로 보인다"
 }
 # 러너 둘인 작은 리포에서 D3 펜스를 러너마다 문서 차례대로 돌린다 — 이 실행이 쥔 잠금을 겹침으로 세지 않는다(AC31).
 d3_fence() { awk '$0 == "## D3 HEAD 축 실행" {on=1; next} on && /^## /{exit} on && /^```bash$/{f=1; b=""; next} on && f && /^```$/{f=0; if (b ~ /run-test-selection.sh" run/) {printf "%s", b; exit}; next} on && f {b=b $0 "\n"}' "$REF"; }
