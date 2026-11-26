@@ -264,6 +264,11 @@ def _decide(reviews: List[F.Review], gs: GitState, site: str) -> Tuple[bool, str
     if reason == "다시 보냄" and site == last.site:
         return True, "다시 보냄 — 같은 자리 · 같은 범위", "same"
     if site == "asked":
+        row = refuses_asked(reviews, gs)
+        if row is not None:
+            return False, ("마지막 리뷰(차례 %d)가 「%s」 로 닫혔고 까닭 %d(%s)이 풀리지 않았다 — "
+                           "이름으로 청한 리뷰도 받지 않는다" % (last.order, reason, row.reason,
+                                                       REASON_NAMES[row.reason])), ""
         return True, "마지막 리뷰가 닫혀 있다 — 이름으로 청한 리뷰", "whole"
     if reason == "다시 보냄":
         return False, "마지막 리뷰가 「다시 보냄」 으로 닫혔다 — 같은 자리(--site %s)로 연다" % last.site, ""
@@ -307,11 +312,6 @@ def open_range(reviews: List[F.Review], gs: GitState, shape: str) -> Tuple[str, 
     if shape == "recheck" and not gs.merge:
         return gs.start, gs.head
     return gs.merge_base, gs.head
-
-
-def next_lines(reviews: List[F.Review], gs: GitState, alive: Tuple[str, ...] = (), no_qg: bool = False) -> List[str]:
-    """그 상태에서 `next` 가 내는 줄들(첫 줄 `할 일 · …`). `next` 가 없는 동안은 빈 목록이다."""
-    return []
 
 
 # ---------------------------------------------------------------- 보관 폴더
@@ -420,7 +420,8 @@ def c_open(ctx: Ctx) -> int:
     gs = GitState(ctx.root, head, ctx.exclude, recheck_start(reviews) or "", resolve(ctx.root, a.base))
     ok, why, shape = _decide(reviews, gs, a.site)
     if not ok:
-        raise Stop(RC_REFUSED, ["까닭 · " + why] + next_lines(reviews, gs))
+        folder = ctx.paths()[reviews[-1].order].parent if reviews else None
+        raise Stop(RC_REFUSED, ["까닭 · " + why] + next_lines(reviews, gs, folder=folder))
     start, end = open_range(reviews, gs, shape)
     traces = []
     if not reviews and a.site == "premerge":
@@ -501,22 +502,6 @@ def apply_outcome(reviews: List[F.Review], out: A.Outcome) -> F.Review:
     return review
 
 
-def back_todo(reviews: List[F.Review]) -> str:
-    """「돌아옴」 뒤의 할 일 한 줄 — `next` 가 짓기 전까지 쓰는 최소의 꼴(Task 7 이 `next_lines` 로 바꾼다)."""
-    review = reviews[-1]
-    if review.result.kind == A.NOT_OBTAINED:
-        return "할 일 · 사용자 차례 · 지적 목록을 얻지 못했다 — %s" % review.result.reason
-    if review.asks:
-        return "할 일 · 사용자 차례 · 물을 것 %d개 — 먼저 「%s」" % (len(review.asks), review.asks[0].kind)
-    if review.stage != "닫힘":
-        return "할 일 · 돌려보낸다 · 막는 지적 %d개를 구현 담당자에게 돌려보낸다" % len(review.blocking)
-    if review.filtered_wrong:
-        return "할 일 · 답 적기 · 거른 「잘못 골랐다」 목록 %d개의 행선을 적는다" % len(review.filtered_wrong)
-    if not any(r.site == "premerge" for r in counting_from(reviews)):
-        return "할 일 · 열기 · 머지 앞 첫 리뷰(PR 전체)를 연다"
-    return "할 일 · 머지 준비 · 막는 지적 없이 닫혔다"
-
-
 def c_back(ctx: Ctx) -> int:
     """보내는 중 · 보냄 → 돌아옴(또는 바로 닫힘). 보관 폴더의 파일만 본다."""
     reviews, path = ctx.last()
@@ -528,8 +513,7 @@ def c_back(ctx: Ctx) -> int:
     apply_outcome(reviews, out)
     _write(path, review)
     gs = GitState(ctx.root, review.range_end, [], recheck_start(reviews) or "")
-    lines = next_lines(reviews, gs)[:1] or [back_todo(reviews)]
-    print("\n".join(lines + out.notices))
+    print("\n".join(next_lines(reviews, gs, folder=path.parent)[:1] + out.notices))
     return RC_OK
 
 
@@ -625,7 +609,7 @@ def revert_unreachable(review: F.Review, gs: GitState) -> List[str]:
         if base is None:
             base = gs.base_commits
         if not any(c.startswith(h) for c in base):
-            f.handling = F.NO_HANDLING
+            f.handling, f.reverted = F.NO_HANDLING, h
             notices.append(OUT_OF_RANGE_NOTICE % h)
     if notices:
         for line in reversed(review.returns):
@@ -882,7 +866,7 @@ class Recorder:
             if not _open(rv.blocking[n - 1].handling):
                 _refuse("막는 지적 %d 의 처리가 「%s」 다 — 돌려보낸 지적(처리 없음 · 다시 돌려보냄)에만 처리를 옮긴다"
                         % (n, rv.blocking[n - 1].handling))
-            rv.blocking[n - 1].handling = h["value"]
+            rv.blocking[n - 1].handling, rv.blocking[n - 1].reverted = h["value"], ""
         rv.returns[-1].moved = item["value"]
         self.notices += revert_unreachable(rv, self.gs)
         _after_empty(rv)
@@ -991,31 +975,449 @@ class Recorder:
             _refuse("행선을 적어도 닫히지 않는다 — 거른 「잘못 골랐다」 목록의 행선도 같은 입력에 적는다")
 
 
-def record_todo(reviews: List[F.Review]) -> str:
-    """「답 적기」 뒤의 할 일 한 줄 — `next` 가 짓기 전까지 쓰는 최소의 꼴(Task 7 이 `next_lines` 로 바꾼다)."""
-    review = reviews[-1]
-    if review.stage in ("열림", "보내는 중", "보냄"):
-        if any(a.kind == ASK_WORKER for a in review.asks):
-            return "할 일 · 사용자 차례 · 담당자가 옮긴 질문 %s 의 답을 적는다" % review.asks[0].id
-        return "할 일 · 기다린다 · 리뷰가 도는 중이다(단계 %s)" % review.stage
-    if review.stage == "닫힘":
-        reason = review.close_reason
-        if reason == "에픽을 멈춤":
-            return "할 일 · 사용자 차례 · 에픽을 멈췄다"
-        if reason in MARK_OF_REASON and not review.close_mark:
-            if reason == F.REASON_DESIGN:
-                return "할 일 · 기다린다 · 설계 대화 뒤 다시 구현한 것이 돌아오면 「다시 구현됨」 표시를 적는다"
-            return "할 일 · 사용자 차례 · 재분해 신호 — 이어 가면 「재분해 뒤 이어 감」 표시를 적는다"
-        if reason in ("다시 보냄", "재리뷰로 이어짐") or reason in MARK_OF_REASON:
-            return "할 일 · 열기 · %s" % reason
-        return back_todo(reviews)
-    if _pending_record(review):
-        return "할 일 · 기록 파일 쓰기 · 의도 점검 답의 기록 파일을 쓰고 그 경로를 적는다"
-    if any(x.moved == NOT_YET for x in review.returns):
-        return "할 일 · 기다린다 · 돌려보낸 구현 담당자의 처리를 기다린다"
-    if not review.asks and _has_wrong(review):
-        return "할 일 · 답 적기 · 「잘못 골랐다」 의 행선을 적는다"
-    return back_todo(reviews)
+# ---------------------------------------------------------------- 관문 · 다음
+
+REASON_NAMES = {1: "리뷰가 도는 중", 2: "에픽을 멈춤", 3: "지적 목록을 얻지 못함", 4: "물을 것이 남음",
+                5: "기록 파일 경로가 빔", 6: "「잘못 골랐다」", 7: "열린 막는 지적", 8: "첫 리뷰 없음"}
+RUNNING = ("열림", "보내는 중", "보냄")
+STOPPED = "에픽을 멈춤"
+GATE_OPEN = "관문 · 열림"
+GATE_OPEN_NO_QG = "관문 · 열림 — qg 리뷰 없음(quality-gates 가 설치돼 있지 않다)"
+GATE_CLOSED = "관문 · 닫힘"
+NO_QG_IGNORED = "알림 · qg 없음 인자를 쓰지 않았다 — 이 PR 에 상태 파일이 있다"
+UNREADABLE = "읽지 못함"
+MISMATCH = "칸끼리 맞지 않음"
+# 보관 폴더에서 지휘자가 보내기 전에 만드는 파일 — 이 밖의 것은 담당자가 옮긴 파일이다(설계 §4 · D75).
+PRE_SEND_FILES = (F.STATE_NAME, "qg-answered.yaml", "qg-answered-notices.txt")
+HANDLING_HEAD = "## 지적마다의 처리"
+HANDLING_READ_LIMIT = 1 << 20
+RAW_HEAD_LINES = 16
+# 물을 것의 차례 — 지적 목록을 얻지 못함 → 담당자가 옮긴 질문 → 의도 점검 → 「두 번까지」 → 고치지 않은 막는 지적.
+ASK_ORDER = (ASK_FAILED, ASK_WORKER, ASK_INTENT, ASK_TWO_MAX, ASK_UNFIXED)
+
+
+def _latest_failed_answer(review: F.Review) -> bool:
+    return any(a.kind == ASK_FAILED for a in latest_answers(review).values())
+
+
+def _finding_open(scope: List[F.Review], i: int, f: F.Finding) -> bool:
+    """설계 §3 까닭 7 — 막는 지적이 닫히는 길은 셋(뒤 리뷰가 얻은 고친 커밋 · 사용자가 남김 · 리뷰 없이 가기로 함)."""
+    if f.handling in (F.USER_LEFT, F.NO_REVIEW):
+        return False
+    if f.handling.startswith(F.FIXED + " "):
+        return not any(is_obtained(later) for later in scope[i + 1:])
+    return True
+
+
+def reasons(reviews: List[F.Review], git_state: GitState, no_qg: bool) -> List[int]:
+    """관문을 닫는 까닭(설계 §3 의 여덟) — 걸린 번호들. 빈 목록이면 관문이 열린다.
+
+    세는 범위는 「다시 구현됨」 · 「재분해 뒤 이어 감」 표시가 붙은 마지막 리뷰 뒤부터다. `git_state` 는 「다음」 과
+    같은 꼴로 받는다 — 기준 커밋을 품었는지는 뒤 리뷰가 지적 목록을 얻었는지로 가린다(§3 까닭 7).
+    """
+    del git_state
+    if not reviews:
+        return [] if no_qg else [8]
+    scope = counting_from(reviews)
+    out = []
+    if scope:
+        last = scope[-1]
+        closed = last.stage == "닫힘"
+        if last.stage in RUNNING:
+            out.append(1)
+        if closed and last.close_reason == STOPPED:
+            out.append(2)
+        failed = last.stage == "돌아옴" and last.result.kind == A.NOT_OBTAINED and not _latest_failed_answer(last)
+        if failed or (closed and last.close_reason == "다시 보냄"):
+            out.append(3)
+        if last.stage not in RUNNING and any(a.kind != ASK_FAILED for a in last.asks):
+            out.append(4)
+        if _pending_record(last):
+            out.append(5)
+        if _has_wrong(last):
+            out.append(6)
+        # 「재리뷰로 이어짐」 으로 닫힌 마지막 리뷰는 올라온 커밋이 재리뷰를 받기 전이다(§1 · §4 「표가 덮는 것」).
+        rereview = closed and last.close_reason == "재리뷰로 이어짐"
+        if rereview or any(_finding_open(scope, i, f) for i, rv in enumerate(scope) for f in rv.blocking):
+            out.append(7)
+    if not any(rv.site == "premerge" for rv in scope):
+        out.append(8)
+    return out
+
+
+def _worker_name(review: F.Review) -> str:
+    m = F.WORKER_RE.fullmatch(review.worker)
+    return m.group(1) if m else ""
+
+
+def _moved_files(folder: Optional[Path]) -> List[str]:
+    """보관 폴더에서 지휘자가 보내기 전에 만든 파일 밖의 이름 — 담당자가 옮긴 파일."""
+    if folder is None or not folder.is_dir():
+        return []
+    return sorted(p.name for p in folder.iterdir() if p.name not in PRE_SEND_FILES)
+
+
+def has_handling(path: str) -> bool:
+    """처리 파일이 「있다」 — 그 경로의 파일에 `## 지적마다의 처리` 머리 줄이 있다(설계 §1 · D74)."""
+    p = Path(path)
+    try:
+        if not p.is_file():
+            return False
+        with open(str(p), "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read(HANDLING_READ_LIMIT)
+    except OSError:
+        return False
+    return any(line.rstrip() == HANDLING_HEAD for line in text.split("\n"))
+
+
+def _pending_return(review: F.Review) -> Optional[F.ReturnLine]:
+    pending = [x for x in review.returns if x.moved == NOT_YET]
+    return pending[-1] if pending else None
+
+
+def _first_ask(review: F.Review) -> Optional[F.Ask]:
+    ranked = sorted(review.asks, key=lambda a: ASK_ORDER.index(a.kind) if a.kind in ASK_ORDER else len(ASK_ORDER))
+    return ranked[0] if ranked else None
+
+
+def _ident(value: str) -> str:
+    return value if value else "(정체 없음)"
+
+
+class View:
+    """「다음」 한 번이 보는 것 — 상태 파일들 · git · 살아 있는 담당자 이름 · 「qg 없음」 · 마지막 리뷰의 보관 폴더."""
+
+    def __init__(self, reviews: List[F.Review], gs: GitState, alive=(), no_qg: bool = False,
+                 folder: Optional[Path] = None):
+        self.reviews, self.gs, self.alive, self.no_qg, self.folder = reviews, gs, tuple(alive), no_qg, folder
+        self.last = reviews[-1] if reviews else None
+
+    def stage(self, *stages: str) -> bool:
+        return self.last is not None and self.last.stage in stages
+
+    def closed(self, *close_reasons: str) -> bool:
+        return self.stage("닫힘") and self.last.close_reason in close_reasons
+
+    def opens(self, site: str) -> bool:
+        return open_accepts(self.reviews, self.gs, site)[0]
+
+    @functools.cached_property
+    def reasons(self) -> List[int]:
+        return reasons(self.reviews, self.gs, self.no_qg)
+
+    @functools.cached_property
+    def moved(self) -> List[str]:
+        return _moved_files(self.folder)
+
+    def under_cap(self) -> bool:
+        return counted_rechecks(self.reviews) < cap(self.reviews)
+
+
+class Todo:
+    """줄 하나가 내는 할 일 — 꼴 낱말 · 글 · 지휘자가 가리는 글 · 물을 것 · 알림."""
+
+    def __init__(self, kind: str, text: str, choose: str = "", ask: Optional[Tuple[str, str]] = None,
+                 notices: Optional[List[str]] = None):
+        self.kind, self.text, self.choose, self.ask = kind, text, choose, ask
+        self.notices = list(notices or [])
+
+
+class Row:
+    """설계 §4 표의 줄 하나. `kind` 는 꼴 낱말(보관 폴더에 따라 갈리는 줄은 그 tuple)."""
+
+    def __init__(self, id, reason, kind, conductor_choices, match, emit):
+        self.id, self.reason, self.kind = id, reason, kind
+        self.conductor_choices = tuple(conductor_choices)
+        self.match, self.emit = match, emit
+
+    def opens_review(self) -> bool:
+        return "열기" in (self.kind if isinstance(self.kind, tuple) else (self.kind,))
+
+
+def _e_r0(v: View) -> Todo:
+    return Todo("머지 준비", "관문은 「열림 — qg 리뷰 없음(quality-gates 가 설치돼 있지 않다)」 — 머지 준비로 간다")
+
+
+def _e_open_first(v: View) -> Todo:
+    return Todo("열기", "첫 리뷰(open --site premerge — PR 전체)를 연다")
+
+
+def _e_r1a(v: View) -> Todo:
+    return Todo("보냄", "같은 상태 파일 · 같은 범위로 보낸다 — 보내기 직전 send --phase start, 보낸 뒤 "
+                       "send --phase done --worker <이름>. 새로 열지 않는다")
+
+
+def _e_r1b(v: View) -> Todo:
+    rv = v.last
+    choose = ("하니스 목록에서 그 리뷰의 설명(qg %s %d)과 맞는 살아 있는 담당자를 찾으면 다시 띄우지 않고 "
+              "send --phase done --worker <그 이름> 으로 적는다" % (rv.site_tag, rv.order))
+    if v.moved:
+        return Todo("돌아옴", "보관 폴더에 담당자가 옮긴 파일이 있다(%s) — back 으로 보관 폴더의 파일로 결과를 가린다"
+                    % ", ".join(v.moved), choose)
+    return Todo("보냄", "보관 폴더에 담당자가 옮긴 파일이 없다 — 담당자를 다시 띄운 뒤 "
+                       "send --phase done --worker <이름> 으로 적는다(같은 상태 파일 · 같은 범위)", choose)
+
+
+def _e_r1c(v: View) -> Todo:
+    ask = [a for a in v.last.asks if a.kind == ASK_WORKER][0]
+    return Todo("사용자 차례", "담당자가 옮긴 질문을 띄워 답을 record 로 적는다",
+                "답을 적은 뒤 같은 담당자를 이어 부르거나, 이어 부를 수 없으면(담당자의 자리가 지워졌다) back 을 부른다",
+                (ASK_WORKER, _ident(ask.id)))
+
+
+def _e_r1d(v: View) -> Todo:
+    return Todo("기다린다", "qg 담당자 %s 가 살아 있다 — 끝나 살아 있는 이름에서 빠지면 back 으로 결과를 가린다"
+                % _worker_name(v.last))
+
+
+def _e_r1e(v: View) -> Todo:
+    return Todo("돌아옴", "qg 담당자가 끝났다 — back 으로 보관 폴더의 파일로 결과를 가린다")
+
+
+def _stopping_answer(review: F.Review) -> Optional[F.Answer]:
+    stops = [a for a in latest_answers(review).values() if a.answer == STOP_EPIC]
+    return stops[-1] if stops else None
+
+
+def _e_r2(v: View) -> Todo:
+    stop = _stopping_answer(v.last)
+    which = "(%s · %s)" % (stop.kind, _ident(stop.id)) if stop else ""
+    return Todo("사용자 차례", "이 에픽은 멈춰 있다 — 사용자가 이어 가자고 하면 멈추게 한 질문%s 을 다시 띄우고 "
+                           "다른 답을 record 로 적는다" % which)
+
+
+def _e_r3a(v: View) -> Todo:
+    asked = [a for a in v.last.asks if a.kind == ASK_FAILED]
+    ident = asked[0].id if asked else ASK_FAILED_ID
+    return Todo("사용자 차례", "지적 목록을 얻지 못했다(%s) — 질문 하나로 묻고(%s) 답을 record 로 적는다"
+                % (v.last.result.reason, " · ".join(CHOICES[ASK_FAILED])), ask=(ASK_FAILED, _ident(ident)))
+
+
+def _e_r3b(v: View) -> Todo:
+    return Todo("열기", "같은 자리(open --site %s) · 같은 범위의 새 리뷰를 연다 — 「두 번까지」 에 세지 않는다"
+                % v.last.site)
+
+
+def _e_r4(v: View) -> Todo:
+    ask = _first_ask(v.last)
+    return Todo("사용자 차례", "물을 것 %d개 — 먼저 「%s」 질문을 띄워 답을 record 로 적는다" % (len(v.last.asks), ask.kind),
+                ask=(ask.kind, _ident(ask.id)))
+
+
+def _e_r5(v: View) -> Todo:
+    idents = [_ident(a.id) for a in v.last.answers if a.kind == ASK_INTENT and a.record == ""]
+    return Todo("기록 파일 쓰기", "의도 점검 답(%s)의 기록 파일을 기록 브랜치에 쓰고 record 로 그 경로를 적는다 — "
+                            "다시 묻지 않는다. 기록 브랜치를 만들지 못하면 「%s — <사유>」 를 적는다"
+                % (", ".join(idents), F.NO_RECORD_BRANCH))
+
+
+def _e_r6a(v: View) -> Todo:
+    rv = v.last
+    idents = [_ident(a.id) for a in latest_answers(rv).values() if a.kind == ASK_INTENT and a.answer == WRONG_CHOICE]
+    idents += [_ident(x.id) for x in rv.filtered_wrong if not x.dest]
+    return Todo("답 적기", "「잘못 골랐다」 의 행선(%s)을 정해 record 로 적는다 — 구현 길로 돌려보내지 않는다 · 질문 %s"
+                % (" · ".join(ROUTES), ", ".join(idents)))
+
+
+def _e_r6b(v: View) -> Todo:
+    return Todo("기다린다", "설계 대화 · spec 승인 · 구현이 상태 파일 밖에서 나아간다 — 다시 구현한 것이 돌아오면 "
+                         "record 로 「%s」 표시를 붙인다. 브랜치 끝이 움직인 것만으로는 열지 않는다" % F.MARK_REIMPLEMENTED)
+
+
+def _e_open_after_mark(v: View) -> Todo:
+    return Todo("열기", "첫 리뷰(open --site premerge — PR 전체)를 새로 연다 — 관문과 「두 번까지」 는 이 리뷰부터 센다")
+
+
+def _e_r6d(v: View) -> Todo:
+    return Todo("사용자 차례", "재분해 신호로 멈춰 있다 — 재분해 신호를 사용자에게 보인다. 재분해가 끝나 이 PR 을 이어 가기로 "
+                           "하면 record 로 「%s」 표시를 붙인다" % F.MARK_RESPLIT_CONTINUE)
+
+
+def _e_r7a(v: View) -> Todo:
+    return Todo("기다린다", "구현 담당자 %s 가 살아 있다 — 다시 돌려보내지 않는다. 끝나 살아 있는 이름에서 빠지면 처리 파일을 본다"
+                % _pending_return(v.last).worker)
+
+
+def _e_r7b(v: View) -> Todo:
+    return Todo("답 적기", "처리 파일 %s 을 읽어 record 로 옮긴다(return_moved 「%s」 와 지적마다 handling)"
+                % (_pending_return(v.last).path, MOVED))
+
+
+def _e_r7c(v: View) -> Todo:
+    second = empty_returns(v.last) >= 1
+    tail = ("쓸 처리 없이 끝난 두 번째다 — 다시 보내지 않는다(record 가 고치지 않은 막는 지적의 질문을 적는다)" if second
+            else "쓸 처리 없이 끝난 첫 번째다 — 적은 뒤 다시 돌려보내고 record 로 return 을 새로 적는다")
+    return Todo("답 적기", "처리 파일 %s 이 없다 — record 로 그 줄에 「%s」 를 적는다. %s"
+                % (_pending_return(v.last).path, NO_FILE, tail),
+                "하위 agent 길이고 그 마지막 메시지가 낸 지적마다의 처리가 대화에 남아 있으면 그 대신 그 처리를 "
+                "record(return_moved 「%s」 와 지적마다 handling)로 옮긴다" % MOVED)
+
+
+def _e_r7d(v: View) -> Todo:
+    rv = v.last
+    count = sum(1 for f in rv.blocking if _open(f.handling))
+    notices = [OUT_OF_RANGE_NOTICE % f.reverted for f in rv.blocking if f.reverted and _open(f.handling)]
+    return Todo("돌려보낸다", "막는 지적 %d개를 구현 길로 돌려보낸다(목록은 스크립트가 짓는다) — 보낸 즉시 record 로 "
+                           "return(담당자 이름 · 처리 파일)을 적는다" % count, notices=notices)
+
+
+def _e_r7e(v: View) -> Todo:
+    return Todo("열기", "좁은 재리뷰(open --site recheck)를 연다")
+
+
+def _e_r7f(v: View) -> Todo:
+    return Todo("답 적기", "기준 커밋이 없다(닫은 뒤 브랜치가 다시 쓰였다) — 열지 않는다. 적을 값 없이 record 를 불러 "
+                         "그 리뷰를 다시 가린다")
+
+
+def _e_r8b(v: View) -> Todo:
+    return Todo("열기", "머지 앞 첫 리뷰(open --site premerge — PR 전체)를 연다 — 이름으로 청한 리뷰는 첫 리뷰를 대신하지 않는다")
+
+
+def _e_r9(v: View) -> Todo:
+    return Todo("머지 준비", "관문이 열렸다 — 머지 준비로 간다")
+
+
+def _m_r7(v: View, alive: Optional[bool] = None, header: Optional[bool] = None) -> bool:
+    pending = _pending_return(v.last) if v.stage("돌아옴") else None
+    if pending is None:
+        return False
+    if alive is not None:
+        return (pending.worker in v.alive) == alive
+    return pending.worker not in v.alive and has_handling(pending.path) == header
+
+
+# 설계 §4 표 — 위에서부터 보고 처음 맞는 줄을 쓴다. 「열기」 를 내는 줄은 「열기」 와 같은 기준(open_accepts)을 본다.
+NEXT_ROWS = [
+    Row("R0", None, "머지 준비", (), lambda v: v.last is None and v.no_qg, _e_r0),
+    Row("R8a", 8, "열기", (), lambda v: v.last is None and v.opens("premerge"), _e_open_first),
+    Row("R1a", 1, "보냄", (), lambda v: v.stage("열림"), _e_r1a),
+    Row("R1b", 1, ("돌아옴", "보냄"), ("send --phase done --worker <이름>",),
+        lambda v: v.stage("보내는 중") and not v.last.worker, _e_r1b),
+    Row("R1c", 1, "사용자 차례", ("back",),
+        lambda v: v.stage("보냄") and any(a.kind == ASK_WORKER for a in v.last.asks), _e_r1c),
+    Row("R1d", 1, "기다린다", (), lambda v: v.stage("보냄") and _worker_name(v.last) in v.alive, _e_r1d),
+    Row("R1e", 1, "돌아옴", (), lambda v: v.stage("보냄"), _e_r1e),
+    Row("R2", 2, "사용자 차례", (), lambda v: v.closed(STOPPED), _e_r2),
+    Row("R3a", 3, "사용자 차례", (),
+        lambda v: v.stage("돌아옴") and v.last.result.kind == A.NOT_OBTAINED and not _latest_failed_answer(v.last),
+        _e_r3a),
+    Row("R3b", 3, "열기", (), lambda v: v.closed("다시 보냄") and v.opens(v.last.site), _e_r3b),
+    Row("R4", 4, "사용자 차례", (), lambda v: v.stage("돌아옴") and bool(v.last.asks), _e_r4),
+    Row("R5", 5, "기록 파일 쓰기", (), lambda v: v.stage("돌아옴") and _pending_record(v.last), _e_r5),
+    Row("R6a", 6, "답 적기", (),
+        lambda v: v.stage("돌아옴", "닫힘") and _has_wrong(v.last) and v.last.close_reason not in MARK_OF_REASON,
+        _e_r6a),
+    Row("R6b", 6, "기다린다", (), lambda v: v.closed(F.REASON_DESIGN) and not v.last.close_mark, _e_r6b),
+    Row("R6c", 6, "열기", (),
+        lambda v: v.closed(F.REASON_DESIGN) and bool(v.last.close_mark) and v.opens("premerge"), _e_open_after_mark),
+    Row("R6d", 6, "사용자 차례", (), lambda v: v.closed(F.REASON_RESPLIT) and not v.last.close_mark, _e_r6d),
+    Row("R6e", 6, "열기", (),
+        lambda v: v.closed(F.REASON_RESPLIT) and bool(v.last.close_mark) and v.opens("premerge"), _e_open_after_mark),
+    Row("R7a", 7, "기다린다", (), lambda v: _m_r7(v, alive=True), _e_r7a),
+    Row("R7b", 7, "답 적기", (), lambda v: _m_r7(v, header=True), _e_r7b),
+    Row("R7c", 7, "답 적기", ("record --input <return_moved 옮김 · handling>",),
+        lambda v: _m_r7(v, header=False), _e_r7c),
+    Row("R7d", 7, "돌려보낸다", (),
+        lambda v: (v.stage("돌아옴") and is_obtained(v.last) and any(_open(f.handling) for f in v.last.blocking)
+                   and v.under_cap()), _e_r7d),
+    Row("R7e", 7, "열기", (), lambda v: v.closed("재리뷰로 이어짐") and v.opens("recheck"), _e_r7e),
+    Row("R7f", 7, "답 적기", (), lambda v: v.closed("재리뷰로 이어짐") and not v.gs.base_commits, _e_r7f),
+    Row("R8b", 8, "열기", (), lambda v: v.closed(*FIRST_AFTER) and v.opens("premerge"), _e_r8b),
+    Row("R9", None, "머지 준비", (), lambda v: v.last is not None and not v.reasons, _e_r9),
+    Row("RX", None, "상태 보이기", (), lambda v: True, None),
+]
+LAST_ROW = NEXT_ROWS[-1]
+
+
+def first_row(v: View) -> Row:
+    """표를 위에서부터 보고 처음 맞는 줄 — 칸끼리 맞지 않는 상태는 끝 줄."""
+    if inconsistency(v.reviews):
+        return LAST_ROW
+    for row in NEXT_ROWS[:-1]:
+        if row.match(v):
+            return row
+    return LAST_ROW
+
+
+def _reason_line(reason: Optional[int]) -> str:
+    return "까닭 · " + ("없음" if reason is None else str(reason))
+
+
+def _todo_lines(row: Row, todo: Todo, notices: List[str]) -> List[str]:
+    lines = ["할 일 · %s · %s" % (todo.kind, todo.text), "줄 · " + row.id, _reason_line(row.reason)]
+    if todo.choose:
+        lines.append("지휘자가 가린다 · " + todo.choose)
+    lines += todo.notices + notices
+    if todo.ask:
+        lines.append("물을 것 · %s · %s" % todo.ask)
+    return lines
+
+
+def _review_values(reviews: List[F.Review]) -> List[str]:
+    """상태 파일의 지금 값을 줄로 — 끝 줄(상태 보이기)이 사용자에게 보인다."""
+    out = []
+    for rv in reviews:
+        head = "값 · 차례 %d" % rv.order
+        tail = [x for x in (rv.close_reason, rv.close_mark) if x]
+        out.append(" · ".join([head, rv.site, rv.stage] + tail + ["범위 %s..%s" % (rv.range_start[:8], rv.range_end[:8]),
+                                                                "지적 목록 %s" % (rv.result.kind or "빔")]))
+        for n, f in enumerate(rv.blocking, 1):
+            out.append("%s · %s %d · %s" % (head, f.kind, n, f.handling))
+        for n, x in enumerate(rv.returns, 1):
+            out.append("%s · 돌려보냄 %d · %s · %s" % (head, n, x.worker, x.moved))
+        for a in rv.asks:
+            out.append("%s · 물을 것 · %s · %s" % (head, a.kind, _ident(a.id)))
+        for a in rv.answers:
+            out.append("%s · 사용자 답 · %s · %s · %s · 기록 %s" % (head, a.kind, _ident(a.id), a.answer, a.record or "빔"))
+        for x in rv.filtered_wrong:
+            out.append("%s · 거른 「잘못 골랐다」 · %s · 행선 %s" % (head, _ident(x.id), x.dest or "빔"))
+    return out
+
+
+def _show_lines(why: str, values: List[str]) -> List[str]:
+    return (["할 일 · 상태 보이기 · 아무것도 하지 않고 상태 파일의 지금 값을 사용자에게 보인다",
+             "줄 · " + LAST_ROW.id, "까닭 · " + why] + values)
+
+
+def next_lines(reviews: List[F.Review], gs: GitState, alive: Tuple[str, ...] = (), no_qg: bool = False,
+               folder: Optional[Path] = None) -> List[str]:
+    """그 상태에서 `next` 가 내는 줄들 — 첫 줄 `할 일 · <꼴> · <글>`, 둘째 줄 `줄 · <id>`, 셋째 줄 `까닭 · <번호|없음>`."""
+    v = View(reviews, gs, alive, no_qg, folder)
+    notices = [NO_QG_IGNORED] if (reviews and no_qg) else []
+    bad = inconsistency(reviews)
+    if bad:
+        return _show_lines("%s — %s" % (MISMATCH, bad), _review_values(reviews)) + notices
+    row = first_row(v)
+    if row is LAST_ROW:
+        why = " · ".join(str(n) for n in v.reasons) or "없음"
+        return _show_lines(why + " — 어느 줄에도 맞지 않는다", _review_values(reviews)) + notices
+    return _todo_lines(row, row.emit(v), notices)
+
+
+def refuses_asked(reviews: List[F.Review], gs: GitState) -> Optional[Row]:
+    """이름으로 청한 리뷰를 받지 않는 닫힘 — 그 상태의 줄이 까닭 2 · 까닭 6 의 「열기」 아닌 줄이면 그 줄(설계 §2 · D77 · D78)."""
+    row = first_row(View(reviews, gs))
+    return row if row.reason in (2, 6) and not row.opens_review() else None
+
+
+def raw_values(report_root: Path, target: str) -> List[str]:
+    """읽지 못한 상태 파일들의 머리 줄을 원본 그대로 — 대상 줄이 다른 대상으로 읽히는 파일은 뺀다."""
+    out = []
+    if not Path(report_root).is_dir():
+        return out
+    for path in sorted(Path(report_root).glob("*/" + F.STATE_NAME)):
+        try:
+            with open(str(path), "r", encoding="utf-8", errors="replace") as fh:
+                lines = fh.read(HANDLING_READ_LIMIT).split("\n")[:RAW_HEAD_LINES]
+        except OSError as exc:
+            out.append("값 · %s · 읽지 못했다 — %s" % (path, exc.__class__.__name__))
+            continue
+        named = [x[len("- 대상: "):] for x in lines if x.startswith("- 대상: ")]
+        if named and named[0] != target and F.TARGET_RE.fullmatch(named[0]):
+            continue
+        out += ["값 · %s · %s" % (path, x) for x in lines if x.startswith("- ")]
+    return out
 
 
 def c_record(ctx: Ctx) -> int:
@@ -1035,8 +1437,9 @@ def c_record(ctx: Ctx) -> int:
         _write(paths[prior.order], prior)
     if reviews[-1] != before[-1]:
         _write(path, reviews[-1])
-    lines = next_lines(reviews, gs)[:1] or [record_todo(reviews)]
-    print("\n".join(lines + rec.notices))
+    # 이 입력으로 막 돌려보낸 구현 담당자는 살아 있는 이름으로 본다 — 보낸 즉시 적는 줄이다(설계 §4).
+    sent = tuple(item["worker"] for item in items if item["kind"] == "return")
+    print("\n".join(next_lines(reviews, gs, sent, folder=path.parent)[:1] + rec.notices))
     return RC_OK
 
 
@@ -1045,7 +1448,47 @@ def c_unbuilt(ctx: Ctx) -> int:
     return RC_USAGE
 
 
-HANDLERS = {"open": c_open, "send": c_send, "back": c_back, "record": c_record}
+def c_next(ctx: Ctx) -> int:
+    """「다음」 — 그 대상에서 지금 할 일 하나. 상태 파일을 읽지 못하면 끝 줄(상태 보이기)로 원본의 머리 줄을 보인다."""
+    a = ctx.a
+    try:
+        reviews = F.reviews_for(ctx.report_root, a.target)
+    except F.Unreadable as exc:
+        lines = _show_lines("%s — %s" % (UNREADABLE, exc.reason), raw_values(ctx.report_root, a.target))
+        print("\n".join(lines))
+        return RC_OK
+    gs = GitState(ctx.root, resolve(ctx.root, "HEAD"), ctx.exclude, recheck_start(reviews) or "")
+    folder = ctx.paths()[reviews[-1].order].parent if reviews else None
+    print("\n".join(next_lines(reviews, gs, tuple(a.alive), a.no_qg, folder)))
+    return RC_OK
+
+
+def c_gate(ctx: Ctx) -> int:
+    """「관문」 — rc 0 열림 · rc 1 닫힘(걸린 까닭마다 한 줄). 읽지 못한 · 칸끼리 맞지 않는 상태 파일은 닫힘."""
+    a = ctx.a
+    try:
+        reviews = F.reviews_for(ctx.report_root, a.target)
+    except F.Unreadable as exc:
+        print("\n".join([GATE_CLOSED, "까닭 · %s — %s" % (UNREADABLE, exc.reason)]))
+        return RC_CLOSED
+    if not reviews and a.no_qg:
+        print(GATE_OPEN_NO_QG)
+        return RC_OK
+    notices = [NO_QG_IGNORED] if (reviews and a.no_qg) else []
+    bad = inconsistency(reviews)
+    if bad:
+        print("\n".join([GATE_CLOSED, "까닭 · %s — %s" % (MISMATCH, bad)] + notices))
+        return RC_CLOSED
+    gs = GitState(ctx.root, resolve(ctx.root, "HEAD"), ctx.exclude, recheck_start(reviews) or "")
+    found = reasons(reviews, gs, a.no_qg)
+    if not found:
+        print("\n".join([GATE_OPEN] + notices))
+        return RC_OK
+    print("\n".join([GATE_CLOSED] + ["까닭 · %d %s" % (n, REASON_NAMES[n]) for n in found] + notices))
+    return RC_CLOSED
+
+
+HANDLERS = {"open": c_open, "send": c_send, "back": c_back, "record": c_record, "next": c_next, "gate": c_gate}
 
 
 # ---------------------------------------------------------------- 명령줄

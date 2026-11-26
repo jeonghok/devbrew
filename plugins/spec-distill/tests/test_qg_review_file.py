@@ -35,7 +35,9 @@ def full_review(target: str = "pr12", order: int = 1) -> F.Review:
                             handling="고친 커밋 cccccc1 — 키 검증을 더했다"),
                   F.Finding(kind="새로 깨진 테스트", text="t.unit · NEW_REGRESSION", handling="반박 — 원래 깨져 있었다"),
                   F.Finding(kind="고른 제안", text="SUGGESTION 이름을 바꾼다", handling=F.USER_LEFT,
-                            from_review="premerge-pr12 1")],
+                            from_review="premerge-pr12 1"),
+                  F.Finding(kind="막는 지적", text="IMPORTANT src/b.py:2 — 범위 밖 커밋을 적어 냈다",
+                            reverted="dddddd1")],
         returns=[F.ReturnLine(worker="impl-a1", at="2026-11-26 11:00",
                               path="/x/report/A1/handling-premerge-pr12-1.md", moved="옮김")],
         filtered_wrong=[F.Filtered(id="q-dir", text="방향이 맞나", dest="설계 대화로")],
@@ -77,6 +79,8 @@ class TestQgReviewFile(unittest.TestCase):
                                     "사용자 답", "멈출 조건"])
         self.assertIn("- 범위: %s..%s" % (A, B), lines)
         self.assertIn("- 닫힘 사유: 「잘못 골랐다」 — 설계 대화로", lines)
+        self.assertIn("- 되돌린 커밋: dddddd1", lines)
+        self.assertEqual(lines.count("- 되돌린 커밋:"), 3)   # 되돌리지 않은 지적은 빈 칸
         # 빈 칸 · 빈 목록도 읽고 쓴 그대로다
         bare = simple("pr12", 1)
         F.write_review(self.path, bare)
@@ -137,6 +141,8 @@ class TestQgReviewFile(unittest.TestCase):
             "표시가 다른 사유에": self._broken("- 닫힘 표시: 다시 구현됨", "- 닫힘 표시: 재분해 뒤 이어 감"),
             "처리 값이 틀 밖": self._broken("- 처리: 반박 — 원래 깨져 있었다", "- 처리: 대충 고침"),
             "칸 하나 지움": self._broken("- 담당자: qg premerge-pr12 1 · 2026-11-26 10:00\n", ""),
+            "되돌린 커밋이 해시가 아님": self._broken("- 되돌린 커밋: dddddd1", "- 되돌린 커밋: 고쳤다"),
+            "되돌린 커밋 칸 지움": self._broken("- 되돌린 커밋:\n", ""),
         }
         for name, text in cases.items():
             with self.subTest(name):

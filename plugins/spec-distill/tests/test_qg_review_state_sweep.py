@@ -707,6 +707,9 @@ def choose_r7c(rig):
 CHOOSE = {"R1b": ("send", choose_r1b), "R1c": ("back", choose_r1c), "R7c": ("record", choose_r7c)}
 
 OPEN_ROWS = frozenset(r for r, (_n, kinds) in EXPECTED.items() if kinds == ("열기",))
+# 마지막 리뷰가 닫혀 있어도 이름으로 청한 리뷰를 받지 않는 줄 — 까닭 2 와 까닭 6 의 표시 없는 줄(설계 §2
+# 「앞 리뷰가 닫힌 뒤에 보낸다」 · AC33 · D77 · D78). 표시 뒤(R6c · R6e)와 그 밖의 닫힘에서는 받는다.
+ASKED_REFUSED = frozenset(r for r, (n, kinds) in EXPECTED.items() if n in (2, 6) and kinds != ("열기",))
 
 
 class TestQgReviewStateSweep(unittest.TestCase):
@@ -822,7 +825,7 @@ class TestQgReviewStateSweep(unittest.TestCase):
                     proc = run_open(rig, site)
                     self.assertEqual(proc.returncode, 4, "%s\n%s%s" % (site, proc.stdout, proc.stderr))
                     self.assertEqual(state_count(rig), before, site)
-                if last(rig).stage == "닫힘":
+                if last(rig).stage == "닫힘" and row_id not in ASKED_REFUSED:
                     ok(rig, run_open(rig, "asked"), "open --site asked (마지막 리뷰가 닫힘)")
                     self.assertEqual(state_count(rig), before + 1)
                     continue
@@ -832,8 +835,20 @@ class TestQgReviewStateSweep(unittest.TestCase):
                 now = run_next(rig, (), v.no_qg)
                 lines = proc.stdout.splitlines()
                 self.assertTrue(lines and lines[0].startswith("까닭 · "), proc.stdout)
-                self.assertTrue(any(x.startswith("할 일 · ") for x in lines), proc.stdout)
+                self.assertIn("할 일 · %s · " % now.kind, proc.stdout, proc.stdout + "\n--- next ---\n" + now.text)
                 self.assertIn("줄 · %s" % now.id, lines, proc.stdout + "\n--- next ---\n" + now.text)
+
+    def test_asked_accepted_after_mark(self):
+        # 거절만 재면 늘 거절하는 구현도 통과한다 — 표시가 붙은 뒤에는 이름으로 청한 리뷰를 받는다(D77).
+        self.assertEqual(ASKED_REFUSED, {"R2", "R6a", "R6b", "R6d"})
+        for row_id, build in self.variants(["R6c", "R6e"]):
+            with self.subTest(row=row_id, variant=build.__name__):
+                rig, v = self.build(build)
+                self.assert_row(run_next(rig, v.alive, v.no_qg), row_id, v.label)
+                before = state_count(rig)
+                ok(rig, run_open(rig, "asked"), "open --site asked (표시 뒤)")
+                self.assertEqual(state_count(rig), before + 1)
+                self.assertEqual((last(rig).site, last(rig).stage), ("asked", "열림"))
 
     def test_closed_reasons_sweep(self):
         cases = [

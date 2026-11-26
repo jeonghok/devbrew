@@ -115,6 +115,7 @@ class Finding:
     text: str               # 원문(여러 줄)
     handling: str = NO_HANDLING
     from_review: str = ""   # 낸 리뷰가 이 리뷰와 다르면 그 리뷰의 표시
+    reverted: str = ""      # 범위에 없어 「처리 없음」 으로 되돌린 「고친 커밋」 의 해시 — 새 처리를 적으면 비운다
 
 
 @dataclass
@@ -231,6 +232,8 @@ def check(review: Review) -> None:
     for f in review.blocking:
         _among("종류", f.kind, FINDING_KINDS)
         _shape("처리", f.handling, HANDLING_RE)
+        if f.reverted != "":
+            _shape("되돌린 커밋", f.reverted, HASH_RE)
         _one_line("낸 리뷰", f.from_review)
         _block("원문", f.text)
     for line in review.returns:
@@ -298,7 +301,8 @@ def render(review: Review) -> str:
                     _field("본 범위", r.seen_range), _field("판정 줄", r.verdict_line),
                     _field("의도 점검 줄", r.intent_line)],
         "막는 지적": _items([[_field("종류", f.kind), _field("처리", f.handling),
-                           _field("낸 리뷰", f.from_review)] + _block_lines("원문", f.text)
+                           _field("되돌린 커밋", f.reverted), _field("낸 리뷰", f.from_review)]
+                          + _block_lines("원문", f.text)
                           for f in review.blocking]),
         "돌려보냄": _items([[_field("담당자", x.worker), _field("보낸 때", x.at),
                           _field("처리 파일", x.path), _field("옮김", x.moved)]
@@ -401,8 +405,9 @@ class _Cursor:
 
 
 def _read_finding(c: _Cursor) -> Finding:
-    kind, handling, origin = c.field("종류"), c.field("처리"), c.field("낸 리뷰")
-    return Finding(kind=kind, handling=handling, from_review=origin, text=c.block("원문"))
+    kind, handling, reverted = c.field("종류"), c.field("처리"), c.field("되돌린 커밋")
+    origin = c.field("낸 리뷰")
+    return Finding(kind=kind, handling=handling, reverted=reverted, from_review=origin, text=c.block("원문"))
 
 
 def _read_return(c: _Cursor) -> ReturnLine:
