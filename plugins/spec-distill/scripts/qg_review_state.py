@@ -56,6 +56,10 @@ LEGACY_TRACES = ("pr-body", "ledger")
 LEGACY_SITES = ("premerge", "recheck")
 LEGACY_NOTICE = "알림 · 옛 흔적이 있다 — PR 전체를 처음부터 리뷰한다"
 LEGACY_PR_BODY = "할 일 · 사용자 차례 · 옛 PR 본문의 막는 지적과 사용자 답을 한 번 보인다"
+BACK_NEXT = ("할 일 · next 를 부른다 · 돌아온 결과를 상태 파일에 옮겼다 — "
+             "다음 할 일은 next 가 정한다")
+REPO_OFF_HEAD = ("--repo 가 리뷰받는 브랜치 끝에 서 있지 않다 — --repo 의 HEAD %s · --head %s. "
+                 "리뷰받는 브랜치를 체크아웃한 자리를 --repo 로 준다")
 GLOB_SPECIALS = "\\*?["
 OLD_TARGET_RE = re.compile("pr[1-9][0-9]*")
 ASK_FAILED_ID = "q-failed"
@@ -417,6 +421,9 @@ def c_open(ctx: Ctx) -> int:
     a = ctx.a
     reviews = ctx.reviews()
     head = resolve(ctx.root, a.head)
+    here = resolve(ctx.root, "HEAD")
+    if here != head:  # record · next · gate 는 --repo 의 HEAD 로 기준 커밋을 본다
+        raise Stop(RC_REFUSED, ["까닭 · " + REPO_OFF_HEAD % (here[:12], head[:12])])
     gs = GitState(ctx.root, head, ctx.exclude, recheck_start(reviews) or "", resolve(ctx.root, a.base))
     ok, why, shape = _decide(reviews, gs, a.site)
     if not ok:
@@ -512,8 +519,7 @@ def c_back(ctx: Ctx) -> int:
     out = A.read_archive(path.parent, review)
     apply_outcome(reviews, out)
     _write(path, review)
-    gs = GitState(ctx.root, review.range_end, [], recheck_start(reviews) or "")
-    print("\n".join(next_lines(reviews, gs, folder=path.parent)[:1] + out.notices))
+    print("\n".join([BACK_NEXT] + out.notices))
     return RC_OK
 
 

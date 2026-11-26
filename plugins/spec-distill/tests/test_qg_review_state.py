@@ -312,6 +312,24 @@ class TestQgReviewState(unittest.TestCase):
         new = self.reviews()[-1]
         self.assertEqual((new.order, new.range_start, new.range_end), (2, rv.range_start, rv.range_end))
 
+    def test_open_refuses_repo_off_head(self):
+        # `--repo` 의 HEAD 가 `--head` 와 다른 커밋이면 open 은 받지 않는다 — record · next · gate 는 `--repo`
+        # 의 HEAD 로 기준 커밋을 보므로, 연 범위와 뒤 명령이 보는 끝이 갈라진다. 상태 파일 · 자원 줄을 남기지 않는다
+        self.rig.git("checkout", "-q", BASE)
+        lines = self.refused(self.open("premerge"))
+        self.assertEqual(lines[0], "까닭 · " + Q.REPO_OFF_HEAD % (self.rig.sha("HEAD")[:12], self.c1[:12]))
+        self.assertEqual(self.count(), 0)
+        rc, out = self.rig.ledger("resources", "--roadmap", ROADMAP)
+        self.assertNotIn("qg 보관", out)
+        # 짝 — 같은 커밋에 detached 로 서 있으면(team 형식 과제 worktree) 연다
+        self.rig.git("checkout", "-q", "--detach", HEAD)
+        self.folder_of(self.ok(self.open("premerge")))
+        self.assertEqual(self.reviews()[-1].range_end, self.c1)
+        # 지휘 절차가 그 까닭 글을 이름으로 들어 다음 할 일(--repo 를 고쳐 다시 부른다)을 적었다
+        doc = (Path(Q.__file__).resolve().parent.parent / "skills" / "epic-conductor" / "references"
+               / "qg-review.md").read_text(encoding="utf-8")
+        self.assertIn("「%s」 면 `--repo` 를" % Q.REPO_OFF_HEAD.split(" — ")[0], doc)
+
     def test_open_writes_resource_line(self):
         folder = self.folder_of(self.ok(self.open("premerge")))
         rc, out = self.rig.ledger("resources", "--roadmap", ROADMAP)

@@ -41,6 +41,7 @@ PRE_MERGE_1 = [
     {"file": "src/a.py", "line": 2, "severity": "IMPORTANT", "summary": "이름이 틀렸다", "proposed_fix": "b 를 c 로"}]
 HANDLING_ROW = re.compile("- 막는 지적 ([1-9][0-9]*) · (.+)")
 MAX_STEPS = 20
+BACK_NEXT = "할 일 · next 를 부른다 · 돌아온 결과를 상태 파일에 옮겼다 — 다음 할 일은 next 가 정한다"
 
 
 class Walk:
@@ -259,7 +260,7 @@ class TestQgReviewStateWalk(unittest.TestCase):
         w.finish("qg-w1")
         w.next("R1e", "돌아옴")
         lines = w.ok("back", exclude=False)
-        self.assertTrue(lines[0].startswith("할 일 · 돌려보낸다 · 막는 지적 2개"), lines)
+        self.assertEqual(lines[0], BACK_NEXT, lines)  # back 은 할 일을 짓지 않는다 — next 가 정한다
         rv = w.reviews()[-1]
         self.assertEqual((rv.stage, [f.text for f in rv.blocking]), ("돌아옴", [FINDING_1, FINDING_2]))
         w.next("R7d", "돌려보낸다")
@@ -286,7 +287,7 @@ class TestQgReviewStateWalk(unittest.TestCase):
         w.finish("qg-w2")
         w.next("R1e", "돌아옴")
         lines = w.ok("back", exclude=False)
-        self.assertTrue(lines[0].startswith("할 일 · 머지 준비 · "), lines)
+        self.assertEqual(lines, [BACK_NEXT])
         w.next("R9", "머지 준비")
         return w
 
