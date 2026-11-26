@@ -40,7 +40,8 @@ def digest(root: Path) -> dict:
 
 
 class Base(unittest.TestCase):
-    def build(self, mode="no-framing", split=True, state_extra="\n## R1\n\n본문\n", settings="intent_dir: docs/iv/"):
+    def build(self, mode="no-framing", split=True, state_extra="\n## R1\n\n본문\n", settings="intent_dir: docs/iv/",
+              split_value=ROADMAP_REL):
         """픽스처 레포 — 결과물 묶음은 docs/iv 에 옛 꼴 이름으로 있다. settings 는 기본 브랜치의 레포 설정 머리말 줄들."""
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -59,7 +60,8 @@ class Base(unittest.TestCase):
         text = brief.read_text(encoding="utf-8")
         if split:
             assert text.count("## 7. Next Action\n") == 1
-            text = text.replace("## 7. Next Action\n", "## 7. Next Action\n\n- `%s`\n" % SPLIT_LINE)
+            text = text.replace("## 7. Next Action\n", "## 7. Next Action\n\n- `%s`\n"
+                                % ("분해됨 — " + split_value.replace("{repo}", str(self.repo))))
             brief.write_text(text, encoding="utf-8")
         state = Path(r["state"])
         state.write_text(state.read_text(encoding="utf-8").rstrip("\n") + "\n" + state_extra, encoding="utf-8")
@@ -342,11 +344,130 @@ class TestEntry(Base):
         self.assertIn("정해진 폴더는 docs/new/ 다(intent_dir)", stops[0])
         self.assertIn("옛 의도 폴더(docs/iv/)는 옛 꼴 이름", stops[0])
 
+    # ── §7 의 로드맵 자리 꼴 — 커밋 펜스가 늦게 거는 판정(check-path roadmaps_dir · 파일 이름 · 빈 값)을 진입에서 먼저 본다 ──
+    FORM = "roadmap-entry: STOP 결과물 §7 의 로드맵 자리가 꼴에 맞지 않다: "
+
+    def test_split_value_folder_not_under_roadmaps_dir_stops(self):
+        self.build(split_value="docs/other/2026-11-20-x/roadmap.md")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn(self.FORM + "부모 폴더가 다르다: ", out)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: STOP")
+
+    def test_split_value_two_levels_down_stops(self):
+        self.build(split_value="docs/superpowers/roadmaps/2026-11-20-x/sub/roadmap.md")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn(self.FORM + "부모 폴더가 다르다: ", out)
+
+    def test_split_value_case_only_stops(self):
+        self.build(split_value="docs/superpowers/Roadmaps/2026-11-20-x/roadmap.md")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn(self.FORM + "대소문자만 다른 경로라 받지 않았다: ", out)
+
+    def test_split_value_not_roadmap_md_stops(self):
+        rel = "docs/superpowers/roadmaps/2026-11-20-x/plan.md"
+        self.build(split_value=rel)
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn(self.FORM + "파일 이름이 roadmap.md 가 아니다 — " + rel + "\n", out)
+
+    def test_split_value_empty_stops(self):
+        self.build(split_value="")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 결과물 §7 의 분해됨 줄에 로드맵 경로가 없다\n", out)
+
+    def test_split_value_absolute_ok(self):
+        self.build(split_value="{repo}/" + ROADMAP_REL)
+        rc, out, err = self.run_entry()
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: OK")
+
+    def test_split_value_option_like_stops(self):
+        # 값이 `-h/…` 처럼 옵션 꼴이어도 위치 인자로 읽혀 꼴 멈춤이 선다(도움말로 읽혀 통과하지 않는다)
+        self.build(split_value="-h/roadmap.md")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1, out)
+        self.assertIn(self.FORM, out)
+
+    def test_split_value_in_code_form_ok(self):
+        # 양성 대조: §7 줄이 목록 · 코드 꼴(`- `분해됨 — …``)이어도 값을 읽어 통과한다(기본 픽스처 꼴)
+        self.build()
+        brief = Path(self.brief).read_text(encoding="utf-8")
+        self.assertIn("- `분해됨 — " + ROADMAP_REL + "`", brief)
+        rc, out, err = self.run_entry()
+        self.assertEqual(rc, 0, out + err)
+
+    # ── 작업 트리 밖 · 링크 성분 · `..` — 커밋 펜스의 path-inside 판정을 진입에서 먼저 본다(로드맵 폴더는 아직 없다) ──
+    INSIDE = "경로가 작업 트리 밖이거나 링크를 거친다 — "
+
+    def test_split_value_dotdot_stops(self):
+        rel = "docs/superpowers/roadmaps/a/../2026-11-20-x/roadmap.md"
+        self.build(split_value=rel)
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1, out)
+        rdir = os.path.dirname(os.path.join(str(self.repo), rel))
+        self.assertIn(self.FORM + self.INSIDE + rdir + ": '..' 성분이 있다\n", out)
+        self.assertEqual(out.strip().split("\n")[-1], "roadmap-entry: STOP")
+
+    def test_split_value_parent_link_stops(self):
+        # 로드맵 폴더(아직 없음)의 부모 성분이 링크다 — check-path 는 지나고 path-inside 가 막는다
+        self.build()
+        sp = self.repo / "docs" / "superpowers"
+        (sp / "real-roadmaps").mkdir(parents=True)
+        os.symlink(str(sp / "real-roadmaps"), str(sp / "roadmaps"))
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1, out)
+        rdir = os.path.dirname(os.path.join(str(self.repo), ROADMAP_REL))
+        self.assertIn(self.FORM + self.INSIDE + rdir + ": 링크를 거친다 (" + str(sp / "roadmaps") + ")\n", out)
+
+    def test_split_value_absolute_through_link_stops(self):
+        # 절대값의 성분이 링크다 — 진입이 realpath 로 풀어 지나가던 값(커밋 펜스에서야 막혔다)
+        self.build(split_value="{repo}/alias/" + ROADMAP_REL)
+        os.symlink(str(self.repo), str(self.repo / "alias"))
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1, out)
+        rdir = os.path.dirname(os.path.join(str(self.repo), "alias", ROADMAP_REL))
+        self.assertIn(self.FORM + self.INSIDE + rdir + ": 링크를 거친다 (" + str(self.repo / "alias") + ")\n", out)
+
+    def test_split_value_trailing_space_class_ok(self):
+        # 백틱 없이 쓴 §7 줄 끝의 공백 글자(폼 피드 + CRLF)를 커밋 펜스 sed 의 `[[:space:]]*$` 처럼 떼고 읽는다
+        self.build()
+        brief = Path(self.brief)
+        text = brief.read_text(encoding="utf-8")
+        old = "- `" + SPLIT_LINE + "`\n"
+        self.assertEqual(text.count(old), 1)
+        brief.write_bytes(text.replace(old, "- " + SPLIT_LINE + "\f\r\n").encode("utf-8"))
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "crlf")
+        rc, out, err = self.run_entry()
+        self.assertNotIn(self.FORM, out)
+        self.assertEqual(rc, 0, out + err)
+
+    def test_recorded_seed_comes_from_state_file(self):
+        # 상태 파일의 seed: 값이 가리키는 파일에 변경이 있으면 원자료 사유가 선다(기록 경로에서 거꾸로 짓지 않는다)
+        self.build(mode="recorded")
+        self.append(self.p["seed"], "\n덧붙임\n")
+        rc, out, _ = self.run_entry()
+        self.assertEqual(rc, 1)
+        self.assertIn("roadmap-entry: STOP 원자료에 커밋하지 않은 변경이 있다: " + self.p["seed"], out)
+
+
     def test_bad_args_rc2(self):
         p = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True)
         self.assertEqual(p.returncode, 2)
         p = subprocess.run([sys.executable, str(SCRIPT), "--brief", "/nonexistent/x.md"], capture_output=True, text=True)
         self.assertEqual(p.returncode, 2)
+
+
+class TestSource(unittest.TestCase):
+    def test_seed_path_from_state_not_from_record(self):
+        # 정적이다 — 거꾸로 짓기는 구조상 같은 값을 내 동작 시험으로 가를 수 없다(기록 파일 이름에서 seed 를 도출하면 같은 글이 나온다)
+        src = SCRIPT.read_text(encoding="utf-8")
+        self.assertNotIn('[:-len(".audit.md")]', src)
+        self.assertIn('.get("seed"', src)
 
 
 if __name__ == "__main__":

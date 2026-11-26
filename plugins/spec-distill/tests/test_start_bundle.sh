@@ -170,7 +170,7 @@ assert_eq "$(job --job E1 --stage plan --plan 1)" "0" "과제: plan 묶음"
 assert_eq "$(line 3)" "원자료: ${B}:${TM}/intent/original.md 2–4행" "과제: plan 의 원자료에 범위가 있다"
 assert_eq "$(line 5)" "쓸 것: ${E1}/results/plan-plan-1-1.md" "과제: plan 의 쓸 것"
 assert_eq "$(line 6)" "맞추는 명령: python3 ${S}/roadmap_write.py job sync --result ${E1}/results/plan-plan-1-1.md --role worker --bundle-at ${B} --job-at ${J}" "과제: plan 의 기본 역할은 worker"
-assert_eq "$(line 7)" "쓸 자리: 사용자 선호: 계획은 기본 자리 대신 ${E1}/plan-1.md 에 쓴다." "과제: plan 의 쓸 자리"
+assert_eq "$(line 7)" "쓸 자리: 계획은 기본 자리 대신 ${E1}/plan-1.md 에 쓴다." "과제: plan 의 쓸 자리"
 assert_eq "$(line 8)" "역할 문서 (${B}):" "과제: plan 의 역할 문서 머리"
 assert_eq "$(sed -n '9,$p' "$T/job.txt" | head -n "$(doc_lines worker)")" "$(g show "$B:${RD}worker/CLAUDE.md")" "과제: plan 의 역할 문서는 worker 의 것"
 # 둘째 브랜치도 설계 파일이 있어야 spec 승인 줄을 대조한다 — 첫 브랜치의 끝에서 갈라 계획 2 를 더해 올린다
@@ -179,7 +179,7 @@ E1B="$(g rev-parse feature/tm-e1b)"; g checkout -q main
 assert_eq "$(job --job E1 --stage plan --plan 2)" "0" "과제: 계획 2 의 plan 묶음(I12 — 블록 브랜치의 둘째)"
 assert_eq "$(line 1)" "기준 커밋: ${B} · 과제 브랜치 ${E1B}" "과제: 계획 2 는 둘째 브랜치를 본다"
 assert_eq "$(grep '^쓸 것: ' "$T/job.txt")" "쓸 것: ${E1}/results/plan-plan-2-1.md" "과제: 계획 2 의 쓸 것"
-assert_eq "$(grep '^쓸 자리: ' "$T/job.txt")" "쓸 자리: 사용자 선호: 계획은 기본 자리 대신 ${E1}/plan-2.md 에 쓴다." "과제: 쓸 자리 문장의 번호는 --plan"
+assert_eq "$(grep '^쓸 자리: ' "$T/job.txt")" "쓸 자리: 계획은 기본 자리 대신 ${E1}/plan-2.md 에 쓴다." "과제: 쓸 자리 문장의 번호는 --plan"
 
 # design — 과제 브랜치가 아직 없다(U4) · 원자료 전체 · 번호 파일(I5)
 E3="$TM/jobs/E3"
@@ -191,7 +191,7 @@ assert_eq "$(line 4)" "원자료: ${B}:${TM}/intent/original.md" "과제: design
 assert_eq "$(line 5)" "읽을 것: ${B}:${E3}/sources.md · ${E3}/INTENT.md" "AC21: design 은 번호 파일을 기준 커밋으로 맨 앞에"
 assert_eq "$(line 6)" "쓸 것: ${E3}/results/design-1.md" "과제: design 의 쓸 것"
 assert_eq "$(line 7)" "맞추는 명령: python3 ${S}/roadmap_write.py job sync --result ${E3}/results/design-1.md --role leader --bundle-at ${B} --job-at ${B}" "과제: design 의 맞추는 명령"
-assert_eq "$(line 8)" "쓸 자리: 사용자 선호: 설계문서는 기본 자리 대신 ${E3}/design.md 에 쓴다." "과제: design 의 쓸 자리"
+assert_eq "$(line 8)" "쓸 자리: 설계문서는 기본 자리 대신 ${E3}/design.md 에 쓴다." "과제: design 의 쓸 자리"
 assert_eq "$(line 9)" "역할 문서 (${B}):" "과제: design 의 역할 문서 머리"
 assert_eq "$(job --job E3 --stage design --role leader)" "0" "AC15: design 과제 묶음은 --role leader 를 받는다"
 assert_contains "$(cat "$T/job.txt")" "$(show "${RD}leader/CLAUDE.md" | sed -n 1p)" "AC15: design 묶음의 역할 문서는 leader 것이다"
@@ -225,7 +225,7 @@ assert_contains "$(cat "$T/job.err")" "설계 없는 흐름의 결과 파일에�
 assert_eq "$(job --job E2 --stage plan --plan 2)" "1" "과제: 설계 없는 흐름의 plan 도 블록 브랜치의 그 번째를 쓴다(브랜치 하나)"
 assert_eq "$(job --job E2 --stage plan --plan 1)" "0" "과제: 설계 없는 흐름의 plan 은 --plan 을 받는다"
 assert_eq "$(grep '^쓸 것: ' "$T/job.txt")" "쓸 것: ${TM}/jobs/E2/results/plan-1.md" "과제: 설계 없는 흐름의 plan 결과 이름에는 번호가 없다"
-assert_eq "$(grep '^쓸 자리: ' "$T/job.txt")" "쓸 자리: 사용자 선호: 계획은 기본 자리 대신 ${TM}/jobs/E2/plan-1.md 에 쓴다." "과제: 쓸 자리 문장의 번호는 --plan"
+assert_eq "$(grep '^쓸 자리: ' "$T/job.txt")" "쓸 자리: 계획은 기본 자리 대신 ${TM}/jobs/E2/plan-1.md 에 쓴다." "과제: 쓸 자리 문장의 번호는 --plan"
 
 # 단순 작업(I8 · U5)
 g checkout -q -b chore/tm-fix main
