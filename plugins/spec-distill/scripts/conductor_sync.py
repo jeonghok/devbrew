@@ -6,7 +6,8 @@
 → (표지를 새로 잡았거나 넘겨받았을 때만) 주인 모를 worktree · 판 차이 → 차례 표 읽기 → 끝 묶음.
 구간마다 한 줄을 내고, 이상이 있는 구간만 그 원문을 네 칸 들여 낸다. 구간이 멈출 사유를 내면 `멈춤 — <구간>: <사유>` 와
 원문을 내고 그 종료 코드로 끝난다(뒤 구간은 돌지 않는다). 끝 묶음은 규모 줄 · (team 형식이면) 리더 묶음 명령 한 줄 ·
-끝나지 않은 일마다 서 있는 걸음과 지시서 · 머지 뒤 일이 남은 에픽 · 병렬 판단 줄 · 시각 줄이다.
+끝나지 않은 일마다 서 있는 걸음과 지시서 · 머지 뒤 일이 남은 에픽 · 병렬 판단 줄 · 시각 줄이다. PR 캐시 구간이 캐시를
+고쳤으면 끝 묶음은 작업 목록을 고친 캐시로 다시 센다(작업 목록 구간 줄은 처음 계산 그대로).
 
 기계 상태 · 상태 브랜치는 직접 쓰지 않는다 — 쓰는 일은 부르는 스크립트(원장 · 상태 브랜치 · 현황)가 한다.
 표의 줄을 지우거나 터미널을 닫지 않는다 — 어긋난 줄을 낼 뿐이다.
@@ -173,9 +174,14 @@ def work_items(report, lines):
     return [(t, stage, done, b) for t, (stage, done, b) in zip(titles, sources)]
 
 
-def seg_tasks(roadmap):
+def tasks_of(roadmap):
+    """(보고 | None, 작업 목록 줄들, 일들 | None, 표준 오류 글, rc)."""
     report, lines, err, rc = task_view(roadmap)
-    items = work_items(report, lines) if report is not None else None
+    return report, lines, (work_items(report, lines) if report is not None else None), err, rc
+
+
+def seg_tasks(roadmap):
+    report, lines, items, err, rc = tasks_of(roadmap)
     if rc == 0 and report is not None and items is not None:
         segment("작업 목록", "에픽 %d · 끝나지 않은 일 %d" % (len(report.get("blocks") or []),
                                                      sum(1 for it in items if not it[2])))
@@ -236,6 +242,7 @@ def pr_rows(root, roadmap):
 
 
 def seg_pr(root, roadmap, sid):
+    """캐시가 바뀌었는가 — 단계 계산이 캐시를 읽으므로 바뀌었으면 끝 묶음은 작업 목록을 다시 센다."""
     before = pr_rows(root, roadmap)
     rc, out, err = script("conductor_ledger.py", "pr-refresh", "--roadmap", roadmap, "--session", sid)
     if rc == 3:
@@ -245,7 +252,7 @@ def seg_pr(root, roadmap, sid):
     odd = rc != 0 or err or any(not ln.startswith(PR_SUMMARY) for ln in out)
     if isinstance(before, str) or isinstance(after, str):
         anomaly("PR 캐시", "캐시를 견주지 못했다 — %s" % (before if isinstance(before, str) else after), raw)
-        return
+        return True
     changed = ["%s %s %s → %s" % (br, no, before.get((br, no), "없음"), after.get((br, no), "없음"))
                for br, no in sorted(set(before) | set(after)) if before.get((br, no)) != after.get((br, no))]
     if changed:
@@ -254,6 +261,7 @@ def seg_pr(root, roadmap, sid):
         anomaly("PR 캐시", "알림이 있다(종료 코드 %d)" % rc, raw)
     else:
         segment("PR 캐시", "달라진 것 없음")
+    return bool(changed)
 
 
 def _status_block(lines):
@@ -529,7 +537,8 @@ def sync(roadmap, given, takeover) -> int:
     report, lines, items = seg_tasks(roadmap)
     sid, first = seg_marker(roadmap, given, takeover)
     seg_default(roadmap, sid)
-    seg_pr(root, roadmap, sid)
+    if seg_pr(root, roadmap, sid):   # 구간 줄은 처음 계산 그대로 두고, 끝 묶음만 고친 캐시로 센다
+        report, lines, items = tasks_of(roadmap)[:3]
     seg_state_branch(roadmap, sid)
     machine, why = machine_of(root, roadmap)
     seg_workers(machine, why)

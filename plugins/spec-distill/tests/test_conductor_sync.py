@@ -332,6 +332,36 @@ class PrCache(SyncRepo):
         self.assertIn("\nPR 캐시 — 달라진 것 없음\n", out)
         rc, out, err = self.sync()   # 그 PR 이 목록에서 사라지면 다시 고침
         self.assertIn("\nPR 캐시 — 이상: 고쳤다 — feature/e1 #5 열림 → 없음\n", out)
+        # 머지 앞 리뷰 지적 3 — squash 머지: 머지됨은 캐시로만 판정된다. 같은 실행이 캐시를 고치면 끝 묶음은 고친 캐시로 센다
+        self.git(self.w, "switch", "-q", "-c", "feature/e1")
+        self.put({"src/e1.txt": "e1\n"})
+        self.git(self.w, "add", "-A")
+        self.git(self.w, "commit", "-qm", "e1")
+        self.git(self.w, "push", "-q", "origin", "feature/e1")
+        tip = self.git(self.w, "rev-parse", "HEAD").strip()
+        self.git(self.w, "switch", "-q", "trunk")
+        self.put({"src/e1.txt": "e1\n"})
+        self.git(self.w, "add", "-A")
+        self.git(self.w, "commit", "-qm", "가 (#6)")
+        self.git(self.w, "push", "-q", "origin", "trunk")
+        squash = self.git(self.w, "rev-parse", "HEAD").strip()
+        rc, out, err = self.sync()
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual([l for l in out.splitlines() if l.startswith("- E1 ")], ["- E1 가 — 설계 중 → 걸음 3 다음 일 고르기와 보내기 · "
+                         + str(PLUGIN / "references" / "conducting-step-3.md")], out)   # 캐시가 머지를 모르는 동안
+        e1.write_text(json.dumps([{"number": 6, "state": "MERGED", "headRefName": "feature/e1", "headRefOid": tip,
+                                   "isCrossRepository": False, "baseRefName": "trunk", "mergeCommit": {"oid": squash}}]),
+                      encoding="utf-8")
+        rc, out, err = self.sync(env=env)
+        self.assertEqual(rc, 0, out + err)
+        self.assertIn("\nPR 캐시 — 이상: 고쳤다 — feature/e1 #6 없음 → 머지됨\n", out)
+        self.assertIn("\n작업 목록 — 에픽 3 · 끝나지 않은 일 2\n", out)   # 구간 줄은 캐시를 고치기 전 계산 그대로
+        self.assertFalse([l for l in out.splitlines() if l.startswith("- E1 ")], out)   # 끝 묶음은 고친 캐시로 — E1 은 끝났다
+        scale = next(l for l in out.splitlines() if l.startswith("규모 — "))
+        self.assertTrue(scale.startswith("규모 — 남은 에픽 1(E2) · "), scale)
+        self.assertEqual([l for l in out.splitlines() if l.startswith("- E2 ")],
+                         ["- E2 나 — 준비 → 걸음 3 다음 일 고르기와 보내기 · "
+                          + str(PLUGIN / "references" / "conducting-step-3.md")], out)
 
 
 class StatusView(SyncRepo):
