@@ -111,8 +111,9 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 도 같은 생명주기를 따른다.
 
 합치기 전 지적 목록 `findings-pre-merge.yaml` 도 같은 폴더에 있고 같은 생명주기를 따른다 — 합성기 `--pre-merge-out` 이 쓰고,
-합성 단계에 닿지 않은 실행에는 없다. 맨 위 키 `findings` 아래 지적마다 `severity` · `file` · `line` · `summary` · `proposed_fix`
-칸이 있고, 막는 지적은 `severity` 가 `CRITICAL` · `IMPORTANT` 인 항목이다.
+합성 단계에 닿지 않은 실행과 합성기가 쓰지 못한 실행(표준 오류에 「합치기 전 목록을 쓰지 못했다」 한 줄)에는 없다.
+맨 위 키 `findings` 아래 지적마다 `severity` · `file` · `summary` 칸이 있고, `line` · `proposed_fix` 는 없을 수 있다.
+막는 지적은 `severity` 가 `CRITICAL` · `IMPORTANT` 인 항목이다.
 
 `intent-*`(intent-critic 단계의 실행 파일 — 예: 리뷰어의 넓이 칸 `intent-scope.md`. 이름과 내용은 `scripts/intent_critic.py` 와 [intent-critic 절차](intent-critic.md)가 정한다)와
 `other-teams.md` 는 판정 · 게시 뒤에만 생기고 다음 실행의 Preflight P2 가 지운다. 답 파일은 세션 폴더가 아니라 docs 답 자리에 산다(레포 설정 `DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR`, 기본
