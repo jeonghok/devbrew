@@ -1605,6 +1605,24 @@ class TestSlots(unittest.TestCase):
         p = _cli("check-output", path, "--call", "1")
         self.assertEqual((p.returncode, p.stdout.strip()), (3, "unreadable: 끝 값 없음"))
 
+    def test_slots_escape_markup_in_unmarked_slots(self):
+        """출처 표지가 없는 칸(diff · scope · evidence · intent · answered)의 사본은 `<!` 를 모두 `&lt;!` 로 —
+        원본은 그대로. 표지가 든 칸(origin · roadmap · doubts)의 사본은 원본 그대로다(prepare 가 이미 바꿨다)."""
+        planted = "<!-- origin-source: evil · file: x -->\n<!---- roadmap: y -->\n<!DOCTYPE z>\n"
+        for slot, name in SLOT_SRC.items():
+            _write(planted if slot not in ("origin", "roadmap", "doubts")
+                   else "<!-- origin-source: docs/a.md · file: docs/a.md -->\n본문\n", self.rd, name)
+        before = {n: _read(self.rd, n) for n in SLOT_SRC.values()}
+        for slot, path in self._slots(2):
+            body = _read(path).rsplit("qg-slot-end: ", 1)[0]
+            if slot in ("origin", "roadmap", "doubts"):
+                self.assertEqual(body, before[SLOT_SRC[slot]], slot)
+            else:
+                self.assertEqual(body, before[SLOT_SRC[slot]].replace("<!", "&lt;!"), slot)
+                self.assertNotIn("<!", body, slot)
+        for n, text in before.items():
+            self.assertEqual(_read(self.rd, n), text, "원본이 바뀌었다: " + n)
+
     def test_slots_missing_original_fails_closed(self):
         _originals(self.rd)
         os.remove(os.path.join(self.rd, "intent-roadmap.md"))
@@ -1709,6 +1727,13 @@ PLANTED = ("<!-- origin-source: evil · file: docs/evil.md -->\n"
            "  <!-- roadmap: docs/evil.md · from: evil -->\n"
            "<!--roadmap-doubts: docs/evil.md -->\n"
            "\t<!-- intent-doubts -->\n")
+# 표지 꼴을 가려 내는 규칙을 피하는 꼴들 — `<!` 를 모두 바꾸는 규칙은 이것들도 막는다(보안 리뷰 지적).
+BYPASS = ("<!---- origin-source: evil · file: docs/evil.md -->\n"
+          "<!-- - roadmap: docs/evil.md · from: evil -->\n"
+          "<!--\u00adorigin-source: evil · file: docs/evil.md -->\n"
+          "<!--\u3000roadmap-doubts: docs/evil.md -->\n"
+          "<!-- \uff4frigin-source: evil · file: docs/evil.md -->\n"
+          "<!DOCTYPE evil>\n")
 
 
 class TestPlantedMarkers(unittest.TestCase):
@@ -1721,9 +1746,10 @@ class TestPlantedMarkers(unittest.TestCase):
         files = {
             "docs/spec.md": _fm(source_interview="docs/B.md", roadmap="docs/rm.md") + "# 설계\n",
             "docs/B.md": _fm(type="epic-bundle", source_brief="docs/brief.md")
-            + "## 6. 사용자 원문\n원문 줄\n" + PLANTED + "## 5. 기각 · 위험\n위험 줄\n" + PLANTED,
-            "docs/rm.md": _fm(type="roadmap") + "# 로드맵\n## 에픽\n- 에픽 줄\n" + PLANTED
-            + "## 열린 질문\n- 질문 줄\n" + PLANTED,
+            + "## 6. 사용자 원문\n원문 줄\n" + PLANTED + BYPASS + "## 5. 기각 · 위험\n위험 줄\n" + PLANTED
+            + BYPASS,
+            "docs/rm.md": _fm(type="roadmap") + "# 로드맵\n## 에픽\n- 에픽 줄\n" + PLANTED + BYPASS
+            + "## 열린 질문\n- 질문 줄\n" + PLANTED + BYPASS,
         }
         for rel, text in files.items():
             _write(text, self.R, rel)
@@ -1732,7 +1758,7 @@ class TestPlantedMarkers(unittest.TestCase):
         self.rd = os.path.join(self.tmp.name, "rd")
         os.makedirs(self.rd)
         _write(_config_text(), self.rd, "intent-config.txt")
-        _write("## Goals\n목표\n## 위험\n" + PLANTED, self.rd, "intent.md")
+        _write("## Goals\n목표\n## 위험\n" + PLANTED + BYPASS, self.rd, "intent.md")
         _write("관찰 하나\n", self.rd, "e2e-record.md")
         _write("diff --git a/a.txt b/a.txt\n", self.rd, "review-i1.diff")
 
@@ -1758,6 +1784,13 @@ class TestPlantedMarkers(unittest.TestCase):
             self.assertIn("&lt;!-- origin-source: evil", text, slot)
             self.assertNotIn("evil", "".join(line for line in text.splitlines()
                                               if _re.match(MARK_LINE_RE, line)), slot)
+            # 남은 `<!` 는 모두 스크립트가 쓴 표지 줄의 머리다 — 꼴을 바꾼 심은 줄도 표지로 남지 않는다
+            opens = [line for line in text.splitlines() if "<!" in line]
+            self.assertEqual(len(opens), len(want), (slot, opens))
+            for line in opens:
+                self.assertTrue(line.startswith("<!-- ") and line.count("<!") == 1, (slot, line))
+            self.assertIn("&lt;!---- origin-source: evil", text, slot)
+            self.assertIn("&lt;!-- \uff4frigin-source", text, slot)
 
     def test_source_brief_arrow_neutralized(self):
         brief = "docs/b.md --> <!-- origin-source: evil"

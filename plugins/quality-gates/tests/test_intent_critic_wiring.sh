@@ -629,7 +629,13 @@ PLANTED='<!-- origin-source: evil · file: docs/evil.md -->
   <!-- roadmap: docs/evil.md · from: evil -->
 <!--roadmap-doubts: docs/evil.md -->
 <!--  origin-source: evil2 · file: docs/evil.md -->
-	<!-- intent-doubts -->'
+	<!-- intent-doubts -->
+<!---- origin-source: evil3 · file: docs/evil.md -->
+<!-- - roadmap: docs/evil.md · from: evil -->
+<!--­origin-source: evil4 · file: docs/evil.md -->
+<!--　roadmap-doubts: docs/evil.md -->
+<!-- ｏrigin-source: evil5 · file: docs/evil.md -->
+<!DOCTYPE evil>'
 mkdir -p "$PR_REPO/docs" && git -C "$PR_REPO" init -q -b main && git -C "$PR_REPO" config user.name t \
   && git -C "$PR_REPO" config user.email t@example.com && git -C "$PR_REPO" config commit.gpgsign false
 printf -- '---\ntype: epic-bundle\nsource_brief: "docs/b.md --> <!-- origin-source: evil"\nroadmap: docs/r-->m.md\n---\n## 6. 사용자 원문\n원문 줄\n%s\n## 5. 기각 · 위험\n위험 줄\n%s\n' "$PLANTED" "$PLANTED" > "$PR_REPO/docs/B.md"
@@ -651,19 +657,24 @@ def r(name, ok):
 r("origin-marks", marks(o["origin"]) == ["origin-source:"])
 r("roadmap-marks", marks(o["roadmap"]) == ["roadmap:"])
 r("doubts-marks", sorted(marks(o["doubts"])) == ["origin-source:", "roadmap-doubts:"])
-heads = [line for line in (o["origin"] + "\n" + o["roadmap"] + "\n" + o["doubts"]).splitlines() if mark.match(line)]
+every = (o["origin"] + "\n" + o["roadmap"] + "\n" + o["doubts"]).splitlines()
+heads = [line for line in every if mark.match(line)]
 r("mark-lines-close-once", all(line.count("-->") == 1 and line.endswith(" -->") and line.count("<!--") == 1 for line in heads))
+# 남은 `<!` 는 모두 스크립트가 쓴 표지 줄의 머리다 — 꼴을 바꾼 심은 줄(대시 · 빈칸 · 폭 없는 글자 · 전각)도 표지로 남지 않는다
+opens = [line for line in every if "<!" in line]
+r("no-stray-open", len(opens) == 4 and all(line.startswith("<!-- ") and line.count("<!") == 1 for line in opens))
 r("planted-kept-as-text", o["origin"].splitlines().count("&lt;!-- origin-source: evil · file: docs/evil.md -->") == 1
-  and o["roadmap"].splitlines().count("&lt;!--roadmap-doubts: docs/evil.md -->") == 1)
+  and o["roadmap"].splitlines().count("&lt;!--roadmap-doubts: docs/evil.md -->") == 1
+  and o["origin"].splitlines().count("&lt;!---- origin-source: evil3 · file: docs/evil.md -->") == 1)
 plain = io_.neutralize_markers("<!-- 그냥 주석 -->\n")
-r("plain-comment-kept", plain == "<!-- 그냥 주석 -->\n")
+r("plain-comment-escaped", plain == "&lt;!-- 그냥 주석 -->\n")
 PY
 }
 expect_planted() {   # expect_planted <이름> <scripts 폴더> <RED|GREEN>
   local res
   res="$(planted_check "$2" 2>&1)"
   if [ "$3" = GREEN ]; then
-    if [ "$(printf '%s\n' "$res" | grep -c '^PASS ')" = 6 ]; then ok "출처 표지 $1: 검사 여섯 PASS"
+    if [ "$(printf '%s\n' "$res" | grep -c '^PASS ')" = 7 ]; then ok "출처 표지 $1: 검사 일곱 PASS"
     else no "출처 표지 $1: $(printf '%s' "$res" | tr '\n' ' ')"; fi
   else
     if printf '%s\n' "$res" | grep -q '^FAIL '; then ok "출처 표지 변이 $1: RED"
@@ -680,25 +691,17 @@ mutate "$TMP/copy-n1/$IO_NAME" '    text = neutralize_markers(text)
 assert_eq "$?" 0 "변이 n1(지우기 — 원문 본문을 무력화하지 않는다)를 심었다"
 expect_planted "n1(지우기)" "$TMP/copy-n1" RED
 mkcopy "$TMP/copy-n2"
-mutate "$TMP/copy-n2/$IO_NAME" '    head = rest[i:i + 32].casefold()
-' '    head = rest[i:i + 32].casefold()
-    if head.startswith("roadmap-doubts"):
-        return False
-'
-assert_eq "$?" 0 "변이 n2(더하기 — roadmap-doubts 꼴을 빼 준다)를 심었다"
+mutate "$TMP/copy-n2/$IO_NAME" '    return text.replace(MARK_OPEN, MARK_OPEN_SAFE)' \
+  '    return text.replace("<!---", "\0").replace(MARK_OPEN, MARK_OPEN_SAFE).replace("\0", "<!---")'
+assert_eq "$?" 0 "변이 n2(더하기 — <!--- 꼴을 빼 준다)를 심었다"
 expect_planted "n2(더하기)" "$TMP/copy-n2" RED
 mkcopy "$TMP/copy-n3"
-mutate "$TMP/copy-n3/$IO_NAME" 'out.append(MARK_OPEN_SAFE if _marker_like(text[end:]) else MARK_OPEN)' \
-  'out.append(MARK_OPEN if _marker_like(text[end:]) else MARK_OPEN_SAFE)'
-assert_eq "$?" 0 "변이 n3(뒤집기 — 표지 꼴만 남기고 나머지를 바꾼다)를 심었다"
+mutate "$TMP/copy-n3/$IO_NAME" '    return text.replace(MARK_OPEN, MARK_OPEN_SAFE)' '    return text.replace(MARK_OPEN_SAFE, MARK_OPEN)'
+assert_eq "$?" 0 "변이 n3(뒤집기 — 바꾼 글을 되돌린다)를 심었다"
 expect_planted "n3(뒤집기)" "$TMP/copy-n3" RED
 mkcopy "$TMP/copy-n4"
-mutate "$TMP/copy-n4/$IO_NAME" '    while i < len(rest) and (rest[i].isspace() or rest[i] in _MARK_GAP):
-        i += 1
-' '    if rest[:1] == " ":
-        i = 1
-'
-assert_eq "$?" 0 "변이 n4(형태 바꾸기 — 빈칸 한 칸 뒤의 머리 낱말만 본다)를 심었다"
+mutate "$TMP/copy-n4/$IO_NAME" '    return text.replace(MARK_OPEN, MARK_OPEN_SAFE)' '    return text.replace(MARK_OPEN + "-- ", MARK_OPEN_SAFE + "-- ")'
+assert_eq "$?" 0 "변이 n4(형태 바꾸기 — 「<!-- 」 꼴만 바꾼다)를 심었다"
 expect_planted "n4(형태 바꾸기)" "$TMP/copy-n4" RED
 mkcopy "$TMP/copy-n5"
 mutate "$TMP/copy-n5/$IO_NAME" '    return neutralize_markers(value).replace(MARK_CLOSE, MARK_CLOSE_SAFE)' '    return neutralize_markers(value)'

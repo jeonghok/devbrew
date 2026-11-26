@@ -71,6 +71,11 @@ def attach(src, out) -> str:
     return _write_slot(_read_bytes(src), out)
 
 
+def attach_body(body: bytes, out) -> str:
+    """이미 읽어 바꾼 원본 바이트로 칸 사본을 쓴다 — 사본만 바꿔 싣는 소비자용(원본 파일은 그대로)."""
+    return _write_slot(body, out)
+
+
 DIFF_HEAD = b"diff --git "
 
 

@@ -75,6 +75,8 @@ SLOT_NAMES = {1: ("diff", "scope", "evidence", "origin", "roadmap", "intent", "a
               2: ("diff", "scope", "evidence", "origin", "roadmap", "intent", "doubts", "answered")}
 SLOT_SOURCES = {"diff": "review-i1.diff", "scope": SCOPE, "evidence": EVIDENCE, "origin": ORIGIN,
                 "roadmap": ROADMAP, "intent": INTENT, "doubts": DOUBTS, "answered": ANSWERED}
+# 스크립트가 쓴 출처 표지가 든 칸 — prepare · doubts-append 가 본문의 `<!` 를 이미 바꿨다. 나머지 칸은 사본에서 바꾼다.
+SLOTS_WITH_MARKERS = ("origin", "roadmap", "doubts")
 QUESTIONS = "intent-questions.yaml"
 RETURN = "intent-return.md"
 RESULT = "result.md"
@@ -916,7 +918,18 @@ def cmd_slots(args) -> int:
     try:
         for slot in SLOT_NAMES[k]:
             out = _path(rd, SLOT_COPY % (k, slot))
-            qg_nonce.attach(_path(rd, SLOT_SOURCES[slot]), out)
+            src = _path(rd, SLOT_SOURCES[slot])
+            if slot in SLOTS_WITH_MARKERS:
+                qg_nonce.attach(src, out)
+            else:
+                try:
+                    with open(src, "rb") as fh:
+                        body = fh.read()
+                except OSError:
+                    raise qg_nonce.IoFail("읽지 못했다", src)
+                # 리뷰받는 쪽 글의 `<!` 는 사본에서 `&lt;!` 로 — 원본은 그대로다(다른 소비자가 읽는다).
+                body = body.replace(io_.MARK_OPEN.encode("ascii"), io_.MARK_OPEN_SAFE.encode("ascii"))
+                qg_nonce.attach_body(body, out)
             written.append((slot, out))
     except qg_nonce.IoFail as exc:
         for slot in SLOT_NAMES[k]:
@@ -2091,7 +2104,8 @@ def _parser() -> argparse.ArgumentParser:
                        description="세션 폴더의 원본(review-i1.diff · %s · %s · %s · %s · %s · %s(k=2 만) · "
                                    "%s)마다 원본 끝에 `qg-slot-end: <16 hex>` 줄을 붙인 사본 "
                                    "intent-slot-<k>-<칸>.md 를 쓰고 「<칸>\\t<경로>」 줄을 낸다 — 칸마다 · "
-                                   "호출마다 새 값. 원본은 그대로다. 둘째 호출의 사본은 doubts-append 뒤에 "
+                                   "호출마다 새 값. 원본은 그대로다. 사본에서는 리뷰받는 쪽 글의 `<!` 가 "
+                                   "`&lt;!` 다(원문 · 로드맵 · 의심은 prepare 가 이미 바꿨다). 둘째 호출의 사본은 doubts-append 뒤에 "
                                    "만든다. rc 0 · 원본을 읽지 못했거나 쓰지 못함 4(이 호출의 사본을 "
                                    "모두 지운다)."
                                    % (SCOPE, EVIDENCE, ORIGIN, ROADMAP, INTENT, DOUBTS, ANSWERED))

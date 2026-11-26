@@ -682,42 +682,17 @@ def strip_roadmap_doubts(text: str) -> tuple:
 _ORIGIN_HEADS = ("## 6.", "## 2.")
 _DOUBT_HEADS = ("## 5.", "## 3.")
 
-# 출처 표지 — 원문 · 로드맵 · 의심 칸에서 스크립트가 쓰는 표지 줄의 머리 낱말. 본문(리뷰받는 쪽 글)에
-# 같은 꼴이 있으면 `<!--` 를 `&lt;!--` 로 바꿔 싣는다 — 표지는 스크립트가 쓴 것만 남는다.
-MARK_OPEN = "<!--"
-MARK_OPEN_SAFE = "&lt;!--"
+# 출처 표지 — 원문 · 로드맵 · 의심 칸에서 스크립트가 쓰는 표지 줄은 `<!-- … -->` 다. 리뷰받는 쪽 글(본문 · 표지
+# 안의 필드)의 `<!` 는 모두 `&lt;!` 로 바꿔 싣는다 — 표지 꼴을 가려 내지 않는다(어떤 꼴도 표지로 읽히지 않게).
+MARK_OPEN = "<!"
+MARK_OPEN_SAFE = "&lt;!"
 MARK_CLOSE = "-->"
 MARK_CLOSE_SAFE = "--&gt;"
-MARK_KEYS = ("origin-source", "roadmap", "intent-doubts")
-# `<!--` 와 머리 낱말 사이에 있어도 표지로 읽힐 글자 — 빈칸(str.isspace)과 폭 없는 글자.
-_MARK_GAP = "\u200b\u200c\u200d\u2060\ufeff"
-
-
-def _marker_like(rest: str) -> bool:
-    i = 0
-    while i < len(rest) and (rest[i].isspace() or rest[i] in _MARK_GAP):
-        i += 1
-    head = rest[i:i + 32].casefold()
-    for key in MARK_KEYS:
-        if head.startswith(key):
-            return True
-    return False
 
 
 def neutralize_markers(text: str) -> str:
-    """본문의 표지 꼴(`<!--` 뒤 빈칸 · 폭 없는 글자 다음이 표지 머리 낱말 — 글자 크기 무관, 줄 어디서든)의
-    `<!--` 를 `&lt;!--` 로 바꾼다."""
-    out: List[str] = []
-    start = 0
-    while True:
-        at = text.find(MARK_OPEN, start)
-        if at < 0:
-            out.append(text[start:])
-            return "".join(out)
-        out.append(text[start:at])
-        end = at + len(MARK_OPEN)
-        out.append(MARK_OPEN_SAFE if _marker_like(text[end:]) else MARK_OPEN)
-        start = end
+    """리뷰받는 쪽 글의 `<!` 를 모두 `&lt;!` 로 바꾼다 — 표지는 스크립트가 쓴 것만 남는다."""
+    return text.replace(MARK_OPEN, MARK_OPEN_SAFE)
 
 
 def marker_field(value: str) -> str:

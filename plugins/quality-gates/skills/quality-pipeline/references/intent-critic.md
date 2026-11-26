@@ -123,7 +123,7 @@ echo "prepare rc=$?"
 
 ## I3 첫째 호출
 
-**칸 사본.** 부르기 전에 그 호출의 칸 사본을 만든다 — `slots --call <k>` 가 원본(`review-i1.diff` · `intent-scope.md` · `intent-evidence.txt` · `intent-origin.md` · `intent-roadmap.md` · `intent-intent.md` · `intent-doubts.md`(k=2 만) · `intent-answered.md`)마다 끝 줄 `qg-slot-end: <값>` 을 붙인 사본 `intent-slot-<k>-<칸>.md` 를 쓰고 `<칸>\t<경로>` 줄을 낸다. 값은 칸마다 · 호출마다 새것이고 원본은 그대로다. `K` 는 첫째 호출이면 `1`, 둘째 호출 · 한 번에 넣은 호출이면 `2` 다:
+**칸 사본.** 부르기 전에 그 호출의 칸 사본을 만든다 — `slots --call <k>` 가 원본(`review-i1.diff` · `intent-scope.md` · `intent-evidence.txt` · `intent-origin.md` · `intent-roadmap.md` · `intent-intent.md` · `intent-doubts.md`(k=2 만) · `intent-answered.md`)마다 끝 줄 `qg-slot-end: <값>` 을 붙인 사본 `intent-slot-<k>-<칸>.md` 를 쓰고 `<칸>\t<경로>` 줄을 낸다. 값은 칸마다 · 호출마다 새것이고 원본은 그대로다. 사본에서는 리뷰받는 쪽 글의 `<!` 가 모두 `&lt;!` 로 바뀐다(원문 · 로드맵 · 의심 칸은 `prepare` 가 이미 바꿨다) — 스크립트가 쓴 출처 표지만 표지로 남는다. `K` 는 첫째 호출이면 `1`, 둘째 호출 · 한 번에 넣은 호출이면 `2` 다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
