@@ -241,8 +241,68 @@ for f, txt in entries:
     sec = lines[heads[0] + 1:e]
     hits = [ln for ln in sec if SENT.lstrip() in ln]
     if len(hits) != 1: no(name + " 진입 단계 절에 문장이 %d 번 있다(기대 1)" % len(hits)); continue
-    if hits[0].startswith(ANCHOR) and hits[0].endswith(SENT): ok(name + " 문장이 앵커 줄 끝에 있다")
-    else: no(name + " 문장이 든 줄이 앵커로 시작하고 문장으로 끝나지 않는다")
+    if hits[0].startswith(ANCHOR) and (hits[0].endswith(SENT) or (SENT + " 감시줄 아래에 `[devbrew-switch] 더 듣지 않는다 — ") in hits[0]): ok(name + " 문장이 앵커 줄에 있다(뒤 문장은 절 E2 가 문다)")
+    else: no(name + " 문장이 든 줄이 앵커로 시작하지 않거나 문장 뒤가 다른 글이다")
+'
+
+note "E2. entry_skills_retired_question"
+run_section E2 '
+PRE_LINE = "!`python3 \"${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py\" "
+SENT = " 감시줄 아래에 `[devbrew-switch]` 로 시작하는 줄이 있으면 감시줄이 무엇이든 그 줄들을 고치지 않고 사용자에게 보인다."
+HEAD = "`[devbrew-switch] 더 듣지 않는다 — "
+def g1(p):
+    return ("감시줄 아래에 `[devbrew-switch] 더 듣지 않는다 — " + p + " 전체(` 로 시작하는 줄이나 `[devbrew-switch] 끄기 변수 표를 읽지 못했다` 로 시작하는 줄이 있으면 "
+            "그 줄을 보인 뒤 `AskUserQuestion` 으로 계속할지 한 번 묻고, 「계속한다」 를 고를 때만 간다 — 물을 수 없거나 답이 없으면 멈춘다.")
+Q = "끄던 변수가 켜져 있지만 더 듣지 않는다 — 계속하면 이 skill 이 그대로 돈다(codex · 웹 조사로 내용을 보내거나, 남의 코드를 돌리거나, PR 에 글을 올릴 수 있다). 계속할까?"
+OPT1 = "`계속한다`(얻음: 이 skill 을 지금 쓴다 · 내줌: 꺼 두었다고 믿던 일이 돈다)"
+OPT2 = "`멈춘다`(얻음: 아무것도 돌지 않는다 · 내줌: 변수를 풀거나 플러그인 끄기를 쓴 뒤 다시 불러야 한다)"
+G8 = "(추천을 달지 않는다 — 꺼 두었다고 믿던 일을 다시 돌릴지는 사용자가 고른다)"
+entries = []
+for f in sorted(glob.glob(os.path.join(root, "plugins", "*", "skills", "*", "SKILL.md"))):
+    with open(f, "rb") as fh: txt = fh.read().decode("utf-8")
+    if any(ln.startswith(PRE_LINE) for ln in txt.split("\n")): entries.append((f, txt))
+if len(entries) == 10: ok("사전 검사 줄이 있는 진입 skill 이 열이다")
+else: no("사전 검사 줄이 있는 진입 skill 이 %d 개다(기대 10)" % len(entries))
+nine = 0
+for f, txt in entries:
+    name = os.path.relpath(f, root)
+    plug = name.split(os.sep)[1]
+    if "[devbrew-entry] disabled" in txt: no(name + " 에 `[devbrew-entry] disabled` 가 남았다")
+    else: ok(name + " 에 disabled 행이 없다")
+    if "이 표가 보는 kill switch" in txt: no(name + " 에 「이 표가 보는 kill switch」 가 남았다")
+    else: ok(name + " 에 「이 표가 보는 kill switch」 가 없다")
+    if any(ln.startswith("| `[devbrew-entry] ok") for ln in txt.split("\n")): ok(name + " 에 ok 행이 있다(양성 짝)")
+    else: no(name + " 에 ok 행이 없다 — 위 부재 확인이 공허하다")
+    lines = txt.split("\n")
+    heads = [k for k, ln in enumerate(lines) if ln == "## 진입 단계"]
+    if len(heads) != 1: no(name + " 의 `## 진입 단계` 절이 %d 개다" % len(heads)); continue
+    e = heads[0] + 1
+    while e < len(lines) and not lines[e].startswith("## "): e += 1
+    sec = lines[heads[0] + 1:e]
+    if plug == "project-init":
+        if any(HEAD in ln for ln in lines): no(name + " 에 은퇴 변수 줄 앞머리가 있다(이 플러그인은 통째 끄기가 없다)")
+        else: ok(name + " 에 은퇴 변수 줄 앞머리가 없다")
+        continue
+    nine += 1
+    base = [ln for ln in sec if SENT.lstrip() in ln]
+    if len(base) != 1: no(name + " 진입 단계 절에 첫 판 문장이 %d 번 있다(기대 1)" % len(base)); continue
+    ln = base[0]
+    after = ln.split(SENT, 1)[1] if SENT in ln else ""
+    if sum(1 for x in sec if g1(plug) in x) == 1 and ln.count(g1(plug)) == 1 and after.startswith(" " + g1(plug)): ok(name + " G1 이 첫 판 문장 뒤 같은 줄에 한 번 있다")
+    else: no(name + " G1 이 첫 판 문장 뒤 같은 줄에 정확히 한 번 있지 않다")
+    g2 = after.split(g1(plug), 1)[1] if g1(plug) in after else ""
+    if Q in g2 and OPT1 in g2 and OPT2 in g2 and g2.index(OPT1) < g2.index(OPT2): ok(name + " 같은 줄에 질문과 두 선택지가 차례대로 있다")
+    else: no(name + " 같은 줄에 질문 · 선택지 두 개(계속한다 → 멈춘다)가 다 있지 않다")
+    if ln.count(G8) == 1 and ln.endswith(G8) and "(권장)" not in ln: ok(name + " 같은 줄 끝에 추천 없음 구절이 한 번 있다")
+    else: no(name + " 같은 줄 끝에 추천 없음 구절이 정확히 한 번 있지 않다")
+    try: rows = rd(plug)
+    except m.TableError: no(plug + " 표를 못 읽어 G1 의 이름을 견주지 못한다"); continue
+    n = "DEVBREW_" + plug.upper().replace("-", "_") + "_DISABLE"
+    hit = [r for r in rows if r["names"][0] == n]
+    if len(hit) == 1 and hit[0]["what"] == plug + " 전체": ok(plug + " G1 의 이름이 표의 통째 끄기 행 「끄는 것」 과 같다")
+    else: no(plug + " G1 의 이름과 표의 통째 끄기 행 「끄는 것」 이 다르다")
+if nine == 9: ok("G1 을 달아야 하는 진입 skill 이 아홉이다")
+else: no("G1 을 달아야 하는 진입 skill 이 %d 개다(기대 9)" % nine)
 '
 
 finish

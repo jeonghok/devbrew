@@ -170,3 +170,14 @@ plugins/plugin-audit/skills/plugin-audit/SKILL.md	꼬리	하나도 안 고르면
 plugins/spec-distill/skills/epic-conductor/references/qg-review.md	비움	**의도 점검 질문.**	라벨 셋의 글자와 순서는 qg 와 같다.	1	
 plugins/spec-distill/skills/epic-conductor/references/qg-review.md	지시	**고치지 않은 막는 지적.**		0	3
 plugins/spec-distill/skills/epic-conductor/references/qg-review.md	지시	**두 번까지.**		0	3
+
+# 진입 skill 아홉 — 은퇴 변수가 켜져 있으면 계속할지 묻는다(추천 없음)
+plugins/plugin-audit/skills/plugin-audit/SKILL.md	비움	끄던 변수가 켜져 있지만 더 듣지 않는다		1
+plugins/quality-gates/skills/artifact-critique/SKILL.md	비움	끄던 변수가 켜져 있지만 더 듣지 않는다		1
+plugins/quality-gates/skills/quality-pipeline/SKILL.md	비움	끄던 변수가 켜져 있지만 더 듣지 않는다		1
+plugins/spec-distill/skills/context-build/SKILL.md	비움	끄던 변수가 켜져 있지만 더 듣지 않는다		1
+plugins/spec-distill/skills/epic-conductor/SKILL.md	비움	끄던 변수가 켜져 있지만 더 듣지 않는다		1
+plugins/spec-distill/skills/intent-sync/SKILL.md	비움	끄던 변수가 켜져 있지만 더 듣지 않는다		1
+plugins/spec-distill/skills/roadmap-draft/SKILL.md	비움	끄던 변수가 켜져 있지만 더 듣지 않는다		1
+plugins/spec-distill/skills/roadmap-status/SKILL.md	비움	끄던 변수가 켜져 있지만 더 듣지 않는다		1
+plugins/spec-distill/skills/spec-review/SKILL.md	비움	끄던 변수가 켜져 있지만 더 듣지 않는다		1

@@ -39,9 +39,6 @@ ENTRY="$(awk '/^## 진입 단계/{f=1;next} f&&/^## /{exit} f' "$CMD")"
 [ -n "$ENTRY" ] && ok "진입 단계(양성): \`## 진입 단계\` 절을 읽었다" \
   || no "진입 단계(양성): \`## 진입 단계\` 절이 없다 — 아래 단언이 공허하다"
 
-assert_contains "$ENTRY" '[devbrew-entry] disabled' "kill switch: 진입 단계가 disabled 감시줄에서 멈춘다"
-assert_contains "$ENTRY" 'DEVBREW_SPEC_DISTILL_DISABLE=1' "kill switch: 진입 단계가 스위치 이름을 밝힌다"
-
 assert_contains "$ENTRY" 'references/trivia-escape.md' "trivia escape 정본 포인터가 진입 단계에 있다"
 assert_contains "$ENTRY" '`spec-distill:intent-sync`' "trivia 안내의 <command> = 완전명"
 

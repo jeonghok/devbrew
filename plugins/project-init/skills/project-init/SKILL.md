@@ -19,12 +19,9 @@ allowed-tools:
 | 그 자리의 내용 | 동작 |
 |---|---|
 | `[devbrew-entry] ok …` | 아래 의존 확인 펜스로 간다. 셋업 대상 디렉토리는 그 줄의 `root=` 다 — `root_source=cwd` 면 git 이 아직 없는 현재 디렉토리다 |
-| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op). 파일을 쓰지 않는다 |
 | `[devbrew-entry] error …` | `[project-init] 사전 검사 실패 — <reason= 값>. 셋업을 시작하지 않는다.` 를 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[project-init] 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 셋업을 시작하지 않는다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[project-init] 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 셋업을 시작하지 않는다.` 를 내고 멈춘다 |
-
-이 표가 보는 kill switch 는 `DEVBREW_PROJECT_INIT_DISABLE=1` 하나다. 이 스위치는 훅과 이 셋업을 함께 끈다.
 
 의존 확인 — 아래 펜스를 Bash 로 한 번 돌린다.
 

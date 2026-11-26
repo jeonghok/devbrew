@@ -36,19 +36,16 @@ allowed-tools:
 
 ## 진입 단계
 
-이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽고 아래 순서대로 간다. 감시줄 아래에 `[devbrew-switch]` 로 시작하는 줄이 있으면 감시줄이 무엇이든 그 줄들을 고치지 않고 사용자에게 보인다.
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽고 아래 순서대로 간다. 감시줄 아래에 `[devbrew-switch]` 로 시작하는 줄이 있으면 감시줄이 무엇이든 그 줄들을 고치지 않고 사용자에게 보인다. 감시줄 아래에 `[devbrew-switch] 더 듣지 않는다 — spec-distill 전체(` 로 시작하는 줄이나 `[devbrew-switch] 끄기 변수 표를 읽지 못했다` 로 시작하는 줄이 있으면 그 줄을 보인 뒤 `AskUserQuestion` 으로 계속할지 한 번 묻고, 「계속한다」 를 고를 때만 간다 — 물을 수 없거나 답이 없으면 멈춘다. 질문 `끄던 변수가 켜져 있지만 더 듣지 않는다 — 계속하면 이 skill 이 그대로 돈다(codex · 웹 조사로 내용을 보내거나, 남의 코드를 돌리거나, PR 에 글을 올릴 수 있다). 계속할까?` · 선택지 `계속한다`(얻음: 이 skill 을 지금 쓴다 · 내줌: 꺼 두었다고 믿던 일이 돈다) · `멈춘다`(얻음: 아무것도 돌지 않는다 · 내줌: 변수를 풀거나 플러그인 끄기를 쓴 뒤 다시 불러야 한다). (추천을 달지 않는다 — 꺼 두었다고 믿던 일을 다시 돌릴지는 사용자가 고른다)
 
 ### 1. 감시줄 판독
 
 | 그 자리의 내용 | 동작 |
 |---|---|
 | `[devbrew-entry] ok …` | 1.5 로 간다. 그 줄의 `root=` 값을 2 에서 쓴다 |
-| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op). state 를 만들지 않는다 |
 | `[devbrew-entry] error …` | `[spec-distill] context-build 사전 검사 실패 — <reason= 값>. 컨텍스트 쌓기를 시작하지 않는다.` 를 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[spec-distill] context-build 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 컨텍스트 쌓기를 시작하지 않는다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[spec-distill] context-build 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 컨텍스트 쌓기를 시작하지 않는다.` 를 내고 멈춘다 |
-
-이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다.
 
 ### 1.5 의존 확인
 

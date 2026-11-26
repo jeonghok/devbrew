@@ -9,3 +9,5 @@
 ```
 
 ## 항목
+- 2026-11-26 · plugins/spec-distill/tests/test_epic_conductor_skill.sh 꺼짐 행 세 단언(56 · 65 · 66) · 지키던 것: 판독 표 `disabled` 행이 spec-distill 전체가 꺼졌다고 알리고 손 절차는 지휘자 없이 따르게 한다 · 판정: 지우기(동작이 사라져 지킬 문장이 없음) · 지금 지키는 것: 없음 — 받아들임(통째 끄기 은퇴로 그 행이 없다. 없음은 `shared/tests/test_switch_tables.sh` 절 E2 가 문다) · PR #미정
+- 2026-11-26 · plugins/spec-distill/tests/test_request_framing_entry.sh 진입 단계 kill switch 두 단언 · 지키던 것: 진입 단계가 `disabled` 감시줄에서 멈추고 `DEVBREW_SPEC_DISTILL_DISABLE=1` 이름을 밝힌다 · 판정: 지우기(동작이 사라져 지킬 문장이 없음) · 지금 지키는 것: 없음 — 받아들임(없음은 `shared/tests/test_switch_tables.sh` 절 E2 가 문다) · PR #미정

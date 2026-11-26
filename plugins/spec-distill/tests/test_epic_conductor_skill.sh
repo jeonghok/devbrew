@@ -53,7 +53,6 @@ assert_eq "$order" "yes" "규모 공시: 규모 줄을 만든 뒤 보이고 5 �
 assert_contains "$BODY" 'Read ${CLAUDE_PLUGIN_ROOT}/references/conducting.md' "conducting.md 를 읽는다"
 assert_contains "$BODY" 'Read ${CLAUDE_PLUGIN_ROOT}/references/conductor-dispatch.md' "conductor-dispatch.md 를 읽는다"
 assert_contains "$BODY" '손으로 따르는 절차' "꺼짐: 손 절차를 가리킨다"
-assert_file_grep "$SK" '^\| `\[devbrew-entry\] disabled …` \| .*손으로 따르는 절차.*멈춘다 \|$' "감시줄 표의 꺼짐 행이 손 절차를 가리키고 멈춘다"
 assert_contains "$BODY" 'subagent_type: "spec-distill:integration-reviewer"' "통합 리뷰어 dispatch 자리"
 assert_contains "$(sec '### 7. 옮김 대조')" 'subagent_type: "spec-distill:relay-checker"' "옮김 대조 dispatch 자리(Ruling R37)"
 assert_eq "$(sec '### 7. 옮김 대조' | grep -oF -- '--name roadmap' | wc -l | tr -d ' ')" "1" "옮김 대조: 로드맵 끝에 로드맵 담당자의 relay 폴더(--name roadmap)로 한 번(R4 행 23)"
@@ -62,8 +61,6 @@ for s in '### 6. 통합 리뷰어' '### 7. 옮김 대조'; do
   assert_contains "$(sec "$s")" '3(설정을 읽지 못함)이면 그 사유 줄을 보이고' "$s: 해결자 rc 3 이면 사유 줄을 보인다"
 done
 assert_not_contains "$BODY$(cat "$ROOT/plugins/spec-distill/references/conducting.md")" '로드맵 frontmatter `review_model`' "리뷰 모델을 로드맵 머리말에서만 읽는 옛 문구가 없다"
-assert_contains "$(grep -F '[devbrew-entry] disabled' "$SK")" 'spec-distill 전체(리뷰 · 상태 계산 포함)가 꺼져' "꺼짐 행: 플러그인 전체가 꺼진다고 알린다(Ruling R35)"
-assert_contains "$(grep -F '[devbrew-entry] disabled' "$SK")" '지휘자를 부르지 않은 채' "꺼짐 행: 손 절차는 지휘자를 부르지 않고 따른다"
 RC="$ROOT/plugins/spec-distill/agents/relay-checker.md"
 assert_eq "$(fm "$RC" | grep -E '^tools:' )" "tools: Read, Grep, Glob" "relay-checker tools 는 Read, Grep, Glob 뿐"
 assert_eq "$(fm "$RC" | grep -cE '^(disallowedTools|allowed-tools|allowedTools):' || true)" "0" "relay-checker 에 거부 목록 · 오기 필드가 없다"
