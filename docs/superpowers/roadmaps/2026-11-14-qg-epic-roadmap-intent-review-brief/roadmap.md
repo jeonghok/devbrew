@@ -77,12 +77,12 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 의존: R4, R6
 - 브랜치: feature/qg-planted-text-suite-lock
 - 묶음: R7.md
-- 경로 예약: plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/quality-pipeline/references/, plugins/quality-gates/references/e2e.md, plugins/quality-gates/scripts/build_codex_prompt.py, plugins/quality-gates/scripts/build_artifact_codex_prompt.py, plugins/quality-gates/skills/artifact-critique/, plugins/quality-gates/scripts/run-test-selection.sh, plugins/quality-gates/scripts/synthesize_findings.py, plugins/quality-gates/scripts/intent_origin.py, plugins/quality-gates/agents/, plugins/quality-gates/tests/, plugins/quality-gates/README.md, plugins/quality-gates/CHANGELOG.md, plugins/quality-gates/.claude-plugin/plugin.json, shared/test-selection/, shared/tests/, tools/adjudication/check_slots.py, plugins/spec-distill/scripts/suite_lock.py, plugins/spec-distill/CHANGELOG.md, plugins/spec-distill/.claude-plugin/plugin.json, plugins/quality-gates/scripts/setup-qg.sh, plugins/quality-gates/scripts/intent_critic.py, plugins/quality-gates/scripts/synthesize_artifact_findings.py, plugins/quality-gates/scripts/publish-comment.sh, plugins/quality-gates/scripts/with-suite-lock.sh, plugins/quality-gates/scripts/suite_lock.py, plugins/quality-gates/scripts/qg_nonce.py, plugins/quality-gates/dependencies.md, shared/suite-lock/, plugins/spec-distill/skills/epic-conductor/references/qg-review.md, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/tests/, plugins/spec-distill/README.md, plugins/spec-distill/dependencies.md
+- 경로 예약: plugins/quality-gates/skills/quality-pipeline/SKILL.md, plugins/quality-gates/skills/quality-pipeline/references/, plugins/quality-gates/references/e2e.md, plugins/quality-gates/scripts/build_codex_prompt.py, plugins/quality-gates/scripts/build_artifact_codex_prompt.py, plugins/quality-gates/skills/artifact-critique/, plugins/quality-gates/scripts/run-test-selection.sh, plugins/quality-gates/scripts/synthesize_findings.py, plugins/quality-gates/scripts/intent_origin.py, plugins/quality-gates/agents/, plugins/quality-gates/tests/, plugins/quality-gates/README.md, plugins/quality-gates/CHANGELOG.md, plugins/quality-gates/.claude-plugin/plugin.json, shared/test-selection/, shared/tests/, tools/adjudication/check_slots.py, plugins/spec-distill/scripts/suite_lock.py, plugins/spec-distill/CHANGELOG.md, plugins/spec-distill/.claude-plugin/plugin.json, plugins/quality-gates/scripts/setup-qg.sh, plugins/quality-gates/scripts/intent_critic.py, plugins/quality-gates/scripts/synthesize_artifact_findings.py, plugins/quality-gates/scripts/publish-comment.sh, plugins/quality-gates/scripts/with-suite-lock.sh, plugins/quality-gates/scripts/suite_lock.py, plugins/quality-gates/scripts/qg_nonce.py, plugins/quality-gates/dependencies.md, shared/suite-lock/, plugins/spec-distill/skills/epic-conductor/references/qg-review.md, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/tests/, plugins/spec-distill/README.md, plugins/spec-distill/dependencies.md, plugins/spec-distill/references/roadmap-ontology.md
 
 ### R8 — qg 답 기록 · 다른 팀 읽기 뒤처리와 리뷰가 낸 막는 지적
 - 의도: 앞 에픽들이 미룬 qg 안쪽 가장자리 가운데 intent-critic 의 답 기록과 다른 팀 읽기에 닿는 것과 R1 · R2 리뷰가 낸 막는 지적을 닫는다
 - 범위:
-  - 한다: 정체가 틀린 머리 아래 직접 쓴 답 · 답 커밋 뒤 질문 기록 실패의 표시 · 올리지 않은 로컬 브랜치의 인용 · 시간 한도와 브랜치 목록 실패의 사유 문구 · R1 과 R2 리뷰가 낸 막는 지적(답 파일 라벨 칸 무력화 · 답 파일 읽기 상한 · 직접 쓴 답의 라벨 읽기 · 표지 없는 옛 원문 공시 · 머리를 못 읽은 문서 세기 · 다른 팀 문서 거부 사유 공시) · 테스트 품질 리뷰가 낸 테스트 틈 · 돌려주는 꼴에서 이미 「잘못 골랐다」 로 걸러진 질문만 있던 실행 가르기 · 넘겨받는 답 파일 경로의 빈칸 · 범위로 부른 리뷰의 의도 출처에서 리뷰 기록 파일 빼기 · 넘겨받은 답 열쇠의 제어 글자 · 스크립트가 내는 낱말 다듬기
+  - 한다: 정체가 틀린 머리 아래 직접 쓴 답 · 답 커밋 뒤 질문 기록 실패의 표시 · 올리지 않은 로컬 브랜치의 인용 · 시간 한도와 브랜치 목록 실패의 사유 문구 · R1 과 R2 리뷰가 낸 막는 지적(답 파일 라벨 칸 무력화 · 답 파일 읽기 상한 · 직접 쓴 답의 라벨 읽기 · 표지 없는 옛 원문 공시 · 머리를 못 읽은 문서 세기 · 다른 팀 문서 거부 사유 공시) · 테스트 품질 리뷰가 낸 테스트 틈 · R6 머지 뒤 리뷰(PR #331)의 제안 열다섯(번호 3–14 · 18–20 — 목록은 R8 설계문서 §6) · 돌려주는 꼴에서 이미 「잘못 골랐다」 로 걸러진 질문만 있던 실행 가르기 · 넘겨받는 답 파일 경로의 빈칸 · 범위로 부른 리뷰의 의도 출처에서 리뷰 기록 파일 빼기 · 넘겨받은 답 열쇠의 제어 글자 · 스크립트가 내는 낱말 다듬기
   - 안 한다: 리뷰 글의 꼴과 답 이어지기(R6) · 심은 글에 속지 않기와 공유 스위트 잠금(R7) · 지휘 절차(R9) · 옆 로드맵의 과제 폴더 구조에 맞추기(답 자리 · INTENT.md 읽기 — 그 구조를 쓰는 로드맵이 생긴 뒤) · 쓴소리 리뷰어 본체
 - 의존: R6
 - 브랜치: feature/qg-answer-record-edges
@@ -97,7 +97,7 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 의존: R6
 - 브랜치: feature/conductor-qg-review-edges
 - 묶음: R9.md
-- 경로 예약: plugins/spec-distill/skills/epic-conductor/references/qg-review.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/scripts/qg_answered.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/tests/, plugins/spec-distill/README.md, plugins/spec-distill/CHANGELOG.md, plugins/spec-distill/.claude-plugin/plugin.json, plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md, plugins/spec-distill/scripts/qg_review_state.py, plugins/spec-distill/references/team-files.md, plugins/spec-distill/dependencies.md
+- 경로 예약: plugins/spec-distill/skills/epic-conductor/references/qg-review.md, plugins/spec-distill/references/conducting.md, plugins/spec-distill/scripts/qg_answered.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/tests/, plugins/spec-distill/README.md, plugins/spec-distill/CHANGELOG.md, plugins/spec-distill/.claude-plugin/plugin.json, plugins/quality-gates/skills/quality-pipeline/references/state-file-format.md, plugins/spec-distill/scripts/qg_review_state.py, plugins/spec-distill/references/team-files.md, plugins/spec-distill/dependencies.md, plugins/quality-gates/CHANGELOG.md, plugins/quality-gates/.claude-plugin/plugin.json
 
 ## 지휘 절차
 
@@ -205,6 +205,11 @@ source_brief: docs/superpowers/interview/2026-11-14-qg-epic-roadmap-intent-revie
 - 바뀜: 바뀐 에픽 R7 · R8 「이대로 고친다 (권장)」
 - 원문:
   - 「이대로 고친다 (권장)」
+
+### 2026-11-26 · 승인한 R7 · R8 · R9 설계에 범위와 경로 예약을 맞춘다 — R8 범위에 R6 머지 뒤 리뷰(PR #331)의 제안 열다섯(R8 설계 G6 · §6), R7 예약에 roadmap-ontology.md(R7 설계 D48), R9 예약에 quality-gates 의 CHANGELOG.md · plugin.json(R9 설계 D2.3 · D48). 로드맵 끝의 확인 end-checks.md 의 5 에서 게시 표지를 빼고 1 에 R7 의 게시 앞 확인을 얹는다
+- 바뀜: 바뀐 에픽 R7 · R8 · R9 「낸다 (권장)」
+- 원문:
+  - 「낸다 (권장)」
 
 ## 위험 번호표
 
