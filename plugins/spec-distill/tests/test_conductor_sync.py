@@ -364,6 +364,65 @@ class PrCache(SyncRepo):
                           + str(PLUGIN / "references" / "conducting-step-3.md")], out)
 
 
+class PrCacheFacts(SyncRepo):
+    """머지 앞 리뷰 고침 2 — 다시 셀지는 단계 계산이 읽는 PR 캐시 칸(상태 · headRefOid · 교차 레포 · baseRefName ·
+    mergeCommit)으로 판정한다. 상태 칸이 그대로여도 다른 칸이 바뀐 갱신은 끝 묶음을 고친 캐시로 다시 센다."""
+
+    SPEC, PLAN = "docs/superpowers/specs/e1-design.md", "docs/superpowers/plans/e1-plan.md"
+
+    def stage_e1_impl_done(self):
+        """feature/e1 — 설계문서 · 계획 · 구현 대조 절이 있어 단계가 「구현 끝」. 끝 커밋을 낸다."""
+        if self.git(self.w, "branch", "--list", "feature/e1").strip():   # 앞 케이스가 세운 브랜치를 쓴다
+            return self.git(self.w, "rev-parse", "feature/e1").strip()
+        self.git(self.w, "switch", "-q", "-c", "feature/e1")
+        table = "## 번호 대조\n\n| 번호 | 반영/기각 | 자리 |\n|---|---|---|\n| C1 | 반영 | §1 |\n"
+        self.put({self.SPEC: "---\nsource_intent: %s\n---\n\n# E1\n\n%s\n## 구현 대조 — %s\n\n- 됨\n"
+                  % (RD + "rm/E1.md", table, self.PLAN),
+                  self.PLAN: "# 계획\n\n**Spec:** %s\n" % self.SPEC, "src/e1.txt": "e1\n"})
+        self.git(self.w, "add", "-A")
+        self.git(self.w, "commit", "-qm", "e1")
+        self.git(self.w, "push", "-q", "origin", "feature/e1")
+        tip = self.git(self.w, "rev-parse", "HEAD").strip()
+        self.git(self.w, "switch", "-q", "trunk")
+        return tip
+
+    def gh_e1(self, number, state, tip, base, merge=None):
+        p = self.t / "gh-e1.json"
+        p.write_text(json.dumps([{"number": number, "state": state, "headRefName": "feature/e1", "headRefOid": tip,
+                                  "isCrossRepository": False, "baseRefName": base,
+                                  "mergeCommit": {"oid": merge} if merge else None}]), encoding="utf-8")
+        self.addCleanup(p.unlink, missing_ok=True)
+        return dict(self.env, FAKE_GH_E1=str(p))
+
+    def e1_line(self, out):
+        return [l for l in out.splitlines() if l.startswith("- E1 ")]
+
+    def test_base_only_change_recounts_the_tail(self):   # 지적 1 — 같은 열린 PR 의 바탕만 바뀌어도 끝 묶음은 고친 캐시로 센다
+        tip = self.stage_e1_impl_done()
+        rc, out, err = self.sync(env=self.gh_e1(5, "OPEN", tip, "feature/other"))
+        self.assertEqual(rc, 0, out + err)
+        self.assertTrue(self.e1_line(out)[0].startswith("- E1 가 — 구현 끝 → 걸음 4 "), out)   # 바탕이 기본 브랜치가 아니면 PR 로 세지 않는다
+        rc, out, err = self.sync(env=self.gh_e1(5, "OPEN", tip, "trunk"))   # 바탕만 바뀜 — 상태 칸은 열림 그대로
+        self.assertEqual(rc, 0, out + err)
+        self.assertIn("\nPR 캐시 — 달라진 것 없음\n", out)   # 보이는 줄은 그대로
+        self.assertTrue(self.e1_line(out)[0].startswith("- E1 가 — PR → 걸음 5 "), out)
+
+    def test_merge_commit_fill_recounts_the_tail(self):   # 지적 2 — 머지됨 줄의 mergeCommit 이 채워진 실행의 끝 묶음은 머지로 센다
+        tip = self.stage_e1_impl_done()
+        self.put({"src/e1.txt": "e1\n"})
+        self.git(self.w, "add", "-A")
+        self.git(self.w, "commit", "-qm", "가 (#6)")
+        self.git(self.w, "push", "-q", "origin", "trunk")
+        squash = self.git(self.w, "rev-parse", "HEAD").strip()
+        rc, out, err = self.sync(env=self.gh_e1(6, "MERGED", tip, "trunk"))   # mergeCommit 을 아직 모르는 캐시
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(len(self.e1_line(out)), 1, out)   # 머지됨으로 세지 않았다
+        rc, out, err = self.sync(env=self.gh_e1(6, "MERGED", tip, "trunk", merge=squash))
+        self.assertEqual(rc, 0, out + err)
+        self.assertIn("\nPR 캐시 — 달라진 것 없음\n", out)
+        self.assertEqual(self.e1_line(out), [], out)   # 끝 묶음은 고친 캐시로 — E1 은 끝났다
+
+
 class StatusView(SyncRepo):
     def test_status_line_outside_benign_is_shown(self):   # Review Focus 2
         self.sync()
