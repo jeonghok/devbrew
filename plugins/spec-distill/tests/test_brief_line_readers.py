@@ -140,6 +140,12 @@ class Invariant(unittest.TestCase):
         self.assertEqual(found["RC1"], S5_LINES[3])
         self.assertEqual(found["ST1"], S5_LINES[0])
 
+    def test_later_old_form_line_wins(self):
+        later = ["- 위험 — 사실 | 뒤에 또 — RC1 (c/d.py) [RC1 → OQ2]", "- 기각 — 또 — verdict: kept — ST1 — 부착 1/1"]
+        found = lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(S5_LINES + later)), AUDIT)
+        self.assertEqual(found["RC1"], later[0])
+        self.assertEqual(found["ST1"], later[1])
+
     def test_paren_form_beats_a_later_link_line(self):
         s5 = S5_LINES + ["- 기각 — 뒤에 또 나온다 [RC1 → OQ2]"]
         found = lines_of(BRIEF.replace("\n".join(S5_LINES), "\n".join(s5)), AUDIT)
