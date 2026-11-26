@@ -16,6 +16,8 @@
 #                                   익명 목록에.
 #   two_externals_not_mixing      — 같은 실행의 외부 리뷰어 둘(ext-code-reviewer 맞음 · ext-pr-test-analyzer 값 없음)의
 #                                   대조가 서로 섞이지 않는다.
+#   check_reviewer_no_verdict_line — 세션 폴더를 읽지 못하면 리뷰어 대조가 판정 줄 없이 rc 4 로 끝나고, SKILL 은
+#                                   그 리뷰어를 응답 없음(지금의 죽은 리뷰어 길)으로 센다고 적는다.
 #   no_session_copies_of_responses — 본문에서 `resp-` 는 `$RV/` 뒤에만 있다 · 세션 폴더에 응답 사본이 생기지 않는다.
 #
 # 지적 목록(findings.yaml)과 각도 파일(angles.txt)은 모델 몫이라 시험이 쓴다 — 그 입력으로 낸 단언은 「옮긴 입력으로」
@@ -177,6 +179,20 @@ resp ext-pr-test-analyzer 1 1 "$(values ext-code-reviewer 1 1)
 assert_eq "$(checkrev ext-code-reviewer | tail -1)" "ext-code-reviewer: ok" "외부 리뷰어 1 은 자기 칸 값으로 ok"
 assert_eq "$(checkrev ext-pr-test-analyzer | tail -1)" "ext-pr-test-analyzer: fail: 끝 값 없음" "외부 리뷰어 2 는 다른 리뷰어의 값을 적어도 실패 — 섞이지 않는다"
 assert_eq "$(ls "$RDIR" | grep -c 'review-i1-slot-ext-')" "4" "외부 리뷰어마다 칸 사본 둘(의도 · diff)"
+
+note "── check_reviewer_no_verdict_line"
+fresh unread
+slot security 1 >/dev/null
+resp security 1 1 "$(values security 1 1)
+[]" >/dev/null
+chmod 000 "$RDIR"
+out="$(checkrev security)"; rc=$?
+chmod 700 "$RDIR"
+assert_eq "$rc" "4" "세션 폴더를 읽지 못하면 리뷰어 대조가 rc 4"
+assert_contains "$out" "[qg_nonce] 읽지 못했다" "그때 stderr 에 읽지 못했다 줄"
+assert_not_contains "$out" "security: " "그때 리뷰어 판정 줄이 없다"
+pin_line '- 마지막 줄이 `<리뷰어 이름>: …` 이 아니고 펜스가 0 이 아닌 값으로 끝나면(rc 4 `[qg_nonce] 읽지 못했다 — <경로>` · rc 2 「리뷰어 이름이 꼴 밖이다」) stderr 줄을 그대로 보이고 그 리뷰어를 `fail: 응답 없음` 과 같이 센다 — 지금의 죽은 리뷰어 길이다(끝 줄에 괄호 없음). 대조를 다시 돌리지 않는다.' \
+  "SKILL — 판정 줄 없이 0 이 아닌 대조는 그 리뷰어를 응답 없음으로 센다"
 
 note "── no_session_copies_of_responses"
 assert_not_grep "$(cat "$SKILL")" '\$RD/resp-' "본문에 세션 폴더의 응답 사본(\$RD/resp-)이 없다"
