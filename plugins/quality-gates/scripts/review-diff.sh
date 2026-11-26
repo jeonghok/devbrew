@@ -226,11 +226,10 @@ if [ "${#GLOBS[@]}" -gt 0 ]; then PS=("${GLOBS[@]}"); else PS=(.); fi
 #             SKILL.md 의 $RD/ 쓰기(range-scope.txt · review-tree.txt), 이 스크립트의 review-i<N>.*,
 #             임시 이름(setup-qg.sh result.md.tmp.<pid> · e2e-state.sh <지문>.tmp · resolve-range.sh
 #             .resolve-range.XXXXXX · 이 스크립트가 끊겨 남긴 .review-diff.XXXXXX/ 안의 임시 이름)
-#   하위 폴더 qg-worktree.sh 의 <리포 최상위>/.claude/worktrees/qg-(base|head)-<sid 앞 8자>(옛 자리
-#             .claude/quality-gates/worktrees/(base|head)-<sid 앞 8자> 는 다른 실행이 남긴 트리로만 알린다) —
+#   하위 폴더 qg-worktree.sh 의 <리포 최상위>/.claude/worktrees/qg-(base|head)-<sid 앞 8자> —
 #             git worktree 라 ls-files 가 폴더 한 줄(끝 /)로만 낸다. 8자가 이 실행의 세션 폴더(--dir)
 #             이름의 앞 8자(SID8 — 영숫자 · _ · - 여덟 자가 아니면 건너뛰기 없음)와 같고 `git worktree list`
-#             에 같은 물리 경로로 등록된 것만 건너뛴다. 다른 세션 접미의 등록된 트리는 리뷰하지 않고 이전 qg
+#             에 같은 물리 경로로 등록된(브랜치를 쥐지 않은 detached) 것만 건너뛴다. 다른 세션 접미의 등록된 트리는 리뷰하지 않고 이전 qg
 #             실행이 남긴 트리로 알린다(say_stale_wt · degraded: yes). 등록되지 않은 같은 이름 폴더(안에 든
 #             다른 레포)는 중첩 레포로 크게 알린다.
 #   테스트    test_review_diff.sh 가 state-file-format.md 의 목록 전부를 이 문법이 받는지 잰다.
@@ -248,7 +247,7 @@ QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/link\.(tmp|patch|out)'
 QG_NAMES="$QG_NAMES"'|\.review-diff\.[A-Za-z0-9]{6}/settings(-local)?-(base|head)'
 QG_NAMES_RE="^($QG_NAMES)\$"
 # qg 일회용 트리 이름 꼴 전부(qg-worktree.sh 는 sid 앞 1~8자를 쓴다)와 이 세션의 것.
-QG_WT_ANY_RE='^\.claude/(worktrees/qg-|quality-gates/worktrees/)(base|head)-[A-Za-z0-9_-]{1,8}/$'
+QG_WT_ANY_RE='^\.claude/worktrees/qg-(base|head)-[A-Za-z0-9_-]{1,8}/$'
 QG_WT_RE=""
 SID8="${DIR##*/}"; SID8="${SID8:0:8}"
 case "$SID8" in
@@ -261,16 +260,18 @@ esac
 DIR_REL=""
 case "$DIR" in "$top"/?*) DIR_REL="${DIR#"$top"/}" ;; esac
 WT_REG=() wt_loaded=0
-is_registered_wt() {   # <리포 기준 폴더 경로/> — 이 리포에 등록된 worktree 와 물리 경로가 같은가
-  local want line p x
+is_registered_wt() {   # <리포 기준 폴더 경로/> — 이 리포에 등록된 detached worktree(브랜치를 쥐지 않은)와 물리 경로가 같은가
+  local want line p="" x
   want="$(cd "$top/${1%/}" 2>/dev/null && pwd -P)" || return 1
   if [ "$wt_loaded" -eq 0 ]; then
     wt_loaded=1
     while IFS= read -r line; do
       case "$line" in
-        "worktree "*) p="$(cd "${line#worktree }" 2>/dev/null && pwd -P)" && WT_REG+=("$p") ;;
+        "worktree "*) p="$(cd "${line#worktree }" 2>/dev/null && pwd -P)" || p="" ;;
+        "branch "*) p="" ;;   # 브랜치를 쥔 worktree 는 사용자 것이다 — 이 세션 사본도 이전 실행의 트리도 아니다
+        "") [ -n "$p" ] && WT_REG+=("$p"); p="" ;;
       esac
-    done < <(git worktree list --porcelain 2>/dev/null)
+    done < <({ git worktree list --porcelain 2>/dev/null; echo; })
   fi
   for x in ${WT_REG[@]+"${WT_REG[@]}"}; do [ "$x" = "$want" ] && return 0; done
   return 1

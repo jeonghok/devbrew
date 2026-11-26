@@ -4,7 +4,7 @@
 # Subcommands:
 #   memo-init <project-dir>      -> 리포 밖 실행 안 메모 디렉토리의 절대 경로 (표지 .qg-memo). 리포 안이면 exit 2
 #   memo-drop <memo-dir>         -> 표지가 있는 메모만 지운다. 없는 경로는 exit 0, 표지 없으면 exit 2
-#   remove <abs-path>            -> 자기 사본(<top>/.claude/worktrees/qg-(base|head)-<sid8> · 옛 자리 포함)만
+#   remove <abs-path>            -> 자기 사본(<top>/.claude/worktrees/qg-(base|head)-<sid8>)만
 #                                   best-effort 로 지운다. 브랜치를 쥔 worktree · 링크 대상은 건드리지 않는다
 #   own-paths <session-id>       -> 이 세션의 등록된 사본의 레포 기준 상대 경로 한 줄씩 (없으면 빈 출력)
 #   create-baseline <merge-base-sha> <session-id>
@@ -136,9 +136,6 @@ make_detached_worktree() {   # <sha> <session-id> <prefix> → 워크트리 절�
     || die "일회용 트리 자리가 기대한 곳이 아니다(링크?) — 만들지 않는다: $parent"
   wt="$parent/qg-${prefix}-${sid_short}"
 
-  # 옛 자리(`.claude/quality-gates/worktrees/`)의 같은 세션 이름만 치운다 — 다른 세션의 옛 사본은 건드리지 않는다.
-  clear_stale_copy "$main_root/.claude/quality-gates/worktrees/${prefix}-${sid_short}" \
-    "$main_root/.claude/quality-gates/worktrees"
   # 새 자리의 같은 이름은 일회용이다. 앞 실행이 남긴 것은 지우고 다시 만든다 —
   # 남겨 두면 그 세션은 다음 차등에서 트리를 못 만든다(R23).
   clear_stale_copy "$wt" "$parent"
@@ -214,8 +211,8 @@ case "${1:-}" in
     # 같은 의미의 다른 사본: plugins/plugin-audit/scripts/audit-sandbox.sh 의 `remove` — 의미가 같다(가드 바꾸면 둘 다).
     [[ $# -eq 2 ]] || die "usage: remove <abs-path>"
     target="$2"
-    # 받는 것: <repo>/.claude/worktrees/qg-(base|head)-<1~8자> 와 옛 <repo>/.claude/quality-gates/worktrees/(base|head)-<1~8자> 뿐.
-    # 앞의 폴더는 사용자 worktree 와 함께 쓴다 — 이름이 자기 꼴이 아니면 거부한다.
+    # 받는 것: <repo>/.claude/worktrees/qg-(base|head)-<1~8자> 뿐.
+    # 그 폴더는 사용자 worktree 와 함께 쓴다 — 이름이 자기 꼴이 아니면 거부한다.
     repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
     # Canonicalize repo_root to resolve symlinks (macOS /var → /private/var)
     repo_root=$(cd "$repo_root" && pwd -P) || die "cd failed: $repo_root"
@@ -235,8 +232,6 @@ case "${1:-}" in
     case "$t_parent" in
       "$repo_root/.claude/worktrees")
         [[ "$t_name" =~ ^qg-(base|head)-[A-Za-z0-9_-]{1,8}$ ]] && scope_ok=1 ;;
-      "$repo_root/.claude/quality-gates/worktrees")
-        [[ "$t_name" =~ ^(base|head)-[A-Za-z0-9_-]{1,8}$ ]] && scope_ok=1 ;;
     esac
     [[ "$scope_ok" -eq 1 ]] || die "refuse to remove outside namespace: $target"
     if [[ -L "$target_real" || -e "$target_real" ]]; then

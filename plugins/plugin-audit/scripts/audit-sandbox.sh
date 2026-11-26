@@ -12,8 +12,7 @@
 #                                   guard_flags / forced_downgrade (pure git).
 #                                   Verifies the snapshot digest before trusting it.
 #   remove <abs-path>            -> best-effort removal of own copies only:
-#                                   <repo>/.claude/worktrees/audit-rt-<1-8 chars> and the old
-#                                   <repo>/.claude/plugin-audit/worktrees/rt-<1-8 chars>.
+#                                   <repo>/.claude/worktrees/audit-rt-<1-8 chars>.
 #                                   A link is removed as a link; a worktree holding a branch is kept.
 #
 # Kill switch: DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1 — `create-sandbox` exits 3
@@ -134,10 +133,7 @@ case "${1:-}" in
     sandbox="$parent/audit-rt-${sid_short}"
 
     # Idempotent: 앞 실행이 남긴 같은 이름의 사본은 일회용이라 치우고 다시 만든다 — 새 기준선이
-    # 앞 실행의 상태를 물려받지 않게. 옛 자리(`.claude/plugin-audit/worktrees/rt-<sid8>`)는 같은 세션 이름만
-    # 치운다 — 다른 세션의 옛 사본은 건드리지 않는다.
-    drop_own_copy "$main_root/.claude/plugin-audit/worktrees/rt-${sid_short}" \
-      "$main_root/.claude/plugin-audit/worktrees"
+    # 앞 실행의 상태를 물려받지 않게.
     drop_own_copy "$sandbox" "$parent"
     git worktree add --detach "$sandbox" HEAD >/dev/null 2>&1 \
       || die "git worktree add failed (sandbox: $sandbox)"
@@ -154,9 +150,9 @@ case "${1:-}" in
     while IFS= read -r -d '' rel; do
       [[ -z "$rel" ]] && continue
       case "$rel" in
-        # 어떤 세션의 사본이든 사본 안으로 복사하지 않는다 — 새 자리의 audit-rt-* 와 옛 자리 전부.
+        # 어떤 세션의 사본이든 사본 안으로 복사하지 않는다 — audit-rt-* 전부.
         # 같은 폴더의 다른 worktree(.claude/worktrees/feat-x 등)는 지금처럼 복사된다.
-        .claude/worktrees/audit-rt-*|.claude/plugin-audit/worktrees/*) continue ;;
+        .claude/worktrees/audit-rt-*) continue ;;
       esac
       src="$main_root/$rel"
       if [[ -e "$src" || -L "$src" ]]; then
@@ -538,8 +534,8 @@ case "${1:-}" in
     # 같은 의미의 다른 사본: plugins/quality-gates/scripts/qg-worktree.sh 의 `remove` — 의미가 같다(가드 바꾸면 둘 다).
     [[ $# -eq 2 ]] || die "usage: remove <abs-path>"
     target="$2"
-    # 받는 것: <repo>/.claude/worktrees/audit-rt-<1~8자> 와 옛 <repo>/.claude/plugin-audit/worktrees/rt-<1~8자> 뿐.
-    # 앞의 폴더는 사용자 worktree 와 함께 쓴다 — 이름이 자기 꼴이 아니면 거부한다.
+    # 받는 것: <repo>/.claude/worktrees/audit-rt-<1~8자> 뿐.
+    # 그 폴더는 사용자 worktree 와 함께 쓴다 — 이름이 자기 꼴이 아니면 거부한다.
     top=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
     top=$(cd "$top" && pwd -P) || die "cd failed: $top"
     [[ -n "$top" ]] || die "empty repo root"
@@ -555,8 +551,6 @@ case "${1:-}" in
     case "$tparent" in
       "$top/.claude/worktrees")
         [[ "$leaf" =~ ^audit-rt-[A-Za-z0-9_-]{1,8}$ ]] && in_scope=1 ;;
-      "$top/.claude/plugin-audit/worktrees")
-        [[ "$leaf" =~ ^rt-[A-Za-z0-9_-]{1,8}$ ]] && in_scope=1 ;;
     esac
     [[ "$in_scope" -eq 1 ]] || die "refuse to remove outside namespace: $target"
     victim="$tparent/$leaf"

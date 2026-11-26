@@ -157,7 +157,7 @@ refusal_check() {   # refusal_check <라벨> <작업 디렉토리> <sid> [setup 
   assert_eq "$(printf '%s\n' "$e" | grep -c .)" "1" "E1: $label — stderr 가 정확히 한 줄이다"
   assert_eq "$after" "$before" "E1: $label — 아무것도 지우거나 쓰지 않았다"
 }
-for reserved in worktrees baseline-cache; do
+for reserved in baseline-cache; do
   WR="$TMP/e1res-$reserved"
   mkdir -p "$WR/.claude/quality-gates/$reserved/qg-baseline-abc"
   : > "$WR/.claude/quality-gates/$reserved/qg-baseline-abc/file"
@@ -171,6 +171,11 @@ for reserved in worktrees baseline-cache; do
   : > "$WR2/.claude/quality-gates/$reserved/pipeline.md"
   refusal_check "예약 이름 $reserved (마커가 이미 있어도)" "$WR2" "$reserved"
 done
+# 짝 — `worktrees` 는 예약이 아니라 보통 세션 id 로 받는다(`baseline-cache` 는 위에서 거부한다).
+WW="$TMP/e1wtsid"; mkdir -p "$WW"
+(cd "$WW" && "$SETUP" --session-id worktrees >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "0" "E1: 세션 id worktrees 는 받는다"
+[ -f "$WW/.claude/quality-gates/worktrees/result.md" ] && ok "E1: worktrees 세션 폴더에 result.md 를 둔다" || no "E1: worktrees 세션 폴더가 만들어지지 않았다"
 WM="$TMP/e1nomarker"
 mkdir -p "$WM/.claude/quality-gates/unrelatedfolder1"
 : > "$WM/.claude/quality-gates/unrelatedfolder1/notes.txt"
