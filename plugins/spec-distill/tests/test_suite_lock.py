@@ -364,11 +364,13 @@ class Cli(unittest.TestCase):
 
     def test_plain_file_at_lock_path_not_moved(self):
         self.d.write_text("not a lock\n", encoding="utf-8")
-        self._age(self.d)
-        rc, out, mark = self._run_marking()
-        self._refused(rc, out, mark)
-        self.assertTrue(self.d.is_file())
-        self.assertEqual(self.d.read_text(encoding="utf-8"), "not a lock\n")
+        for aged in (False, True):   # 나이와 무관하다 — 갓 생긴 파일도 바쁜 잠금으로 보지 않는다
+            if aged:
+                self._age(self.d)
+            rc, out, mark = self._run_marking()
+            self._refused(rc, out, mark)
+            self.assertTrue(self.d.is_file())
+            self.assertEqual(self.d.read_text(encoding="utf-8"), "not a lock\n")
 
     def test_owner_named_folder_is_not_lock_shaped(self):
         """`owner` 이름 하나뿐이어도 폴더면 잠금 꼴이 아니다 — 그 안의 것이 지워지지 않는다."""
