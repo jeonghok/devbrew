@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# guards: shared/entry/entry_preflight.py plugins/*/scripts/entry_preflight.py shared/killswitch/kill_switch_active.py plugins/*/switches.md
+# guards: shared/entry/entry_preflight.py plugins/*/scripts/entry_preflight.py plugins/*/switches.md
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
 S="$ROOT/shared/entry/entry_preflight.py"
 # 사전 검사 링크와 끄기 변수 표를 싣는 플러그인 — 아래 「깨끗한 환경」 과 절 1 이 이 목록으로 읽고, --emit-scanned 도 이 목록으로 낸다
 PLUGINS="spec-distill quality-gates plugin-audit project-init"
 if [ "${1:-}" = "--emit-scanned" ]; then
-  printf '%s\n' shared/entry/entry_preflight.py shared/killswitch/kill_switch_active.py
+  printf '%s\n' shared/entry/entry_preflight.py
   for p in $PLUGINS; do
     printf '%s\n' "plugins/$p/scripts/entry_preflight.py" "plugins/$p/switches.md"
   done

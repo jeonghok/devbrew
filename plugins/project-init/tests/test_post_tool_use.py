@@ -68,7 +68,7 @@ def make_repo(root: str, content: Union[str, bytes, None], origin_head: bool = T
 
 
 def run_hook(payload: dict, env_override: Optional[dict] = None,
-             cwd: Optional[str] = None) -> Tuple[str, int]:
+             cwd: Optional[str] = None, hook: Path = HOOK) -> Tuple[str, int]:
     """Invoke the hook script as a subprocess; return (stdout, returncode)."""
     env = os.environ.copy()
     # Strip inherited devbrew env vars so tests are deterministic.
@@ -80,7 +80,7 @@ def run_hook(payload: dict, env_override: Optional[dict] = None,
     if cwd:
         env["CLAUDE_PROJECT_DIR"] = cwd
     cp = subprocess.run(
-        [sys.executable, str(HOOK)],
+        [sys.executable, str(hook)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -232,7 +232,7 @@ class F1RegressionLockTest(unittest.TestCase):
 
 
 class PreservedBehaviorTest(_RepoTestCase):
-    """AC7 — commit / kill-switch / non-Bash / malformed-JSON paths unchanged."""
+    """AC7 — commit / non-Bash / malformed-JSON paths unchanged · AC22 — 은퇴한 끄기 변수는 훅을 끄지 않고 알림 끝에 한 줄을 덧붙인다."""
 
     def test_protected_branch_skipped(self):
         self.assertIsNone(_hook.check_branch_name("main", re.compile(r"^feature/.+$")))
@@ -249,15 +249,75 @@ class PreservedBehaviorTest(_RepoTestCase):
         self.assertIsNotNone(msg)
         self.assertIn("Conventional Commits", msg)
 
-    def test_kill_switch_disable(self):
+    BAD_BRANCH_PAYLOAD = {"tool_name": "Bash", "tool_input": {"command": "git branch Bad_Name"}}
+    # 기대 글자는 계획의 G3 그대로다(검사 대상과 다른 출처).
+    G3_DISABLE = "[devbrew-switch] 더 듣지 않는다 — 플러그인 끄기를 쓴다(DEVBREW_PROJECT_INIT_DISABLE=1)"
+    G3_TOKEN = "[devbrew-switch] 더 듣지 않는다 — 플러그인 끄기를 쓴다(DEVBREW_SKIP_HOOKS=project-init:PostToolUse)"
+
+    def bad_branch_repo(self) -> str:
         work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
         git("branch", "Bad_Name", cwd=work)
-        out, rc = run_hook(
-            {"tool_name": "Bash", "tool_input": {"command": "git branch Bad_Name"}},
-            env_override={"DEVBREW_PROJECT_INIT_DISABLE": "1"}, cwd=work,
-        )
+        return work
+
+    def test_retired_switch_still_runs(self):
+        work = self.bad_branch_repo()
+        base_out, base_rc = run_hook(self.BAD_BRANCH_PAYLOAD, cwd=work)
+        self.assertEqual(base_rc, 0)
+        base = json.loads(base_out).get("systemMessage", "")
+        self.assertIn("이름 규칙에 맞지 않는다", base, "픽스처 전제: 스위치 없이 브랜치 알림이 난다")
+        out, rc = run_hook(self.BAD_BRANCH_PAYLOAD,
+                           env_override={"DEVBREW_PROJECT_INIT_DISABLE": "1"}, cwd=work)
+        self.assertEqual(rc, 0)
+        msg = json.loads(out).get("systemMessage", "")
+        self.assertTrue(msg.startswith(base), out)
+        self.assertEqual(msg.splitlines()[-1], self.G3_DISABLE)
+
+    def test_retired_switch_silent_without_notice(self):
+        work = self.repo(strategy(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$"))
+        out, rc = run_hook({"tool_name": "Bash", "tool_input": {"command": "git status"}},
+                           env_override={"DEVBREW_PROJECT_INIT_DISABLE": "1"}, cwd=work)
         self.assertEqual(out.strip(), "{}")
         self.assertEqual(rc, 0)
+
+    def test_retired_token_alias(self):
+        work = self.bad_branch_repo()
+        out, rc = run_hook(self.BAD_BRANCH_PAYLOAD,
+                           env_override={"DEVBREW_SKIP_HOOKS": "project-init:PostToolUse"}, cwd=work)
+        self.assertEqual(rc, 0)
+        msg = json.loads(out).get("systemMessage", "")
+        self.assertIn("이름 규칙에 맞지 않는다", msg)
+        self.assertEqual(msg.splitlines()[-1], self.G3_TOKEN)
+
+    def test_table_unreadable_no_suffix(self):
+        """끄기 변수 표를 못 읽거나 은퇴 행이 없으면 알림은 지금처럼 나고 덧붙임 줄이 없다."""
+        work = self.bad_branch_repo()
+        plugin = HOOK.parent.parent
+        real_table = (plugin / "switches.md").read_text(encoding="utf-8")
+        self.assertIn("| 은퇴 |", real_table, "픽스처 전제: 실제 표에 은퇴 행이 있다")
+        broken = "---\ntype: devbrew-switches\nplugin: project-init\n---\n\n| 이름 | 망가진 머리 |\n|---|---|\n"
+        variants = {
+            "망가진 switches.md": ("table", broken),
+            "표 없음": ("table", None),
+            "entry_preflight.py 없음": ("no-preflight", real_table),
+            "은퇴 행 없음": ("table", real_table.replace("| 은퇴 |", "| 남음 |")),
+        }
+        env = {"DEVBREW_PROJECT_INIT_DISABLE": "1", "DEVBREW_SKIP_HOOKS": "project-init:PostToolUse"}
+        for label, (kind, table) in variants.items():
+            with self.subTest(label):
+                copy = Path(self.tmp, "plugin-" + str(len(os.listdir(self.tmp))))
+                (copy / "hooks").mkdir(parents=True)
+                shutil.copy(HOOK, copy / "hooks" / HOOK.name)
+                shutil.copytree(plugin / "scripts", copy / "scripts", symlinks=False)
+                if kind == "no-preflight":
+                    (copy / "scripts" / "entry_preflight.py").unlink()
+                if table is not None:
+                    (copy / "switches.md").write_text(table, encoding="utf-8")
+                out, rc = run_hook(self.BAD_BRANCH_PAYLOAD, env_override=env, cwd=work,
+                                   hook=copy / "hooks" / HOOK.name)
+                self.assertEqual(rc, 0, out)
+                msg = json.loads(out).get("systemMessage", "")
+                self.assertIn("이름 규칙에 맞지 않는다", msg)
+                self.assertNotIn("[devbrew-switch]", msg)
 
     def test_non_bash_tool_skipped(self):
         out, rc = run_hook({"tool_name": "Write", "tool_input": {"file_path": "x"}})

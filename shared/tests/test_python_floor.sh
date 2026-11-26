@@ -172,51 +172,22 @@ R="$ROOT/$RESOLVER"
 
 note "── 축 A: 해석기 행동 ───────────────────────────────────────────────"
 
-# A1 (AC5a) [플러그인 이름의 하이픈 → 밑줄 매핑(fix-ture → FIX_TURE)도 여기서 잰다] 전역 스위치가 해석보다 먼저다 — 바닥 만족 인터프리터가 있어도 아무것도 안 한다
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_FIX_TURE_DISABLE=1 /bin/sh "$R" \
-        --event SessionStart --plugin fix-ture --hook hook-name "$TARGET")"
-assert_eq "$out" "" "A1/AC5a: DEVBREW_FIX_TURE_DISABLE=1 이면 stdout 이 비고 훅이 안 돈다"
+# A19 (AC21) 해석기는 끄기 변수를 읽지 않는다 — 은퇴한 통째 끄기 · `DEVBREW_SKIP_HOOKS` 토큰을 켜도
+#     바닥 만족 인터프리터로 대상을 exec 한다. 양성 대조(변수 없이 같은 PATH 로 exec)는 A5 다.
+for ks in DEVBREW_PROJECT_INIT_DISABLE=1 DEVBREW_SKIP_HOOKS=project-init:post-tool-use DEVBREW_SKIP_HOOKS=project-init:PostToolUse; do
+  out="$(run_resolver "$PATH_FLOOR" "$ks" /bin/sh "$R" \
+          --event PostToolUse --plugin project-init --hook post-tool-use "$TARGET")"
+  assert_contains "$out" "TARGET-RAN" "A19/AC21: ${ks} 를 켜도 해석기가 바닥 만족 인터프리터로 대상을 exec 한다"
+done
+# A20 (AC21) 해석기 본문에 끄기 판정 갈래가 남지 않는다. 짝: 같은 grep 이 본문의 `FLOOR_MAJOR=` 를 찾는다.
+for tok in DISABLE SKIP_HOOKS kill_switch_active; do
+  assert_file_absent "$R" "$tok" "A20/AC21: 해석기 본문에 ${tok} 가 없다"
+done
+assert_file_grep "$R" "^FLOOR_MAJOR=" "A20/AC21: 짝 — 같은 grep 이 해석기 본문의 FLOOR_MAJOR= 를 찾는다"
 
-# A1b (AC5a 의 exec 갈래별 짝) A1 의 PATH_FLOOR 는 3단계(글롭)에서야 만족 후보를 만난다. 그래서
-#     kill switch 판정을 1·2단계 «아래» 로 옮겨도 A1 은 GREEN 인데 끈 훅이 그 두 갈래로 돈다
-#     〔#162 회고 리뷰 실측: 131/131〕. exec 갈래마다 만족 후보를 하나씩 두고 스위치를 켠다.
-#     양의 짝(스위치 없이 같은 갈래로 exec 한다)은 A9 · A17 · A5 다.
-out="$(run_resolver "$PATH_SUB" DEVBREW_FIX_TURE_DISABLE=1 "DEVBREW_PYTHON=$TMP/floor/python3.99" \
-        /bin/sh "$R" --event SessionEnd --plugin fix-ture --hook hook-name "$TARGET")"
-assert_not_contains "$out" "TARGET-RAN" "A1b: 스위치가 켜지면 1단계(\$DEVBREW_PYTHON)로도 exec 하지 않는다"
-out="$(run_resolver "$PATH_PLAINFLOOR" DEVBREW_FIX_TURE_DISABLE=1 \
-        /bin/sh "$R" --event SessionEnd --plugin fix-ture --hook hook-name "$TARGET")"
-assert_not_contains "$out" "TARGET-RAN" "A1b: 스위치가 켜지면 2단계(bare python3)로도 exec 하지 않는다"
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_FIX_TURE_DISABLE=1 \
-        /bin/sh "$R" --event SessionEnd --plugin fix-ture --hook hook-name "$TARGET")"
-assert_not_contains "$out" "TARGET-RAN" "A1b: 스위치가 켜지면 3단계(python3.* 글롭)로도 exec 하지 않는다"
-
-# A2 (AC5b) 전체 토큰 — 부분 일치는 끄지 않는다
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=qg:hook /bin/sh "$R" \
-        --event SessionStart --plugin qg --hook hook-name "$TARGET")"
-assert_contains "$out" "TARGET-RAN" "A2/AC5b: 부분 일치 'qg:hook' 는 끄지 않는다"
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=qg:hook-name /bin/sh "$R" \
-        --event SessionStart --plugin qg --hook hook-name "$TARGET")"
-assert_eq "$out" "" "A2/AC5b: 전체 토큰 훅명은 끈다"
-
-# A3 (AC5c) 이벤트 별칭 + 공백 제거 + 쉼표 목록
-out="$(run_resolver "$PATH_FLOOR" "DEVBREW_SKIP_HOOKS= qg:SessionStart ,other:x" /bin/sh "$R" \
-        --event SessionStart --plugin qg --hook hook-name "$TARGET")"
-assert_eq "$out" "" "A3/AC5c: 이벤트 별칭 + 앞뒤 공백 + 쉼표 목록이 정본과 같게 판정된다"
-# 하위 기능 토큰은 훅 전체를 끄지 않는다 — 정본의 의미를 «넓히지도» 않는다
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=qg:hook-name:sub /bin/sh "$R" \
-        --event SessionStart --plugin qg --hook hook-name "$TARGET")"
-assert_contains "$out" "TARGET-RAN" "A3/AC5c: 하위 기능 토큰은 훅 전체를 끄지 않는다(정본과 동치)"
-
-# A4 (AC5 순서 + PATH 불신) — 해석기가 외부 명령에 기대지 않는다는 것을 **행동으로** 잰다.
-#    〔실측〕 kill switch 의 변수명 도출을 `tr` 로 쓰면 PATH 에 /usr/bin 이 없을 때
-#    `tr: command not found` 로 판정이 **조용히 fail-open** 하고, PATH 분리를 `tr` 로 쓰면
-#    글롭 스캔이 통째로 죽는다. 둘 다 텍스트 grep 이 아니라 실행으로 잡는다 — 해석기 본문이
-#    그 명령 «이름» 을 주석에서 언급하므로 텍스트 락은 자기 주석에 걸린다.
-out="$(printf '%s' "$PAY" | env -i PATH= DEVBREW_SKIP_HOOKS=qg:SessionStart \
-        /bin/sh "$R" --event SessionStart --plugin qg \
-        --hook hook-name "$TARGET" 2>/dev/null)"
-assert_eq "$out" "" "A4a: PATH 가 비어도 kill switch 가 발동한다"
+# A4 (PATH 불신) — 해석기가 외부 명령에 기대지 않는다는 것을 **행동으로** 잰다.
+#    〔실측〕 PATH 분리를 `tr` 로 쓰면 글롭 스캔이 통째로 죽는다. 텍스트 grep 이 아니라 실행으로
+#    잡는다 — 해석기 본문이 그 명령 «이름» 을 주석에서 언급하므로 텍스트 락은 자기 주석에 걸린다.
 out="$(printf '%s' "$PAY" | env -i PATH="$PATH_BARE" \
         /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET" 2>/dev/null)"
 assert_contains "$out" "TARGET-RAN" "A4b: coreutils 가 하나도 없는 PATH 에서도 글롭 스캔이 python3.99 를 찾는다"
@@ -232,21 +203,6 @@ assert_not_contains "$out" "CONFIG-SHOULD-NOT-RUN" "A5/AC2: python3.12-config �
 out="$(run_resolver "$PATH_ATFLOOR" /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET")"
 assert_contains "$out" "TARGET-RAN" \
   "A12: 바닥과 정확히 같은 Python ${FLOOR_MAJOR_VAL}.${FLOOR_MINOR_VAL} 를 만족으로 친다 (등호 경계)"
-
-# A13 (AC5·C2) 판정이 cwd 내용에 좌우되지 않는다. 정본은 순수 문자열 비교다
-#     (`kill_switch_active.py` 의 `skip.split(",")`). unquoted 확장은 IFS 분리 **뒤에**
-#     pathname expansion 을 타서, cwd 에 우연히 맞는 파일이 있으면 조용히 끈다〔실측〕.
-: > "$TMP/qg:h"
-out="$(cd "$TMP" && printf '%s' "$PAY" | env PATH="$PATH_FLOOR" DEVBREW_SKIP_HOOKS='qg:*' \
-        /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET" 2>/dev/null)"
-assert_contains "$out" "TARGET-RAN" "A13/C2: cwd 에 'qg:h' 가 있어도 'qg:*' 는 끄지 못한다 (글롭 아님)"
-
-# A16 (:73 의 [ -n "$3" ] 가드 — 빈 이벤트는 별칭을 만들지 않는다) --event 없이 부르면
-#     EVENT 가 비고, DEVBREW_SKIP_HOOKS 의 `<plugin>:` 꼴 접두어와 매치되면 안 된다. 이
-#     규칙을 재는 단언이 지금까지 없었다. (번호는 A15 를 Task 5 가 이미 예약해 A16 으로 띄운다.)
-out="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS=qg: /bin/sh "$R" \
-        --plugin qg --hook h "$TARGET")"
-assert_contains "$out" "TARGET-RAN" "A16: --event 없이 불러도(빈 이벤트) DEVBREW_SKIP_HOOKS=qg: 가 훅을 끄지 않는다"
 
 # A6 (AC3) 후보도 같은 판정을 받는다 — 바닥 미만 python3.9 는 건너뛴다
 out="$(run_resolver "$PATH_SUB" /bin/sh "$R" --event SessionEnd --plugin qg --hook h "$TARGET")"
@@ -548,8 +504,7 @@ note "── 축 C: 배선 — hooks.json 1 자리 (AC1) ───────�
 
 cmds_of() {   # hooks.json 하나에서 «(이벤트 키, command)» 쌍을 전부. 한 줄 = `<이벤트> <command>`.
   # **이벤트 키를 버리지 않는다.** 버리면 `--event` 값이 자기를 담은 이벤트 키와 같은지를
-  # 아무도 안 본다: 갈라지면 (a) kill switch 의 이벤트 별칭이 엉뚱한 이름에 답해
-  # `DEVBREW_SKIP_HOOKS=<plugin>:<event>` 로 끈 사용자가 안 꺼지고(C2), (b) `PostToolUse`
+  # 아무도 안 본다: 갈라지면 `PostToolUse`
   # 자리에 `--event SessionStart` 가 박히면 바닥 미만 머신에서 **Bash 호출마다** 안내가 모델
   # 컨텍스트로 재주입된다 — 설계가 이름 붙여 기각한 실패다(R14·D26).
   # 이벤트 이름에는 공백이 없으므로 「첫 공백까지가 키, 나머지가 command」로 되쪼갤 수 있다.
@@ -617,29 +572,14 @@ for hj in $HOOKS_JSONS; do   # 축 B 머리에서 git ls-files 로 도출했다
       *.py) ok "C/AC1: 마지막 토큰이 훅 .py 다 ($last)" ;;
       *)    no "C/AC1: 마지막 토큰이 훅 .py 가 아니다 ($last) — test_command_contract.py 가 깨진다" ;;
     esac
-    # --event / --plugin / --hook 셋이 다 있어야 kill switch 가 정본과 같은 판정을 한다
+    # --event / --plugin / --hook 셋이 다 있다(해석기는 받되 쓰지 않는다 — 훅 등록 파일과의 호환)
     for flag in --event --plugin --hook; do
       case "$cmd" in *"$flag "*) ;; *) no "C/AC1: $hj 의 자리에 $flag 가 없다" ;; esac
     done
-    # 여기까지는 command 의 «모양» 만 봤다 — 세 값이 무엇인지는 아무것과도 대조되지 않았다.
-    # 아래 둘이 그 값을 바깥 사실 두 가지에 묶는다.
     ev_arg="$(flag_val --event "$cmd")"
-    pl_arg="$(flag_val --plugin "$cmd")"
-    hk_arg="$(flag_val --hook "$cmd")"
-    # (1) `--event` 값 == 자기를 담은 hooks.json 의 이벤트 키.
+    # `--event` 값 == 자기를 담은 hooks.json 의 이벤트 키.
     assert_eq "$ev_arg" "$ev_key" \
       "C/AC1: $hj — '$ev_key' 아래 자리의 --event 가 그 이벤트 키와 같다"
-    # (2) 세 값이 훅 .py 가 실제로 부르는 `kill_switch_active(...)` 인자와 **글자 그대로** 같다.
-    #     해석기(sh)와 훅(python) 두 층이 서로 다른 토큰에 답하면 kill switch 가 층마다 다르게
-    #     발동한다 — C2 가 금지하는 「정본과 다른 의미」가 조용히 산다. 훅 경로는 command 의
-    #     마지막 토큰에서 기계적으로 도출한다(`${CLAUDE_PLUGIN_ROOT}` → 이 플러그인 디렉토리).
-    #     공백은 느슨하게 둔다 — 포매터가 인자 사이 간격을 바꿔도 이 락이 거짓 RED 를 내지 않게.
-    #     〔못 재는 것〕 호출이 여러 줄로 쪼개지면 이 줄-단위 grep 은 못 본다.
-    PLUGIN_ROOT_PREFIX='${CLAUDE_PLUGIN_ROOT}/'
-    hook_py="$plugin_dir/${last#"$PLUGIN_ROOT_PREFIX"}"
-    assert_file_grep "$hook_py" \
-      "kill_switch_active\(\"$pl_arg\",[[:space:]]*\"$hk_arg\",[[:space:]]*\"$ev_arg\"\)" \
-      "C/AC1·C2: $hook_py 가 kill_switch_active(\"$pl_arg\", \"$hk_arg\", \"$ev_arg\") 로 같은 토큰에 답한다"
   done <<EOF
 $hj_cmds
 EOF
@@ -649,16 +589,16 @@ assert_eq "$n_bare" "0" "C/AC1: bare python3 로 시작하는 자리가 0 이다
 
 # AC9 (설계 2026-09-23) — 위는 command 의 «모양» 이다. 실제로 cwd 의 `sh` 를 안 집는지는 실행으로
 # 잰다: 훅처럼 `/bin/sh -c "<command>"` 로, cwd 에 카나리 `sh` 를 두고 PATH 앞에 빈 항목을 둔다.
-# 해석기에 닿으면 그 플러그인의 kill switch 가 곧바로 끝내 훅 파이썬은 돌지 않는다.
+# PATH 에는 바닥 미만 인터프리터만 있어 해석기에 닿아도 exec 하지 않고 끝나 훅 파이썬은 돌지 않는다.
 # 양의 짝: 같은 command 의 앞 `/bin/sh ` 를 bare `sh ` 로 바꾸면 카나리가 돌아야 한다 — 이것이
 # 없으면 「카나리 없음」은 카나리가 고장 나도 통과한다.
 SH_CWD="$TMP/shcwd"; SH_MARK="$TMP/sh-canary.ran"
 mkdir -p "$SH_CWD"
 printf '#!/bin/sh\n: > "%s"\n' "$SH_MARK" > "$SH_CWD/sh"; chmod +x "$SH_CWD/sh"
-run_hook_cmd() {   # run_hook_cmd <플러그인 디렉토리> <kill switch 변수> <command>
+run_hook_cmd() {   # run_hook_cmd <플러그인 디렉토리> <command>
   rm -f "$SH_MARK"
-  (cd "$SH_CWD" && env PATH=":/usr/bin:/bin" CLAUDE_PLUGIN_ROOT="$ROOT/$1" "$2=1" \
-     /bin/sh -c "$3" </dev/null >/dev/null 2>&1)
+  (cd "$SH_CWD" && env PATH=":$TMP/sub:/bin" CLAUDE_PLUGIN_ROOT="$ROOT/$1" \
+     /bin/sh -c "$2" </dev/null >/dev/null 2>&1)
 }
 n_shexec=0
 for hj in $HOOKS_JSONS; do   # 축 B 머리에서 git ls-files 로 도출했다
@@ -668,12 +608,11 @@ for hj in $HOOKS_JSONS; do   # 축 B 머리에서 git ls-files 로 도출했다
     [ -n "$pair" ] || continue
     cmd="${pair#* }"
     pl_arg="$(flag_val --plugin "$cmd")"
-    ks_var="DEVBREW_$(printf '%s' "$pl_arg" | tr 'a-z-' 'A-Z_')_DISABLE"
     n_shexec=$((n_shexec+1))
-    run_hook_cmd "$plugin_dir" "$ks_var" "$cmd"
+    run_hook_cmd "$plugin_dir" "$cmd"
     if [ -f "$SH_MARK" ]; then no "C/AC9: $hj ($pl_arg) — command 가 cwd 의 sh 를 실행했다: $cmd"
     else ok "C/AC9: $hj ($pl_arg) — command 가 cwd 의 sh 를 집지 않는다"; fi
-    run_hook_cmd "$plugin_dir" "$ks_var" "sh ${cmd#/bin/sh }"
+    run_hook_cmd "$plugin_dir" "sh ${cmd#/bin/sh }"
     if [ -f "$SH_MARK" ]; then ok "C/AC9: 양의 짝 — 같은 command 를 bare sh 로 부르면 카나리가 돈다 ($pl_arg)"
     else no "C/AC9: 양의 짝이 안 돈다 ($pl_arg) — 위 「카나리 없음」이 헛돈다"; fi
   done <<EOF
@@ -709,10 +648,6 @@ if [ "$iso_ok" -eq 1 ]; then
              --event "$ev" --plugin "$pl" --hook "$hk" "$ROOT/$tgt" 2>/dev/null)"; rc=$?
     assert_eq "$rc" "0" "C2/AC12: $pl/$hk 가 rc 0 이다 (fail-open, 막지 않는다)"
     assert_eq "$out" "" "C2/AC12: $ev($pl) 는 stdout 이 비어 있다"
-    out_ks="$(printf '{"session_id":"x"}' \
-           | env PATH=/usr/bin:/bin DEVBREW_SKIP_HOOKS="$pl:$ev" /bin/sh "$R" \
-             --event "$ev" --plugin "$pl" --hook "$hk" "$ROOT/$tgt" 2>/dev/null)"
-    assert_eq "$out_ks" "" "C2/AC12: kill switch 를 켜면 $pl/$ev 는 안내도 내지 않는다"
   done
 
   # 「본래 동작은 수행되지 않는다」 — 위 둘은 실패 경로에서 부작용이 없어 관측할 것이
@@ -726,31 +661,6 @@ if [ "$iso_ok" -eq 1 ]; then
     && no "C2/AC12: 해석에 실패했는데 대상이 실행됐다 — exec 하지 않는다는 계약이 깨졌다" \
     || ok "C2/AC12: 해석 실패 시 대상이 한 줄도 돌지 않는다 (본래 동작 미수행)"
 fi
-
-# 위 격리 PATH 블록의 $out_ks 단언은 두 자리 모두에서 vacuous 하다 — 바닥
-# 미만 PATH 에서는 해석기가 fail-open 으로 이미 stdout 을 비우므로, 스위치 검사를 통째로
-# 지워도 그 두 자리는 그대로 GREEN 이다(스크래치 사본으로 실측). kill switch 자신의 효과는
-# 거기서 관측할 수 없다 — 만족 PATH($PATH_FLOOR)에서 exec 여부로 직접 재야 한다: 스위치가
-# 꺼지면 $TARGET 이 돌아 TARGET-RAN 이 나오고, 켜지면 exec 자체가 없어 사라진다. 이 satisfying
-# PATH 는 호스트의 실제 python3 와 무관하므로 `iso_ok` 게이트 밖에 둔다.
-for spec in "PostToolUse:project-init:post-tool-use"; do
-  ev="${spec%%:*}"; r1="${spec#*:}"; pl="${r1%%:*}"; hk="${r1#*:}"
-
-  out_run="$(run_resolver "$PATH_FLOOR" /bin/sh "$R" \
-          --event "$ev" --plugin "$pl" --hook "$hk" "$TARGET")"
-  assert_contains "$out_run" "TARGET-RAN" \
-    "C2/AC12: 만족 PATH·스위치 꺼짐 — $pl/$hk 대상이 실행된다 (양성 대조)"
-
-  out_hookoff="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS="$pl:$hk" /bin/sh "$R" \
-          --event "$ev" --plugin "$pl" --hook "$hk" "$TARGET")"
-  assert_not_contains "$out_hookoff" "TARGET-RAN" \
-    "C2/AC12: 훅명 별칭(DEVBREW_SKIP_HOOKS=$pl:$hk) 이 $pl/$hk 대상 실행을 막는다"
-
-  out_evoff="$(run_resolver "$PATH_FLOOR" DEVBREW_SKIP_HOOKS="$pl:$ev" /bin/sh "$R" \
-          --event "$ev" --plugin "$pl" --hook "$hk" "$TARGET")"
-  assert_not_contains "$out_evoff" "TARGET-RAN" \
-    "C2/AC12: 이벤트명 별칭(DEVBREW_SKIP_HOOKS=$pl:$ev) 이 $pl/$hk 대상 실행을 막는다"
-done
 
 note "── 축 E: 훅 자식 (AC10) ──────────────────────────────────────────────"
 

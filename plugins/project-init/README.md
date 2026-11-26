@@ -19,7 +19,7 @@ plugins/project-init/
 ├── tests/                           # 플러그인 최상위, hooks/의 형제 — 3규약(hooks/tests 포함)을 1종으로 통일
 │   ├── __init__.py
 │   ├── test_post_tool_use.py        # post-tool-use fail-open/F2/main 검증
-│   ├── test_post_tool_use_branch.sh # 명령 · EnterWorktree 뒤 새 브랜치 관찰 · 기본 브랜치 규칙 · kill switch (임시 레포)
+│   ├── test_post_tool_use_branch.sh # 명령 · EnterWorktree 뒤 새 브랜치 관찰 · 기본 브랜치 규칙 (임시 레포)
 │   ├── test_command_contract.py     # skills/project-init 산문 계약 회귀 락 (4c S2a H1 · 이전 거절 선택지 · 헌장 게이트 선택)
 │   ├── test_branch_prefix_templates.py  # 템플릿 브랜치 접두 placeholder · worktree 절 락
 │   ├── test_branch_strategy_rebase_clause.sh  # AC8e, rebase 무조건 금지 조항 부재 락
@@ -115,8 +115,6 @@ plugins/project-init/
   - EnterWorktree 뒤에 이 훅이 실제로 불리는지는 실측하지 못했다(Claude Code 훅 문서는 PostToolUse 가 모든 도구 호출 뒤에 불린다고 적는다 — 문서 근거, 실측 아님). 불리지 않으면 EnterWorktree 로 만든 브랜치는 검사 밖일 수 있다(60초 안에 그 작업 트리를 cwd 로 다음 Bash 호출이 오면 그때 잡힌다). 불리면 그 호출의 브랜치는 cwd 의 지금 브랜치이거나 입력 `name` 으로 끝나는 경로(`…/<name>`, name 의 `/` 는 `+` 또는 하위 폴더)의 작업 트리가 쓰는 브랜치다 — payload 의 cwd 가 옮기기 전 레포여도 잡는다(그때는 다른 작업 트리의 브랜치라 이름 바꾸기 명령 없이 알린다). 작업 트리 목록을 못 읽으면 그 사실을 알리고 건너뛴다. `name` 없이 부른 EnterWorktree 는 payload 의 cwd 가 새 작업 트리일 때만 잡힌다.
   - 관찰 범위: 공용 git 디렉토리를 보지만 같은 레포의 다른 세션 · 다른 작업 트리가 만든 브랜치는 이 호출의 입력이 그 이름을 가리키지 않고 cwd 의 지금 브랜치도 아니면 다루지 않는다(알리지도, 이름 바꾸기 명령을 내지도 않는다). 그래서 변수 · 스크립트로 만들어 이름이 명령 글에 드러나지 않고 지금 브랜치로 옮겨 가지도 않은 브랜치는 검사 밖이다. 이 호출이 가리킨 브랜치라도 다른 작업 트리에서 쓰고 있으면 이름 바꾸기 명령 없이 알린다. 세션 cwd 의 레포가 아닌 다른 레포에 `git -C <dir>` 로 만든 브랜치는 보지 않는다. reflog 가 없는 레포(`core.logAllRefUpdates=false` · reftable 저장소)에서는 새 브랜치를 볼 수 없어 이 검사가 알림 없이 돌지 않는다.
   - spec-distill 의 레포 설정 `branch_prefix` 는 이 플러그인의 브랜치 규칙과 맞춘다 — 두 플러그인은 서로의 설정을 읽지 않으므로, 어긋나면 지휘자가 만드는 브랜치마다 이 훅이 알린다.
-  - Kill switch: `DEVBREW_PROJECT_INIT_DISABLE=1` (전체) 또는 `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` — 또는 이벤트명 하나로 `DEVBREW_SKIP_HOOKS=project-init:PostToolUse`. 이벤트명 별칭은 spec-distill 이 쓰던 형태를 이 플러그인으로 통일한 것이다 — 한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것이 결함이었다.
-  - `DEVBREW_PROJECT_INIT_DISABLE=1` 은 훅만이 아니라 `/project-init` 진입도 `disabled` no-op 으로 만든다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다.
   - 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
 
 ## Principles Instantiated

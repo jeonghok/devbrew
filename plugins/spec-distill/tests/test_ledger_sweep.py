@@ -374,8 +374,15 @@ class OldGcIgnoresDocreviewTest(unittest.TestCase):
                              "옛 GC 를 git 에서 꺼내지 못했다(커밋 %s 도달 불가) — 도출 불가는 RED" % OLD_GC_COMMIT)
             tools = tmp / "oldgc"; tools.mkdir()
             (tools / "spec-distill-gc.py").write_text(src.stdout, encoding="utf-8")
-            for n in ("state_path.py", "legacy_names.py", "gc_common.py", "kill_switch_active.py"):
+            for n in ("state_path.py", "legacy_names.py", "gc_common.py"):
                 shutil.copy(SCRIPTS / n, tools / n)
+            # 옛 GC 가 import 하는 판정 모듈은 지금 나무에 없다 — 같은 옛 커밋의 것을 꺼내 쓴다.
+            ks = subprocess.run(["git", "-C", str(REPO), "show",
+                                 OLD_GC_COMMIT + ":plugins/spec-distill/scripts/kill_switch_active.py"],
+                                capture_output=True, text=True)
+            self.assertEqual(ks.returncode, 0,
+                             "옛 판정 모듈을 git 에서 꺼내지 못했다(커밋 %s 도달 불가) — 도출 불가는 RED" % OLD_GC_COMMIT)
+            (tools / "kill_switch_active.py").write_text(ks.stdout, encoding="utf-8")
             repo = tmp / "repo"; repo.mkdir()
             subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
             root = repo / ".claude" / "spec-distill"; root.mkdir(parents=True)
