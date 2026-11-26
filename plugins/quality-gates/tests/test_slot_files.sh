@@ -6,7 +6,10 @@
 #   unreadable_literal_same — `QG_INPUT_UNREADABLE:` 글자가 정의 넷 · 본문 SKILL.md · 의도 점검 절차 ·
 #                             문서 비평 SKILL.md · qg_nonce.py 에 모두 있고, 어디서나 바로 뒤가 `:` 다.
 #   sentences_in_defs       — 정의마다 칸 절 첫머리에 더한 문장 넷이 줄 전체로 이어서 있고 그 뒤가 빈 줄이다.
-#                             경로를 싣는 칸(`*_file`)마다 본문이 그 칸 이름을 적는다.
+#                             경로를 싣는 칸(`*_file`)마다 본문이 그 칸 이름을 적는다. intent-critic 의
+#                             「칸 파일은 `<project_dir>` 밖에 있어도 …」 예외 문장은 줄 전체로 한 번 있다.
+#                             한계: 다른 절에 더한 「X 는 예외다」 문장은 이 락이 잡지 못한다 — 그 자리는
+#                             persona 편집의 보안 리뷰가 맡는다.
 #   kind_unchanged          — 정의마다 `input_slots` 의 (태그, 변수, kind) 가 아래 기대 표와 같다.
 #   exempt_count_4          — check_slots.py 의 면제 등록이 넷이고 반박자의 열쇠가 `merged_findings_file` 이다.
 #   mutations               — 리뷰어 정의의 규칙은 보안 갈래라 변이 넷(지우기 · 뒤집기 · 다른 리뷰어 이름 더하기 ·
@@ -59,6 +62,10 @@ DOCS = [
 NONCE = "plugins/quality-gates/scripts/qg_nonce.py"
 SLOTS = "tools/adjudication/check_slots.py"
 LIT = "QG_INPUT_UNREADABLE:"
+# intent-critic 의 칸 파일 예외 — 줄 전체로 잰다(넓히는 한정어 · 꼬리가 붙으면 RED).
+EXCEPTION = (AG + "intent-critic.md",
+             "칸 파일은 `<project_dir>` 밖에 있어도 그 경로를 읽는다 — 아래 「읽는 파일은 이 "
+             "아래의 것뿐이다」 는 칸 파일 말고 스스로 열어 보는 파일에 닿는다.")
 SENTENCES = [
     "- 칸의 경로에 있는 파일을 끝까지 읽는다.",
     "- 칸 파일마다 끝 줄 `qg-slot-end: <값>` 의 값을, 응답 맨 앞 출력 블록 밖에 "
@@ -159,6 +166,12 @@ def sentences():
             tag = str(slot.get("tag", ""))
             if tag.endswith("_file") and ("<%s>" % tag) not in body and ("`%s`" % tag) not in body:
                 bad(rel, "경로 칸 `%s` 를 본문이 적지 않는다" % tag)
+
+
+    rel, line = EXCEPTION
+    n = read(rel).split("\n").count(line)
+    if n != 1:
+        bad(rel, "칸 파일 예외 문장이 줄 전체로 한 번이 아니다(%d)" % n)
 
 
 def kinds():
@@ -297,6 +310,9 @@ M="$(copy_root m-reshape)" && mutate "$M/$ADV" "QG_INPUT_UNREADABLE:" "QG_INPUT_
   && expect_red "형태 바꾸기 — artifact-adversarial 의 QG_INPUT_UNREADABLE 뒤 공백(문장)" "$M" sentences "$ADV" \
   && expect_red "형태 바꾸기 — artifact-adversarial 의 QG_INPUT_UNREADABLE 뒤 공백(글자 락)" "$M" unreadable "$ADV" \
   || no "변이 준비 실패 — 형태 바꾸기"
+M="$(copy_root m-widen)" && mutate "$M/$INT" "칸 파일은 \`<project_dir>\` 밖에 있어도" "어떤 파일이든 \`<project_dir>\` 밖에 있어도" \
+  && expect_red "넓히기 — intent-critic 의 칸 파일 예외를 어떤 파일이든으로" "$M" sentences "$INT" \
+  || no "변이 준비 실패 — 넓히기"
 M="$(copy_root m-kind)" && mutate "$M/$INT" "  - tag: answered_file
     var: ANSWERED_FILE
     kind: repo_context" "  - tag: answered_file
