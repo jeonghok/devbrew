@@ -215,44 +215,76 @@ def drop_leftovers(work: Path, keep: Path) -> None:
 # ── 테스트 임시 폴더 ─────────────────────────────────────────────────────────
 
 def tmp_candidates() -> list:
-    """테스트에 줄 임시 폴더를 만들 자리 후보 — 차례대로 본다."""
-    return [tempfile.gettempdir(), "/tmp", "/var/tmp"]
+    """테스트에 줄 임시 폴더를 만들 자리 후보 — 차례대로 본다. 기본 임시 자리를 정하지 못하면(OSError) 그 예외가 경로
+    대신 들어간다 — `side_tmps` 가 건너뛰고 대체 길 알림에 까닭을 싣는다."""
+    try:
+        first = tempfile.gettempdir()
+    except OSError as exc:
+        first = exc
+    return [first, "/tmp", "/var/tmp"]
 
 
-def outside_git(path: str) -> bool:
-    """git 작업 트리 밖이면 True. 호출한 쪽의 GIT_DIR · GIT_WORK_TREE 는 빼고 잰다(있으면 어디서나 「안」 이라 답한다)."""
-    env = dict(os.environ)
+def _why(exc: BaseException) -> str:
+    return "%s: %s" % (type(exc).__name__, getattr(exc, "strerror", None) or exc)
+
+
+def outside_git(path: str):
+    """(판정, 까닭). 판정은 git 작업 트리 밖이면 True, 안(작업 트리 · .git 폴더 안)이면 False, 가리지 못하면 None.
+    git 이 「레포가 아니다」 로 답할 때만 밖이다. 호출한 쪽의 GIT_DIR · GIT_WORK_TREE 는 빼고 잰다(있으면 어디서나 「안」
+    이라 답한다). git 의 답은 C 로캘로 받는다."""
+    env = dict(os.environ, LC_ALL="C")
     env.pop("GIT_DIR", None)
     env.pop("GIT_WORK_TREE", None)
-    p = subprocess.run(["git", "-C", path, "rev-parse", "--is-inside-work-tree"], env=env,
-                       capture_output=True, encoding="utf-8", errors="replace")
-    return p.stdout.strip() != "true"
+    try:
+        p = subprocess.run(["git", "-C", path, "rev-parse", "--is-inside-work-tree"], env=env,
+                           capture_output=True, encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return None, _why(exc)
+    if p.returncode == 0:
+        return False, ""
+    if "not a git repository" in p.stderr:   # 파일시스템 경계에서는 끝 줄이 다른 안내다 — 전체에서 찾는다
+        return True, ""
+    lines = [l.strip() for l in p.stderr.splitlines() if l.strip()]
+    fatal = [l for l in lines if l.startswith("fatal:")]
+    return None, (fatal or lines[-1:] or ["git rc %d" % p.returncode])[0]
 
 
 def side_tmps(work: Path):
     """({"base": 폴더, "merged": 폴더}, 알림 또는 None). 후보를 링크를 푼 경로로 견주어 있는 폴더 · 쓸 수 있음 · git
     작업 트리 밖인 첫 자리 아래에 사본마다 하나씩 만든다(돌려주는 폴더도 링크를 푼 경로). 후보가 없으면 실행 폴더 안
-    (work/tmp-<사본>)을 쓰고 알림을 돌려준다. 지우는 것은 `drop_tmps`."""
-    seen = []
+    (work/tmp-<사본>)을 쓰고, 후보마다 떨어진 까닭을 실은 알림을 돌려준다. 지우는 것은 `drop_tmps`."""
+    seen, why = [], []
     for cand in tmp_candidates():
+        if isinstance(cand, BaseException):
+            why.append("기본 임시 자리를 정하지 못했다(%s)" % _why(cand))
+            continue
         real = os.path.realpath(str(cand))
         if real in seen:
             continue
         seen.append(real)
-        if not (os.path.isdir(real) and os.access(real, os.W_OK | os.X_OK)) or not outside_git(real):
+        if not (os.path.isdir(real) and os.access(real, os.W_OK | os.X_OK)):
+            why.append("%s: 쓸 수 있는 폴더가 아니다" % real)
+            continue
+        out, detail = outside_git(real)
+        if out is None:
+            why.append("%s: git 밖인지 가리지 못했다(%s)" % (real, detail))
+            continue
+        if not out:
+            why.append("%s: git 작업 트리 안이다" % real)
             continue
         made = {}
         try:
             for side in SIDES:
                 made[side] = Path(os.path.realpath(tempfile.mkdtemp(prefix="merge-check-%s-" % side, dir=real)))
-        except OSError:
+        except OSError as exc:
             drop_tmps(made)
+            why.append("%s: 폴더를 만들지 못했다(%s)" % (real, _why(exc)))
             continue
         return made, None
     tmps = dict((side, work / ("tmp-" + side)) for side in SIDES)
     for d in tmps.values():
         d.mkdir(parents=True, exist_ok=True)
-    return tmps, TMP_FALLBACK_NOTE
+    return tmps, TMP_FALLBACK_NOTE + (" — 후보마다: " + " · ".join(why) if why else "")
 
 
 def drop_tmps(tmps: dict) -> None:
@@ -294,8 +326,9 @@ def compare_command(cmd: str, pattern, base: Path, merged: Path, work: Path, tmp
     except BaseException as exc:
         try:
             exc.base_run = res["base_run"]
-        except Exception:   # 속성을 받지 않는 예외 — 꼬리는 「돌리지 않았다」 로 접힌다
-            pass
+        except Exception as why:   # 속성을 받지 않는 예외 — 꼬리는 「돌리지 않았다」 로 접힌다
+            print("[spec-distill] 멈춘 예외(%s)에 기준 사본을 어떻게 돌렸는지(%s)를 싣지 못했다(%s) — 머리 줄 꼬리가 "
+                  "실제와 다를 수 있다" % (type(exc).__name__, res["base_run"], type(why).__name__))
         raise
 
 

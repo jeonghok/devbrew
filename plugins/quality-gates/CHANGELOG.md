@@ -8,6 +8,12 @@
 ### Fixed
 - `qg-worktree.sh` 가 앞 사본을 지우기 전에 등록된 worktree 목록(`git worktree list`)을 읽지 못하면 「등록 안 됨」 으로 보고 지우던 것을, 지우지 않고 `등록된 worktree 목록을 읽지 못했다` 사유와 함께 rc 2 로 멈춘다.
 
+## [17.1.1] — 2026-11-24
+
+### Fixed
+- codex 결과 파서(`scripts/codex_findings_to_yaml.py`, 정본 `shared/codex/`)가 깨진 바이트가 섞인 입력에서 UTF-8 로캘이면 `UnicodeDecodeError` 로 죽던 것 — 입력을 바이트로 읽어 깨진 바이트를 대체 글자로 바꾸고 `reason: malformed_json` 으로 강등을 알린다.
+- 문서 비평의 codex 결과 추출기(`scripts/extract_codex_artifact_yaml.py`)가 깨진 바이트가 섞인 입력에서 UTF-8 로캘이면 `UnicodeDecodeError` 로 죽던 것 — 성공 갈래 · 실패 갈래 모두 입력을 바이트로 읽어 깨진 바이트를 대체 글자로 바꾸고 강등(`codex_failed: true`)을 알린다.
+
 ## [17.1.0] — 2026-11-24
 
 ### Changed

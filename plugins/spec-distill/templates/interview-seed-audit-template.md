@@ -70,9 +70,7 @@ source: spec-distill intent-sync
 
 ## 5. degrade
 
-(`framing_degradations` 원장 — `brief_review_state.py degrade-append … --ledger-key
-framing_degradations` 로 기록한 것을 축 구분 없이 전부 그대로 직렬화한다. 원장에
-못 쓰면 그 사실 자체를 게이트 앞 글에 실었다는 것과 함께 여기에도 남긴다. 워크트리를
+(Phase 0 은 degrade 원장에 쓰지 않는다 — 게이트 앞 글에 실은 degrade 줄을 축 구분 없이 전부 그대로 옮긴다. 워크트리를
 만들지 않았으면(거절·`EnterWorktree` 부재·`DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE`) «워크트리
 없음 — <이유>» 한 줄도 여기 남긴다 — degrade 원장과 같은 절이지만 별개 사실이다.)
 

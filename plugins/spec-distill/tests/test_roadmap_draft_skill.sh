@@ -247,6 +247,37 @@ r="$(gen_brief "$c" "$c/docs/superpowers/intent/untracked-context.md")"
 assert_eq "$r" "1|" "brief_rel_from_git: 추적되지 않는 결과물이면 생성기를 부르지 않고 멈춘다"
 assert_contains "$(cat "$T/gen.log")" "결과물의 레포 상대경로를 git 에서 얻지 못했다" "brief_rel_from_git: 그 사유를 보인다"
 
+# 커밋 뒤 끊겨 다시 부른 로드맵 잡기 — 이미 커밋된 로드맵이면 새 커밋 없이 그 사실을 낸다(상태 파일 · 로드맵 폴더가 그대로일 때만)
+c="$(mk again "$DEC")"; generated "$c"; runc "$c" >/dev/null; o="$(runc "$c")"
+assert_eq "$(nhead "$c")" "3" "다시 돌린 커밋 펜스: 새 커밋이 생기지 않는다"
+assert_contains "$o" "[spec-distill] 로드맵 폴더 · 상태 파일은 이미 커밋돼 있다 — " "다시 돌린 커밋 펜스: 이미 커밋됐다는 줄을 낸다"
+assert_not_contains "$o" "커밋이 실패했다" "다시 돌린 커밋 펜스: 실패 줄을 내지 않는다"
+# 양의 짝 — 상태 파일만 바뀌면 새 커밋이 생긴다(「이미 커밋」 이 모든 재실행을 삼키지 않는다)
+c="$(mk again-state "$DEC")"; generated "$c"; runc "$c" >/dev/null
+awk '{print} /^고친 횟수: /{print "승인: 「다시」"}' "$c/$STEM.state.md" > "$c/state.tmp" && mv -- "$c/state.tmp" "$c/$STEM.state.md"
+o="$(runc "$c")"
+assert_eq "$(nhead "$c")" "4" "상태 파일만 바뀜: 새 커밋이 생긴다"
+assert_contains "$o" "[spec-distill] 로드맵 폴더 · 상태 파일을 커밋했다 — " "상태 파일만 바뀜: 커밋했다 줄을 낸다"
+# 양의 짝 — 로드맵 폴더에 추적 안 된 새 파일이 생기면 새 커밋이 생기고 그 파일이 든다
+c="$(mk again-new "$DEC")"; generated "$c"; runc "$c" >/dev/null
+printf '# R2\n' > "$c/$RREL/R2.md"
+o="$(runc "$c")"
+assert_eq "$(nhead "$c")" "4" "추적 안 된 새 파일: 새 커밋이 생긴다"
+assert_eq "$(files_of_head "$c")" "$RREL/R2.md " "추적 안 된 새 파일: 그 커밋에 새 파일이 든다"
+# 사용자 설정 status.showUntrackedFiles=no 에서도 같다 — 추적 안 된 새 파일을 놓치지 않는다
+c="$(mk again-new-no "$DEC")"; generated "$c"; runc "$c" >/dev/null
+git -C "$c" config status.showUntrackedFiles no
+printf '# R2\n' > "$c/$RREL/R2.md"
+o="$(runc "$c")"
+assert_eq "$(nhead "$c")" "4" "표시 설정 no · 추적 안 된 새 파일: 새 커밋이 생긴다"
+assert_contains "$o" "[spec-distill] 로드맵 폴더 · 상태 파일을 커밋했다 — " "표시 설정 no · 추적 안 된 새 파일: 커밋했다 줄을 낸다"
+assert_eq "$(files_of_head "$c")" "$RREL/R2.md " "표시 설정 no · 추적 안 된 새 파일: 그 커밋에 새 파일이 든다"
+# 상태 파일이 인덱스에서 빠지고 git 이 무시하면 「이미 커밋」 을 내지 않는다
+c="$(mk again-ign "$DEC")"; generated "$c"; runc "$c" >/dev/null
+git -C "$c" rm -q --cached -- "$STEM.state.md"; git -C "$c" commit -q -m drop; printf '%s\n' "$STEM.state.md" >> "$c/.git/info/exclude"
+o="$(runc "$c")"
+assert_not_contains "$o" "이미 커밋돼 있다" "무시된 상태 파일: 이미 커밋됐다고 하지 않는다"
+
 # AC19 — 판 · 변경 기록 · README
 ver=$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["version"])' "$SD/.claude-plugin/plugin.json")
 if python3 -I -c 'import sys; sys.exit(0 if tuple(int(x) for x in sys.argv[1].split(".")) >= (9, 0, 0) else 1)' "$ver" 2>/dev/null; then ok "AC19: 판이 9.0.0 이상이다(판 번호는 묶지 않는다 — 9.0.0 의 내용은 CHANGELOG 9.0.0 절이 지킨다)"; else no "AC19: 판이 9.0.0 보다 낮다: ${ver}"; fi

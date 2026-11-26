@@ -9,7 +9,8 @@ MC="$ROOT/plugins/spec-distill/scripts/merge_check.py"
 T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 CT=""   # 장면 18 이 /tmp 아래에 만드는 호출한 쪽 임시 폴더 — trap 이 함께 지운다
-trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"; [ -n "$CT" ] && rm -rf "$CT"' EXIT
+NG=""   # 장면 19 가 /tmp 아래에 만드는 후보 폴더 — trap 이 함께 지운다
+trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"; [ -n "$CT" ] && rm -rf "$CT"; [ -n "$NG" ] && rm -rf "$NG"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 PYTHONDONTWRITEBYTECODE=1
 RM="plan/rm/roadmap.md"
 
@@ -93,15 +94,17 @@ assert_eq "$rc" "1" "unittest: 새 실패 → rc 1"
 assert_contains "$out" "test_a" "unittest: 새 실패 이름"
 assert_eq "$(headline "$out" feature/ut "과 기본 브랜치 사본을 돌렸다")" "1" "탐지 경로: 머리 줄 꼬리는 두 사본을 돌렸다 그대로다"
 
-# 3 — 실행 비트 셸: 양쪽 빨강 · ✗ 줄로 이름 대조
+# 3 — 실행 비트 셸: 양쪽 빨강 · ✗ 줄로 이름 대조 · 탐지 경로는 고쳐짐도 이름으로 보인다
 mkrepo sh
-put tests/t.sh $'#!/usr/bin/env bash\necho "  ✗ 하나"\nexit 1'; chmod +x "$W/tests/t.sh"
+put tests/t.sh $'#!/usr/bin/env bash\necho "  ✗ 하나"\necho "  ✗ 셋"\nexit 1'; chmod +x "$W/tests/t.sh"
 push_base
 put tests/t.sh $'#!/usr/bin/env bash\necho "  ✗ 하나"\necho "  ✗ 둘"\nexit 1'; chmod +x "$W/tests/t.sh"
 branch_with feature/sh
 out="$(mc --branch feature/sh)"; rc=$?
 assert_eq "$rc" "1" "셸: 양쪽 빨간 단위 안의 새 실패 → rc 1"
 assert_contains "$out" "둘" "셸: 새 실패 이름(✗ 줄)"
+assert_contains "$out" "기본 브랜치에만 있는 실패(고쳐짐) 1개: tests/t.sh: 셋" "셸: 탐지 경로는 기본 브랜치에만 있는 실패(고쳐짐)를 이름으로 보인다"
+assert_contains "$out" "양쪽 다 있는 실패 1개: tests/t.sh: 하나" "셸: 원래 있던 실패는 양쪽 다 있는 실패다"
 assert_eq "$(cat "$W/.claude/spec-distill/.gitignore" 2>/dev/null)" "*" "상태 루트: 스위트 대조가 상태 루트를 보장한다(.gitignore)"
 assert_eq "$(git -C "$W" status --porcelain)" "" "상태 루트: 스위트 대조 뒤 git status 가 비었다"
 mkrepo trk; put README.md r; push_base; put x.txt x; branch_with feature/trk
@@ -127,7 +130,7 @@ assert_eq "$rc" "1" "셸: ERROR: 진단 줄이 있어도 양쪽 빨간 단위 �
 assert_contains "$out" "tests/t.sh: b" "셸: 새 실패 이름 b"
 assert_not_contains "$out" "could not reach cache" "셸: ERROR: 진단 줄은 실패 이름이 아니다"
 
-# 4 — test_command(node --test tap) · 고쳐짐도 보인다
+# 4 — test_command(node --test tap) · 목록을 건넨 대조는 고쳐짐을 재지 않았다고 말한다(이름 붙은 고쳐짐은 3 이 잰다)
 mkrepo nd 'test_command: node --test --test-reporter=tap tests/a.test.js\n'
 put tests/a.test.js $'const t = require("node:test"); const a = require("node:assert");\nt("one", () => a.equal(1, 2));\nt("two", () => a.equal(1, 1));'
 push_base
@@ -567,5 +570,125 @@ assert_eq "$(awk -F'\t' '$3 != "out"' "$T/td.log" | wc -l | tr -d ' ')" "0" "탐
 assert_eq "$(awk -F'\t' '$4 != "yes"' "$T/td.log" | wc -l | tr -d ' ')" "0" "탐지 경로: 단위가 받은 TMPDIR 폴더가 실제로 있었다(git 밖 단언이 공허하지 않다)"
 assert_eq "$(awk -F'\t' '$5 != ""' "$T/td.log" | wc -l | tr -d ' ')" "0" "탐지 경로: 호출한 쪽 목록 변수를 단위에 건네지 않는다"
 assert_eq "$(awk -F'\t' '{ n = split($1, a, "/"); m = split($2, b, "/"); if (index(b[m], "merge-check-" a[n] "-") != 1) c++ } END { print c + 0 }' "$T/td.log")" "0" "탐지 경로: 각 사본의 단위는 그 사본의 merge-check-<사본>- 폴더를 TMPDIR 로 받는다"
+
+# 19 — 임시 자리 고르기(tmp_candidates · outside_git · side_tmps)의 갈래를 함수 단위로 잰다. 후보 폴더는 /tmp 아래 git 밖(NG).
+#   side.py <경우> 는 「<경우> note=<알림 또는 ->」 · 「<경우> <사본>=<폴더>」 줄을 내고 만든 폴더를 지운다(죽으면 「<경우> raised=<예외>」).
+NG="$(mktemp -d /tmp/mc-ng.XXXXXX)" || NG=""
+if [ -n "$NG" ] && ! git -C "$NG" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  NG="$(cd "$NG" && pwd -P)"
+  mkrepo st; put a.txt a; push_base; WR="$(cd "$W" && pwd -P)"   # git 안 후보
+  mkdir -p "$NG/a" "$NG/b" "$NG/fakegit" "$NG/fakegit-boundary" "$NG/fakegit-hint"; : > "$NG/file"
+  printf '#!/bin/sh\necho "fatal: boom-e1r" >&2\nexit 1\n' > "$NG/fakegit/git"
+  # 파일시스템 경계의 「레포 아님」 — git 이 두 줄을 내고 끝 줄에는 그 글자가 없다(git 2.54.0 · LC_ALL=C · cwd /dev 실측 글)
+  printf '#!/bin/sh\necho "fatal: not a git repository (or any parent up to mount point /)" >&2\necho "Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set)." >&2\nexit 128\n' > "$NG/fakegit-boundary/git"
+  # 다른 까닭의 실패 뒤에 힌트 줄이 붙는다
+  printf '#!/bin/sh\necho "fatal: boom-hint" >&2\necho "hint: try something else" >&2\nexit 128\n' > "$NG/fakegit-hint/git"
+  chmod +x "$NG/fakegit/git" "$NG/fakegit-boundary/git" "$NG/fakegit-hint/git"
+  cat > "$T/side.py" <<'EOF'
+import os
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import merge_check as m
+ng, repo, case = Path(sys.argv[2]), sys.argv[3], sys.argv[4]
+work = ng / ("work-" + case)
+work.mkdir()
+real_mkdtemp, real_cands = m.tempfile.mkdtemp, m.tmp_candidates
+if case.startswith("gettempdir"):
+    def boom():
+        raise FileNotFoundError(2, "No usable temporary directory found")
+    m.tempfile.gettempdir = boom
+if case == "gettempdir-why":   # 기본 자리의 까닭만 남기고 나머지 후보는 쓸 수 없는 것으로 바꾼다
+    m.tmp_candidates = lambda: [c for c in real_cands() if not isinstance(c, str)] + [str(ng / "file")]
+elif case != "gettempdir":
+    cands = {"mkdtemp": [ng / "a", ng / "b"], "half": [ng / "a", ng / "b"], "dotgit": [Path(repo) / ".git", ng / "b"],
+             "dotgit-why": [Path(repo) / ".git"], "gitenv": [ng / "b"], "unknown": [ng / "b"],
+             "boundary": [ng / "b"], "hint": [ng / "b"], "why": [ng / "file", Path(repo), ng / "a"]}[case]
+    m.tmp_candidates = lambda: [str(c) for c in cands]
+if case in ("mkdtemp", "why", "half"):   # 후보 a 에서만 폴더 만들기가 실패한다(half 는 둘째 사본 폴더에서만)
+    def flaky(*a, **k):
+        if os.path.realpath(str(k.get("dir", ""))) == str(ng / "a") and (
+                case != "half" or k.get("prefix", "").startswith("merge-check-%s-" % m.SIDES[-1])):
+            raise PermissionError(13, "Permission denied")
+        return real_mkdtemp(*a, **k)
+    m.tempfile.mkdtemp = flaky
+if case == "gitenv":   # 호출한 쪽이 다른 레포의 GIT_DIR · GIT_WORK_TREE 를 물려준다
+    os.environ["GIT_DIR"] = str(Path(repo) / ".git")
+    os.environ["GIT_WORK_TREE"] = repo
+FAKE = {"unknown": "fakegit", "boundary": "fakegit-boundary", "hint": "fakegit-hint"}
+if case in FAKE:   # git 이 가짜다 — 「레포 아님」 이 아닌 까닭 · 경계에서 두 줄 · 힌트 줄이 붙은 실패
+    os.environ["PATH"] = str(ng / FAKE[case]) + os.pathsep + os.environ["PATH"]
+try:
+    tmps, note = m.side_tmps(work)
+except BaseException as exc:
+    print("%s raised=%s" % (case, type(exc).__name__))
+    sys.exit(0)
+print("%s note=%s" % (case, note or "-"))
+for side in m.SIDES:
+    print("%s %s=%s" % (case, side, tmps[side]))
+m.drop_tmps(tmps)
+EOF
+  side() { python3 "$T/side.py" "$ROOT/plugins/spec-distill/scripts" "$NG" "$W" "$1" 2>&1; }
+  TR="$(cd /tmp && pwd -P)"
+  o="$(side gettempdir)"
+  assert_not_contains "$o" "raised=" "기본 임시 자리를 정하지 못해도(gettempdir 실패) 내부 오류로 멈추지 않는다"
+  assert_contains "$o" "gettempdir merged=$TR/merge-check-merged-" "기본 임시 자리를 정하지 못하면 다음 후보(/tmp)로 간다"
+  o="$(side gettempdir-why)"
+  assert_contains "$o" "git 작업 트리 밖 임시 폴더를 찾지 못해 실행 폴더 안을 쓴다" "후보가 모두 떨어지면 대체 길(실행 폴더 안)로 간다"
+  assert_contains "$o" "기본 임시 자리를 정하지 못했다(FileNotFoundError: No usable temporary directory found)" "대체 길 알림이 기본 임시 자리를 못 정한 까닭을 싣는다"
+  o="$(side mkdtemp)"
+  assert_contains "$o" "mkdtemp note=-" "첫 후보에서 폴더를 만들지 못해도 다음 후보가 되면 알리지 않는다"
+  assert_contains "$o" "mkdtemp merged=$NG/b/merge-check-merged-" "첫 후보에서 폴더를 만들지 못하면(OSError) 다음 후보로 간다"
+  assert_eq "$(ls -A "$NG/a")" "" "폴더를 만들지 못한 후보에는 아무것도 남기지 않는다"
+  o="$(side dotgit)"
+  assert_contains "$o" "dotgit merged=$NG/b/merge-check-merged-" "레포의 .git 폴더 안(git 이 「작업 트리 안 아님」 이라 답한다)은 git 밖으로 치지 않는다"
+  o="$(side dotgit-why)"
+  assert_contains "$o" "$WR/.git: git 작업 트리 안이다" "레포의 .git 폴더 안은 「안」 으로 판정한다(가리지 못함이 아니다)"
+  o="$(side half)"
+  assert_contains "$o" "half merged=$NG/b/merge-check-merged-" "한 사본 폴더를 만든 뒤 다른 사본 폴더에서 실패하면 다음 후보로 간다"
+  assert_eq "$(ls -A "$NG/a")" "" "반쯤 만든 후보에서 앞서 만든 사본 폴더를 되돌려 아무것도 남기지 않는다"
+  o="$(side gitenv)"
+  assert_contains "$o" "gitenv note=-" "호출한 쪽 GIT_DIR · GIT_WORK_TREE 가 있어도 git 밖 후보를 git 밖으로 잰다(알림 없음)"
+  assert_contains "$o" "gitenv merged=$NG/b/merge-check-merged-" "호출한 쪽 GIT_DIR · GIT_WORK_TREE 를 빼고 재어 git 밖 후보를 쓴다"
+  o="$(side unknown)"
+  assert_contains "$o" "unknown merged=$NG/work-unknown/tmp-merged" "git 이 다른 까닭으로 실패하면 git 밖으로 치지 않고 대체 길로 간다"
+  assert_contains "$o" "$NG/b: git 밖인지 가리지 못했다(fatal: boom-e1r)" "git 밖인지 가리지 못한 까닭을 알림에 싣는다"
+  o="$(side boundary)"
+  assert_contains "$o" "boundary note=-" "파일시스템 경계의 「레포 아님」(두 줄 · 끝 줄에 그 글자 없음)도 git 밖이다(알림 없음)"
+  assert_contains "$o" "boundary merged=$NG/b/merge-check-merged-" "파일시스템 경계의 「레포 아님」 후보를 git 밖으로 쓴다"
+  o="$(side hint)"
+  assert_contains "$o" "hint merged=$NG/work-hint/tmp-merged" "힌트 줄이 붙은 다른 까닭의 실패는 git 밖으로 치지 않는다(전제)"
+  assert_contains "$o" "$NG/b: git 밖인지 가리지 못했다(fatal: boom-hint)" "까닭 글은 힌트 줄이 아니라 fatal: 줄이다"
+  o="$(side why)"
+  assert_contains "$o" "why merged=$NG/work-why/tmp-merged" "후보가 모두 떨어지면 실행 폴더 안을 쓴다(전제)"
+  assert_contains "$o" "$NG/file: 쓸 수 있는 폴더가 아니다" "대체 길 알림: 폴더가 아닌 후보의 까닭"
+  assert_contains "$o" "$WR: git 작업 트리 안이다" "대체 길 알림: git 안 후보의 까닭"
+  assert_contains "$o" "$NG/a: 폴더를 만들지 못했다(PermissionError: Permission denied)" "대체 길 알림: 폴더를 만들지 못한 까닭을 버리지 않는다"
+else
+  no "전제: /tmp 아래에 git 작업 트리 밖 폴더를 만들지 못했다 — 장면 19 를 돌리지 못했다"
+fi
+
+# 19b — 멈춘 예외에 기준 사본 실행 꼴을 싣지 못하면 그 사실을 다른 [spec-distill] 알림과 같은 표준 출력에 한 줄로 남기고
+#   원래 예외를 그대로 올린다
+cat > "$T/sticky.py" <<'EOF'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import merge_check as m
+class Sticky(Exception):
+    def __setattr__(self, key, value):
+        raise AttributeError("read-only")
+def stub(cmd, pattern, base, merged, work, tmps, res):
+    res["base_run"] = "listed"
+    raise Sticky("x")
+m._compare_command = stub
+try:
+    m.compare_command("true", None, Path("."), Path("."), Path("."), {})
+except Sticky:
+    print("reraised Sticky")
+EOF
+o="$(python3 "$T/sticky.py" "$ROOT/plugins/spec-distill/scripts" 2>/dev/null)"
+assert_contains "$o" "reraised Sticky" "실행 꼴을 싣지 못해도 원래 예외를 그대로 올린다"
+assert_contains "$o" "[spec-distill] 멈춘 예외(Sticky)에 기준 사본을 어떻게 돌렸는지(listed)를 싣지 못했다(AttributeError) — 머리 줄 꼬리가 실제와 다를 수 있다" "실행 꼴을 싣지 못하면 표준 출력에 한 줄로 알린다"
 
 finish
