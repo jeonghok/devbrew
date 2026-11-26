@@ -440,6 +440,18 @@ class TestQgAnsweredEdges(unittest.TestCase):
         p = e4.run(["main", "docs/records"])
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(self.keys(e4), [NAME2 + "#1"])
+        # 글로 읽지 못한 파일(UTF-8 아님)도 같은 대상을 막는다
+        e5 = Env(self)
+        commit_files(e5.repo, {rpath(NAME): good_record(), rpath(NAME2): good_record()})
+        with open(os.path.join(e5.repo, rpath(later)), "wb") as fh:
+            fh.write(b"---\xff\n")
+        run_git(e5.repo, "add", "-A")
+        run_git(e5.repo, "commit", "-q", "-m", "bin")
+        p = e5.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.keys(e5), [NAME2 + "#1"])
+        self.assertEqual(e5.notice_text().splitlines(),
+                         ["읽지 못한 기록 1개: main:%s" % rpath(later)])
 
     def test_out_of_template_name_drops_all(self):
         # 이름이 틀(`<YYYY-MM-DD>-<대상>-<자리>[-<n>].md`) 밖인 기록이 하나라도 있으면 대상을 가릴 수 없어
