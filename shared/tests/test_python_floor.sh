@@ -572,7 +572,7 @@ for hj in $HOOKS_JSONS; do   # 축 B 머리에서 git ls-files 로 도출했다
       *.py) ok "C/AC1: 마지막 토큰이 훅 .py 다 ($last)" ;;
       *)    no "C/AC1: 마지막 토큰이 훅 .py 가 아니다 ($last) — test_command_contract.py 가 깨진다" ;;
     esac
-    # --event / --plugin / --hook 셋이 다 있다(해석기는 받되 쓰지 않는다 — 훅 등록 파일과의 호환)
+    # --event / --plugin / --hook 셋이 다 있다(해석기는 --plugin · --hook 을 받되 쓰지 않고 --event 는 바닥 미만 안내에만 쓴다 — 훅 등록 파일과의 호환)
     for flag in --event --plugin --hook; do
       case "$cmd" in *"$flag "*) ;; *) no "C/AC1: $hj 의 자리에 $flag 가 없다" ;; esac
     done

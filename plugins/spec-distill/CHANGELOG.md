@@ -19,7 +19,7 @@
 - `DEVBREW_SKIP_HOOKS=spec-distill:statusline` — 대신: 상태줄 설정을 지운다
 - `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` · `DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup` — 대신: 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다
 - `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` — 대신: 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다
-- 위 두 줄의 정리 끄기를 켜 둔 사용자는 정리가 다시 돈다 — 지워지는 것은 문서가 사라진 리뷰 원장이다. 미루려면 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다.
+- 위 두 줄의 정리 끄기를 켜 둔 사용자는 정리가 다시 돈다 — 지워지는 것은 문서가 사라진 리뷰 원장과, `state.local.md` 가 없고 유예 시간이 지난 옛 세션 폴더다. 미루려면 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다.
 - 진입 사전 검사(`scripts/entry_preflight.py`)의 통째 끄기 판정 — `disabled` 감시줄과 `switch_name` 갈래. 끄기 변수가 켜져 있어도 사전 검사는 `ok` 감시줄을 낸다.
 - 진입 skill 의 통째 끄기 판독 표 행.
 - 끄기 판정 정본 `kill_switch_active.py` 의 사본(`scripts/kill_switch_active.py`)과 지도 · 원장 정리, `spec-review` 진입 검사(`review_entry.py`)의 스위치 갈래.
