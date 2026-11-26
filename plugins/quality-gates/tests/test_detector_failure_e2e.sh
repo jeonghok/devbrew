@@ -36,6 +36,7 @@ fresh() {
   RDIR="$G/.claude/quality-gates/$SID"; mkdir -p "$RDIR"
   printf 'diff --git a/src/a.py b/src/a.py\n--- a/src/a.py\n+++ b/src/a.py\n@@ -1 +1 @@\n-x\n+y\ndiff --git a/src/b.py b/src/b.py\n--- a/src/b.py\n+++ b/src/b.py\n@@ -1 +1 @@\n-p\n+q\n' > "$RDIR/review-i1.diff"
   printf '# 설계\n\n입력을 매개변수로 넘긴다.\n' > "$RDIR/intent.md"
+  printf 'src/a.py\nsrc/b.py\n' > "$RDIR/review-i1.names"
   local out
   out="$(run_fence 'RV="$(mktemp -d)"' rv --sub '<8 hex>' 0a1b2c3d \
     --sub '<P3 에서 찍은 intent: 줄 — 한 줄, 글자 그대로>' 'intent: spec docs/x.md — 설계')"
@@ -67,7 +68,9 @@ values() { tail -q -n 1 "$RDIR/review-i1-slot-$1-b$2-t$3-"*.txt; }
 # prepare_and_synth <recritic 블록> — Step 3.5 익명화 펜스 → 재비판 응답 → Step 4 합성 펜스.
 prepare_and_synth() {
   PREP_OUT="$(run_fence 'synthesize_findings.py" prepare' prep --sub "$P_RV" "$RVD")"; PREP_RC=$?
-  { printf '재비판을 마쳤다.\n\n```qg-recritic\n%s\n```\n' "$1"; } > "$RVD/recritic.txt"
+  # 재비판자는 칸 사본 넷의 끝 값을 응답 맨 앞에 적는다(Step 3.5 — 합성기가 견준다).
+  { tail -q -n 1 "$RDIR"/review-i1-slot-recritic-b1-t1-*.txt
+    printf '재비판을 마쳤다.\n\n```qg-recritic\n%s\n```\n' "$1"; } > "$RVD/recritic.txt"
   SYNTH_OUT="$(run_fence '--pre-merge-out "$RD/findings-pre-merge.yaml"' synth --sub "$P_RV" "$RVD" --sub '<위 표의 판정 입력>' '')"
 }
 yaml_finding() {  # <agent> <file> <severity> <summary>
@@ -95,6 +98,8 @@ prepare_and_synth 'verdicts:
   - f: f1
     verdict: confirm'
 assert_eq "$PREP_RC" "0" "Step 3.5 익명화 펜스가 0 으로 끝난다"
+assert_eq "$(ls "$RDIR" | grep -c '^review-i1-slot-recritic-b1-t1-')" "4" "재비판 칸 사본 넷이 세션 폴더에 있다"
+assert_not_contains "$SYNTH_OUT" "입력 실패(주): code-recritic" "끝 값을 적은 재비판 응답은 죽은 것으로 세지 않는다"
 assert_contains "$(cat "$RVD/recritic-findings.yaml" 2>/dev/null)" "$SUM_S" "실패한 보안 응답의 지적이 익명 목록에 있다"
 assert_contains "$SYNTH_OUT" "$SUM_S 를 고친다" "그 지적이 합성 출력의 고칠 목록에 있다"
 assert_contains "$SYNTH_OUT" "verdict: not-certified" "판정은 not-certified"

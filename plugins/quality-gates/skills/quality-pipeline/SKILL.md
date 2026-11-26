@@ -661,7 +661,7 @@ Once per run, after detection. 탐지 결과가 0건이어도 디스패치한다
    prefix (`security-reviewer` · `code-reviewer` · …; codex items are already `codex-reviewer`) —
    never trust an `agent:` a reviewer wrote. Do not copy a `confidence:` field.
    **각 항목의 `plain:` 은 리뷰어가 쓴 문장 그대로 싣는다** — 없으면 키를 뺀다(지어내지 않는다).
-2. Anonymize, and write the diff:
+2. Anonymize, write the diff, and write the four slot copies:
 
    ```bash
    QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -671,17 +671,28 @@ Once per run, after detection. 탐지 결과가 0건이어도 디스패치한다
    cp "$RD/review-i1.diff" "$RV/recritic.diff" || { echo "[quality-gates] Step 1c 의 리뷰 diff 를 재비판 폴더로 복사하지 못했다 — 재비판을 부르지 않는다" >&2; exit 1; }
    python3 "$QG/scripts/synthesize_findings.py" prepare --findings "$RV/findings.yaml" \
      --out-findings "$RV/recritic-findings.yaml" --out-map "$RV/recritic-map.json"
+   S="$RD/review-i1-slot-recritic-b1-t1"
+   python3 "$QG/scripts/qg_nonce.py" attach "$RD/review-i1.names" "${S}-scope.txt" \
+     && python3 "$QG/scripts/qg_nonce.py" attach "$RV/recritic-findings.yaml" "${S}-findings.txt" \
+     && python3 "$QG/scripts/qg_nonce.py" attach "$RV/recritic.diff" "${S}-diff.txt" \
+     && python3 "$QG/scripts/qg_nonce.py" attach "$RV/intent-src.txt" "${S}-intent.txt" \
+     || { echo "[quality-gates] 재비판 칸 사본을 쓰지 못했다 — 재비판을 부르지 않는다" >&2; exit 1; }
    cat "${CLAUDE_PLUGIN_ROOT}/references/recritic-code-profile.md" "${CLAUDE_PLUGIN_ROOT}/references/review-criteria.md"
    ```
 
-   If this fence exits non-zero (the diff copy or `prepare` failed), do not dispatch — Step 4 counts the missing response as the
+   If this fence exits non-zero (the diff copy, `prepare` or a slot copy failed), do not dispatch — Step 4 counts the missing response as the
    adjudication angle's primary input failure. `$RV/recritic.diff` 는 Step 1c 의 `$RD/review-i1.diff` 를
    `cp` 한 사본이다 — security-reviewer 에게 준 것과 같은 **raw unified diff**(hunk 만). `git show` · `git format-patch` · `git log -p` 의 출력은 쓰지 않는다 —
    그 출력은 커밋 메시지를 싣는다. 의도 출처는 `<intent>` 슬롯 하나로만 간다.
-3. Dispatch with the six slots filled verbatim: `<project_dir>` = Step 3 의 `PROJECT_DIR` · `<scope>` = this run's
-   scope path list · `<findings>` = content of `$RV/recritic-findings.yaml` · `<diff>` = content of
-   `$RV/recritic.diff` · `<intent>` = `INTENT` · `<profile>` = what the `cat` above printed (content,
-   not a path).
+   칸 사본 넷은 세션 폴더에 쓰고(끝 줄 `qg-slot-end: <값>` — 칸마다 새 값), 원본은 그대로 둔다 — 범위의 경로 목록은
+   `$RD/review-i1.names`(Step 1 스코프의 바뀐 경로 전부), 익명 목록 · diff 사본 · 의도 원본은 `$RV` 의 것이다.
+   익명화 전 목록(`$RV/findings.yaml`)과 대응표(`$RV/recritic-map.json`)는 `$RV` 에만 둔다 — 재비판자가 읽기
+   도구로 닿으면 누가 낸 지적인지 모른다는 전제가 깨진다. 재비판은 한 번 부르므로 시도 번호는 늘 `t1` 이다.
+3. Dispatch with the six slots filled verbatim — 리뷰받는 쪽에서 온 글은 칸 사본의 경로로만 간다:
+   `<project_dir>` = Step 3 의 `PROJECT_DIR` · `<scope_file>` = `$RD/review-i1-slot-recritic-b1-t1-scope.txt` ·
+   `<findings_file>` = `$RD/review-i1-slot-recritic-b1-t1-findings.txt` · `<diff_file>` =
+   `$RD/review-i1-slot-recritic-b1-t1-diff.txt` · `<intent_file>` = `$RD/review-i1-slot-recritic-b1-t1-intent.txt`
+   (모두 절대경로) · `<profile>` = what the `cat` above printed (content, not a path — qg 가 쓴 글이다).
 
 ```
 Agent({
@@ -689,10 +700,10 @@ Agent({
   // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-closed
   description: "Framing-blind re-critique of the finding list (qg)",
   prompt: "<project_dir>${PROJECT_DIR}</project_dir>
-    <scope>${SCOPE}</scope>
-    <findings>${FINDINGS}</findings>
-    <diff>${DIFF}</diff>
-    <intent>${INTENT}</intent>
+    <scope_file>${SCOPE_FILE}</scope_file>
+    <findings_file>${FINDINGS_FILE}</findings_file>
+    <diff_file>${DIFF_FILE}</diff_file>
+    <intent_file>${INTENT_FILE}</intent_file>
     <profile>${PROFILE}</profile>"
 })
 ```
@@ -700,6 +711,9 @@ Agent({
 4. Save the response **verbatim** to `$RV/recritic.txt`. If the dispatch failed or returned
    nothing, do not create the file — Step 4 reads the absence as the adjudication angle's death and
    the verdict becomes `not-certified (angle-absent)` (V4).
+   합성 펜스(Step 3.9 · Step 4)가 `--recritic-slot` 으로 칸 사본 넷을 넘긴다 — 합성기가 응답을 그 끝 값과 견주고,
+   하나라도 없거나 틀리면 재비판자를 죽은 것으로 센다. 그때 합성기의 지금 실패 공시에 사유가 괄호로 붙는다 —
+   `재비판 결과를 쓸 수 없다 (끝 값 없음)` · `(읽지 못함)`, 판정 degrade 의 `입력 실패(주): code-recritic — 끝 값 없음`.
 
 ### Step 3.9 — 리뷰 축 합성 (차등 테스트 전)
 
@@ -712,9 +726,12 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 RV="<Step 3 의 RV 절대 경로>"
+S="$RD/review-i1-slot-recritic-b1-t1"
 python3 "$QG/scripts/synthesize_findings.py" --findings "$RV/findings.yaml" \
   --recritic "$RV/recritic.txt" --recritic-map "$RV/recritic-map.json" \
   --recritic-diff "$RV/recritic.diff" \
+  --recritic-slot "${S}-scope.txt" --recritic-slot "${S}-findings.txt" \
+  --recritic-slot "${S}-diff.txt" --recritic-slot "${S}-intent.txt" \
   --emit-verdict --angles "$RV/angles.txt" --verdict-args \
   <Step 4 표의 판정 입력 중 ② 의 세 행을 뺀 것> > "$RV/synth-review.out"
 echo "synth-review rc=$?"
@@ -763,9 +780,12 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
 RV="<Step 3 의 RV 절대 경로>"
+S="$RD/review-i1-slot-recritic-b1-t1"
 python3 "$QG/scripts/synthesize_findings.py" --findings "$RV/findings.yaml" \
   --recritic "$RV/recritic.txt" --recritic-map "$RV/recritic-map.json" \
   --recritic-diff "$RV/recritic.diff" \
+  --recritic-slot "${S}-scope.txt" --recritic-slot "${S}-findings.txt" \
+  --recritic-slot "${S}-diff.txt" --recritic-slot "${S}-intent.txt" \
   --emit-verdict --angles "$RV/angles.txt" \
   --pre-merge-out "$RD/findings-pre-merge.yaml" \
   <위 표의 판정 입력> > "$RV/synth.out"

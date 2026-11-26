@@ -588,11 +588,21 @@ def _read_text(path):
         return None, type(exc).__name__
 
 
-def load_recritic(recritic_path, map_path, diff_path, ledger):
-    """`--recritic` 진입점. 역매핑 항목의 형태도 믿지 않는다. Returns `(doc, dead)`."""
+def load_recritic(recritic_path, map_path, diff_path, ledger, slot_paths=None):
+    """`--recritic` 진입점. 역매핑 항목의 형태도 믿지 않는다. Returns `(doc, dead)`.
+
+    `slot_paths`(`--recritic-slot`)가 있으면 응답을 그 칸 사본들의 끝 값과 먼저 견준다 — 하나라도
+    없거나 틀리면 재비판자는 칸을 끝까지 읽지 않은 것이라 죽은 것으로 센다(사유 `끝 값 없음` ·
+    `읽지 못함`). 끝 값이 모두 맞으면 `QG_INPUT_UNREADABLE:` 줄을 인용해도 실패가 아니다.
+    """
     text, why = _read_text(recritic_path)
     if text is None:
         return _dead(ledger, f"응답 파일 {recritic_path}: {why}")
+    if slot_paths:
+        import qg_nonce
+        reason = qg_nonce.check(text, list(slot_paths))
+        if reason is not None:
+            return _dead(ledger, reason)
     mtext, why = _read_text(map_path)
     if mtext is None:
         return _dead(ledger, f"역매핑 {map_path}: {why}")
@@ -888,6 +898,8 @@ def main(argv=None):
     ap.add_argument("--recritic", default=None)
     ap.add_argument("--recritic-map", default=None)
     ap.add_argument("--recritic-diff", default=None)
+    # 재비판자에게 경로로 넘긴 칸 사본(끝 줄 `qg-slot-end: <값>`) — 여러 번 준다.
+    ap.add_argument("--recritic-slot", action="append", default=[])
     # 사용자가 「낮춘 지적」 게이트에서 되올린 번호 — `L<k>` 쉼표 목록 또는 `all`.
     ap.add_argument("--restore-lowered", default=None)
     ap.add_argument("--pre-merge-out", default=None)
@@ -905,6 +917,10 @@ def main(argv=None):
         _usage("--recritic 과 --recritic-map 은 함께 준다")
     if args.recritic_diff is not None and args.recritic is None:
         _usage("--recritic-diff 는 --recritic 없이 의미가 없다")
+    if args.recritic_slot and args.recritic is None:
+        _usage("--recritic-slot 은 --recritic 없이 의미가 없다")
+    if any(s == "" for s in args.recritic_slot):
+        _usage("--recritic-slot 은 빈 문자열을 받지 않는다 (플래그를 생략하거나 실제 경로를 줘라)")
     restore = _parse_restore(args.restore_lowered)
     if restore is not None and args.recritic is None:
         _usage("--restore-lowered 는 --recritic 없이 의미가 없다 (낮춘 지적은 재비판이 만든다)")
@@ -921,7 +937,7 @@ def main(argv=None):
     ledger = Ledger(items="open")
     if args.recritic is not None:
         doc, adjudicator_dead = load_recritic(
-            args.recritic, args.recritic_map, args.recritic_diff, ledger)
+            args.recritic, args.recritic_map, args.recritic_diff, ledger, args.recritic_slot)
     else:
         doc, adjudicator_dead = None, False
     verdicts, dropped_verdicts = extract_verdicts(doc, ledger=ledger)

@@ -23,6 +23,10 @@
 #                             diff 에 없는 경로면 멈춘다 · Step 3 에 diff 를 손으로 쓰는 here-doc 이 없다(AC27).
 #   check_fence_end_line    — 응답 사본 · 대조 펜스를 돌린다 — 값 없음 · 읽지 못함 · 인용한 읽지 못함 줄(AC4).
 #   check_reviewer_fence    — 리뷰어 대조 펜스가 check-reviewer 를 한 번 부르고 한 묶음 실패를 리뷰어 실패로 낸다.
+#   recritic_dispatch_paths — 재비판 dispatch 가 경로 칸 넷을 싣고 글 칸(scope · findings · diff · intent)을 싣지 않는다.
+#   synth_fences_pass_slots — Step 3.9 · Step 4 합성 펜스가 둘 다 `--recritic-slot` 넷(재비판 칸 사본)을 넘긴다.
+#   pre_anon_not_in_session — 익명화 전 목록 · 대응표 · 응답 사본은 `$RV` 에만 — 본문에 `$RD/findings.yaml` ·
+#                             `$RD/recritic-map` · `$RD/resp-` 가 없다(AC2).
 #   slot_copies_cleared_next_start — 앞 실행의 칸 사본을 P2 펜스가 지운다 · review-i* 지우기를 뺀 사본은 RED(AC32).
 #   qg_names_slot           — review-diff.sh 의 QG_NAMES 가 칸 사본 이름 꼴을 알아보고 꼴 밖은 알아보지 않는다.
 #   mutations               — 리뷰어 정의의 규칙은 보안 갈래라 변이 넷(지우기 · 뒤집기 · 다른 리뷰어 이름 더하기 ·
@@ -452,6 +456,30 @@ rm -f "$RDIR"/review-i1-slot-security-b1-t2-* "$RDIR"/review-i1-slot-security-b3
 out="$(fence_run 'qg_nonce.py" check-reviewer' crf --sub "$P_RV" "$RVD" --sub '<리뷰어 이름>' security)"
 assert_eq "$(printf '%s\n' "$out" | tail -1)" "security: fail: 끝 값 없음" "한 묶음만 값 없음 → 리뷰어 끝 줄이 security: fail: 끝 값 없음"
 assert_contains "$out" "b1: ok" "맞은 묶음은 ok 로 보인다"
+
+note "── recritic_dispatch_paths"
+S35="$(awk '/^### Step 3\.5 /{f=1;next} f&&/^### /{exit} f' "$SKILLF")"
+REC_F="$(printf '%s\n' "$S35" | awk '/^```$/{if(f){if(b ~ /quality-gates:code-recritic/){printf "%s", b; exit}; f=0; b=""; next} f=1; next} f{b=b $0 "\n"}')"
+[ -n "$REC_F" ] && ok "재비판 dispatch 펜스를 뽑았다" || no "재비판 dispatch 펜스가 없다 — 아래가 공허하다"
+for s in scope findings diff intent; do
+  U="$(printf '%s' "$s" | tr '[:lower:]' '[:upper:]')"
+  assert_contains "$REC_F" "<${s}_file>\${${U}_FILE}</${s}_file>" "재비판 dispatch: ${s} 칸은 경로(${s}_file)"
+  assert_not_contains "$REC_F" "<${s}>\${${U}}" "재비판 dispatch: ${s} 글 칸이 없다"
+done
+assert_contains "$REC_F" '<profile>${PROFILE}</profile>' "재비판 dispatch: 프로필은 그대로 글(qg 가 쓴 글)"
+
+note "── synth_fences_pass_slots"
+for m in 'synth-review.out"' '--pre-merge-out "$RD/findings-pre-merge.yaml"'; do
+  F="$(python3 "$FENCE" "$SKILLF" "$m" 2>&1)"
+  for s in scope findings diff intent; do
+    assert_contains "$F" "--recritic-slot \"\${S}-${s}.txt\"" "합성 펜스(${m%%\"*}): --recritic-slot ${s}"
+  done
+  assert_contains "$F" 'S="$RD/review-i1-slot-recritic-b1-t1"' "합성 펜스(${m%%\"*}): 칸 사본 자리는 세션 폴더의 재비판 사본"
+done
+
+note "── pre_anon_not_in_session"
+assert_not_grep "$(cat "$SKILLF")" '\$RD/findings\.yaml|\$RD/recritic-map|\$RD/resp-' "본문에 세션 폴더의 익명화 전 목록 · 대응표 · 응답 사본이 없다"
+assert_count_ge "grep -c '\$RV/recritic-map.json' '$SKILLF'" 1 "대응표는 \$RV 에 있다(양성 짝)"
 
 note "── slot_copies_cleared_next_start"
 P2W="$(awk '/^\*\*P2 — setup\.\*\*/{f=1} /^\*\*P3 /{f=0} f' "$SKILLF")"
