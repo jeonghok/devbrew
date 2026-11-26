@@ -176,56 +176,64 @@ unittest_has_bare_test() {
   grep -qE '^(async[[:space:]]+)?def[[:space:]]+test' "$1/$2" 2>/dev/null
 }
 
-# 불러 보기(§5). argv: <결과 파일> <파일>... — 한 폴더의 파일들. 그 폴더에 `__init__.py` 가 있거나 폴더가 `.` 이면
+# 불러 보기(§5). argv: <결과 파일> <파일>... — 한 폴더의 파일들. `-c` 가 sys.path[0] 에 두는 '' 는 `-m` 처럼 그때의
+# 작업 폴더 절대경로로 바꾼다. 쓰기 함수는 함수 안에 두어 `__main__` 의 이름이 아니다. 그 폴더에 `__init__.py` 가 있거나 폴더가 `.` 이면
 # 트리 최상위를 sys.path 앞에 두고 점 이름으로, 아니면 그 폴더를 앞에 두고 바탕 이름으로 부른다(실행 줄과 같은 꼴).
 # 그 모듈에서 정의된 모듈 수준 클래스 가운데 이름이 Test 로 시작하거나 test 로 시작하는 이름(물려받은 것 포함)을
 # 가진 것이 모두 unittest.TestCase 의 자손이면 claim. 판정은 결과 파일의 줄로만 낸다 — 표준 출력 · 종료 코드는 보지 않는다.
 UT_PROBE='import importlib, os, sys, unittest
-out_path, files = sys.argv[1], sys.argv[2:]
-sys.argv = sys.argv[:1]
-top = os.getcwd()
-out = open(out_path, "w", encoding="utf-8")
-def put(f, *cells):
-    out.write("\t".join((f,) + cells) + "\n")
-    out.flush()
-for f in files:
-    d, b = os.path.split(f)
-    d = d or "."
-    stem = b[:-3] if b.endswith(".py") else b
-    if d == "." or os.path.isfile(os.path.join(d, "__init__.py")):
-        name, entry = (stem if d == "." else d.replace("/", ".") + "." + stem), top
-    else:
-        name, entry = stem, os.path.join(top, d)
-    saved = list(sys.path)
-    sys.path.insert(0, entry)
-    try:
-        mod = importlib.import_module(name)
-    except BaseException as exc:
-        put(f, "no", "import " + type(exc).__name__)
-        continue
-    finally:
-        sys.path[:] = saved
-    bad = []
-    try:
-        for key, val in list(vars(mod).items()):
-            if not isinstance(val, type) or getattr(val, "__module__", None) != mod.__name__:
-                continue
-            if key.startswith("Test") or any(n.startswith("test") for n in dir(val)):
-                if not issubclass(val, unittest.TestCase):
-                    bad.append(key)
-    except BaseException as exc:
-        put(f, "no", "inspect " + type(exc).__name__)
-        continue
-    if bad:
-        put(f, "no", "TestCase 자손이 아닌 테스트 클래스 " + ",".join(bad))
-    else:
-        put(f, "claim")
-out.close()
+if sys.path and sys.path[0] == "":
+    sys.path[0] = os.getcwd()
+def _probe():
+    out_path, files = sys.argv[1], sys.argv[2:]
+    sys.argv = sys.argv[:1]
+    top = os.getcwd()
+    out = open(out_path, "w", encoding="utf-8")
+    def put(f, *cells):
+        out.write("\t".join((f,) + cells) + "\n")
+        out.flush()
+    for f in files:
+        d, b = os.path.split(f)
+        d = d or "."
+        stem = b[:-3] if b.endswith(".py") else b
+        if d == "." or os.path.isfile(os.path.join(d, "__init__.py")):
+            name, entry = (stem if d == "." else d.replace("/", ".") + "." + stem), top
+        else:
+            name, entry = stem, os.path.join(top, d)
+        saved = list(sys.path)
+        sys.path.insert(0, entry)
+        try:
+            mod = importlib.import_module(name)
+        except BaseException as exc:
+            put(f, "no", "import " + type(exc).__name__)
+            continue
+        finally:
+            sys.path[:] = saved
+        bad = []
+        try:
+            for key, val in list(vars(mod).items()):
+                if not isinstance(val, type) or getattr(val, "__module__", None) != mod.__name__:
+                    continue
+                if key.startswith("Test") or any(n.startswith("test") for n in dir(val)):
+                    if not issubclass(val, unittest.TestCase):
+                        bad.append(key)
+        except BaseException as exc:
+            put(f, "no", "inspect " + type(exc).__name__)
+            continue
+        if bad:
+            put(f, "no", "TestCase 자손이 아닌 테스트 클래스 " + ",".join(bad))
+        else:
+            put(f, "claim")
+    out.close()
+_probe()
 '
 
 # unittest 실행(§5). argv[1:] 는 `-m unittest` 의 인자 그대로다(argv[0] 은 프로그램 이름 자리). 테스트 0개로 끝나면 5(오류) — 파이썬 판에 따라
-# 통과(3.12 미만)와 오류(3.12 부터)로 갈리지 않게 한다. 실패 · 오류는 1, 통과는 0.
-UT_RUN='import sys, unittest
+# 통과(3.12 미만)와 오류(3.12 부터)로 갈리지 않게 한다. 실패 · 오류는 1, 통과는 0. sys.path[0] 은 `-m unittest` 와 같게
+# 작업 폴더 절대경로다(`-c` 의 '' 는 테스트가 작업 폴더를 옮기면 다른 곳을 가리킨다).
+UT_RUN='import os, sys, unittest
+if sys.path and sys.path[0] == "":
+    sys.path[0] = os.getcwd()
 prog = unittest.main(module=None, argv=sys.argv, exit=False)
 res = prog.result
 sys.exit(5 if res.testsRun == 0 else (0 if res.wasSuccessful() else 1))
@@ -423,7 +431,7 @@ tree_is_disposable() {
 # assign 의 unittest 불러 보기(§5 · AC20 · AC28). IN_R 이 `?` 인 입력을 모아 한 번 판정해 `unittest` 또는 빈 값으로 바꾼다.
 # 관문: 일회용 트리 → adapter_usable(kill switch → 감지 → 환경 폴더 무시 여부 → 준비 → 러너). 멈추면 불러 보지 않는다.
 unittest_probe() {
-  local i d n_q=0 res line pf pv dirs="" files
+  local i d n_q=0 res line pf pv nv dirs="" files
   for ((i = 0; i < n_in; i++)); do [[ "${IN_R[i]}" == "?" ]] && n_q=$((n_q + 1)); done
   [[ $n_q -eq 0 ]] && return 0
   if ! tree_is_disposable "$w"; then
@@ -445,10 +453,12 @@ unittest_probe() {
       ( cd "$w" && PYTHONDONTWRITEBYTECODE=1 "${PY_ARGV[@]}" -c "$UT_PROBE" "$res" "${files[@]}" ) >&2 2>&1 </dev/null
       for ((i = 0; i < n_in; i++)); do
         [[ "${IN_R[i]}" == "?" && "$(dirname -- "${IN_F[i]}")" == "$d" ]] || continue
-        pv=""
+        # 판정 줄은 파일마다 정확히 하나여야 읽는다 — 불러 본 모듈이 줄을 더 썼으면 맡지 않는다.
+        pv=""; nv=0
         while IFS=$'\t' read -r pf line; do
-          [[ "$pf" == "${IN_F[i]}" ]] && { pv=$line; break; }
+          [[ "$pf" == "${IN_F[i]}" ]] && { pv=$line; nv=$((nv + 1)); }
         done < "$res"
+        [[ $nv -gt 1 ]] && pv="판정 줄이 ${nv}개"
         if [[ "$pv" == "claim" ]]; then
           IN_R[i]=unittest
         else

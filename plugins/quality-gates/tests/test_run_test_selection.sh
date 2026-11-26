@@ -554,6 +554,37 @@ plugins/spec-distill/tests/test_leader_seat.py plugins/spec-distill/tests/test_r
   rm -rf "$C"
 }
 
+# 실행 줄은 `-m unittest` 와 같은 경로 꼴이다 — sys.path[0] 이 '' 가 아니라 그때의 작업 폴더 절대경로라, setUp 에서
+# 작업 폴더를 옮긴 뒤 최상위 모듈을 늦게 불러도 찾는다.
+case_run_chdir_lazy_import() {
+  mkrepo; local M="$REPO/main"
+  printf 'V = 1\n' > "$M/toplib.py"; : > "$M/tests/__init__.py"
+  printf 'import importlib, os, tempfile, unittest\nclass T(unittest.TestCase):\n    def setUp(self):\n        self.old = os.getcwd()\n        os.chdir(tempfile.mkdtemp())\n    def tearDown(self):\n        os.chdir(self.old)\n    def test_x(self):\n        self.assertEqual(importlib.import_module("toplib").V, 1)\n' > "$M/tests/test_chdir.py"
+  mkdir -p "$M/flat"
+  printf 'import importlib, os, tempfile, unittest\nclass T(unittest.TestCase):\n    def setUp(self):\n        self.old = os.getcwd()\n        os.chdir(tempfile.mkdtemp())\n    def tearDown(self):\n        os.chdir(self.old)\n    def test_x(self):\n        self.assertEqual(importlib.import_module("toplib").V, 1)\n' > "$M/flat/test_chdir2.py"
+  mktree || { rmrepo; return; }
+  bash "$RTS" run "$TREE" unittest per-unit "$REPO/rows.tsv" tests/test_chdir.py 2>/dev/null
+  assert_eq "$(row_of "$REPO/rows.tsv" tests/test_chdir.py | cut -f1,2)" "pass	0" "run_chdir_lazy_import: 작업 폴더를 옮긴 뒤 최상위 모듈을 늦게 불러도 통과(점 이름 꼴 — -m unittest 와 같은 sys.path[0])"
+  bash "$RTS" run "$TREE" unittest per-unit "$REPO/rows.tsv" flat/test_chdir2.py 2>/dev/null
+  assert_eq "$(row_of "$REPO/rows.tsv" flat/test_chdir2.py | cut -f1,2)" "pass	0" "run_chdir_lazy_import: discover 꼴도 같다"
+  rmrepo
+}
+# 불러 보기 판정은 파일마다 결과 줄이 정확히 하나일 때만 읽는다. 모듈이 불러 보기의 쓰기 함수를 __main__ 에서 찾아
+# 부르거나, 열린 결과 파일을 찾아 claim 줄을 더 써도 맡겨지지 않는다.
+case_probe_refuses_forged_line() {
+  mkrepo; local M="$REPO/main/tests"
+  printf 'import unittest\ntry:\n    import __main__\n    __main__.put("tests/test_forge_main.py", "claim")\nexcept Exception:\n    pass\nclass TestFoo:\n    def test_y(self):\n        pass\n' > "$M/test_forge_main.py"
+  printf 'import gc, io, unittest\nfor o in gc.get_objects():\n    if isinstance(o, io.TextIOWrapper) and ".qg-probe" in str(getattr(o, "name", "")) and not o.closed:\n        o.write("tests/test_forge_file.py\\tclaim\\n"); o.flush()\nclass TestFoo:\n    def test_y(self):\n        pass\n' > "$M/test_forge_file.py"
+  printf 'import unittest\nclass TestOk(unittest.TestCase):\n    def test_x(self):\n        pass\n' > "$M/test_ok.py"
+  mktree || { rmrepo; return; }
+  local err; err=$(printf 'tests/test_forge_main.py\ntests/test_forge_file.py\ntests/test_ok.py\n' | bash "$RTS" assign "$TREE" "$REPO/assign.tsv" 2>&1 >/dev/null)
+  assert_eq "$(arow tests/test_forge_main.py)" "unclaimed	file" "probe_refuses_forged_line: __main__ 의 쓰기 함수를 불러 claim 을 심어도 맡지 않는다"
+  assert_eq "$(arow tests/test_forge_file.py)" "unclaimed	file" "probe_refuses_forged_line: 결과 파일에 claim 줄을 더 써도 맡지 않는다(줄이 둘)"
+  assert_contains "$err" "unittest 맡지 않음: tests/test_forge_file.py — 판정 줄이 2개" "probe_refuses_forged_line: 줄이 여럿이면 그 사실을 알린다"
+  assert_eq "$(arow tests/test_ok.py)" "unittest	file" "probe_refuses_forged_line: 양성 대조 — 같은 폴더의 진짜 테스트는 맡는다"
+  rmrepo
+}
+
 for c in case_R17_assign_writes_trailer case_R17_failed_assign_leaves_no_file \
          case_R17_failed_assign_removes_stale_file case_R17_output_path_is_directory_fails \
          case_R20_assign_refuses_units_outside_tree case_R20_shell_scope \
@@ -572,7 +603,7 @@ for c in case_R17_assign_writes_trailer case_R17_failed_assign_leaves_no_file \
          case_imported_testclient_ignored case_probe_ignores_module_stdout_and_exit case_kill_switch_no_probe \
          case_setup_failure_no_probe case_env_dir_not_ignored_no_probe case_attached_tree_no_probe \
          case_zero_tests_is_error_both_axes case_zero_tests_low_python case_support_after_probe \
-         case_six_repo_files_claimed; do
+         case_six_repo_files_claimed case_run_chdir_lazy_import case_probe_refuses_forged_line; do
   echo "== $c"; $c
 done
 finish
