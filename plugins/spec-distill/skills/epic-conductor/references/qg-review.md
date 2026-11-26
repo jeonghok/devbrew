@@ -404,6 +404,8 @@ Agent(
 <로드맵 폴더>/reviews/<YYYY-MM-DD>-<대상>-<자리>.md
   대상: 에픽 번호(R3 등) | roadmap
   자리: spec | premerge-pr<번호> | recheck-pr<번호> | end | asked
+  team 형식 로드맵의 머지 앞 자리: premerge-<과제>-plan<n> | recheck-<과제>-plan<n>
+    (PR 이 열린 뒤에도 그 과제 · 계획의 자리 글자는 바꾸지 않는다)
   같은 이름이 쓰는 기록 브랜치나 기본 브랜치(origin/HEAD)에 이미 있으면 끝에 -2, -3 … 을 붙인다 — 두 자리를 모두 본다
 ```
 

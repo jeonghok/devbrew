@@ -477,6 +477,51 @@ class TestQgAnsweredEdges(unittest.TestCase):
         self.assertEqual(sorted(self.keys(e)), sorted(n + "#1" for n in names))
         self.assertEqual(e.notice_text(), "")
 
+    def test_team_site_names_read(self):
+        # team 형식의 자리 글자(`premerge-<과제>-plan<n>` · `recheck-<과제>-plan<n>`)는 이름 틀 안이다 —
+        # 그 기록의 답은 정상 열쇠로 넘어간다
+        names = [rname("R4", "premerge-auth-flow-plan1"), rname("R4", "recheck-auth-flow-plan2-2"),
+                 rname("E3", "premerge-t2.db_v1-plan12"), rname("roadmap", "recheck-x-plan3")]
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): good_record(), **{rpath(n): good_record() for n in names}})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(sorted(self.keys(e)), sorted([NAME + "#1"] + [n + "#1" for n in names]))
+        self.assertEqual(e.notice_text(), "")
+        # 짝 — team 꼴을 흉내 낸 틀 밖 이름은 여전히 어느 답도 넘기지 않는다
+        for odd in ("premerge-plan1", "premerge-auth-plan0", "premerge-auth-plan", "premerge--x-plan1",
+                    "recheck-auth-plan1x", "end-auth-plan1", "asked-auth-plan1", "spec-auth-plan1",
+                    "premerge-auth-pr1"):
+            e = Env(self)
+            bad = rname("R4", odd)
+            commit_files(e.repo, {rpath(NAME): good_record(), rpath(bad): good_record()})
+            p = e.run(["main"])
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(e.entries(), [], odd)
+            self.assertEqual(e.notice_text().splitlines(),
+                             ["읽지 못한 기록 1개: main:%s" % rpath(bad)], odd)
+
+    def test_doc_name_template_sites_read(self):
+        # 지휘 절차(qg-review.md 「### 기록 파일」)의 이름 틀에 적힌 자리 글자마다 꼴을 채운 이름이 이름 틀 안이다
+        doc = os.path.join(HERE, "..", "skills", "epic-conductor", "references", "qg-review.md")
+        with open(doc, encoding="utf-8") as fh:
+            body = fh.read().split("\n### 기록 파일\n", 1)[1].split("\n```text\n", 1)[1].split("\n```", 1)[0]
+        sites = []
+        for line in body.splitlines():
+            for head in ("  자리: ", "  team 형식 로드맵의 머지 앞 자리: "):
+                if line.startswith(head):
+                    sites += line[len(head):].split(" | ")
+        self.assertEqual(len(sites), 7, sites)
+        self.assertEqual(sum("<과제>" in s for s in sites), 2, sites)
+        sys.path.insert(0, os.path.abspath(os.path.dirname(SCRIPT)))
+        try:
+            import qg_answered
+        finally:
+            sys.path.pop(0)
+        for site in sites:
+            name = rname("R4", site.replace("<번호>", "12").replace("<과제>", "auth").replace("<n>", "1"))
+            self.assertEqual(qg_answered._target(name), "R4", name)
+
     def test_whole_ref_unreadable_drops_that_ref(self):
         # 없는 ref · `-` 로 시작하는 ref 는 그 ref 의 답이 없고 알림 한 줄, 다른 ref 의 답은 넘어간다
         e = Env(self)

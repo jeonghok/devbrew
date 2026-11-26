@@ -23,6 +23,9 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from qg_review_file import TEAM_TARGET  # noqa: E402 — 상태 파일의 team 대상 꼴과 같은 정의
+
 try:
     import yaml
 except ImportError:  # 지휘 절차가 rc 5 를 「답 없이 보낸다」 로 다룬다
@@ -50,7 +53,8 @@ HEADING = "## 질문"
 SEP = " · "
 TIME_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}|-")
 NAME_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}-(?P<target>[A-Z][0-9]+[a-z]?|roadmap)-"
-                     r"(?:spec|premerge-pr[0-9]+|recheck-pr[0-9]+|end|asked)(?:-[0-9]+)?\.md")
+                     r"(?:spec|(?:premerge|recheck)-(?:pr[0-9]+|" + TEAM_TARGET + r")|end|asked)"
+                     r"(?:-[0-9]+)?\.md")
 ALL_TARGETS = None
 NOTICE_FAIL = "[qg_answered] 알림 파일을 쓰지 못했다 — 알림은 위 줄뿐이다"
 NO_YAML = "[qg_answered] PyYAML 이 없다 — 답 없이 보낸다"
