@@ -12,6 +12,7 @@
 
 ## Global Constraints
 
+- 자리 표시 — `<지휘 자원>` 은 지휘자가 보내는 글에 준 이 로드맵의 지휘 자원 폴더(`…/files`), `<spec-distill 설치본>` 은 이 세션이 쓰는 spec-distill 설치본 폴더다. 지휘자가 준 글의 실제 경로로 바꿔 쓴다.
 - 한 PR · 한 브랜치(`feature/conductor-qg-review-edges`). 과제 차례대로 커밋한다 — 문서 과제(Task 10–12)는 스크립트 과제(Task 2–9)가 낸 명령 이름과 출력 꼴을 글자로 인용한다.
 - 판 번호는 지휘자가 준다. 계획 · 테스트에 판 글자를 박지 않는다(락이 판을 재면 `plugin.json` 에서 읽는다). spec-distill 은 minor(새 스크립트 · 새 동작), quality-gates 는 patch(문서 하나).
 - 상태 파일은 머지 앞 자리(첫 리뷰 · 좁은 재리뷰 · 구현이 끝난 뒤 이름으로 청한 리뷰)만 쓴다. spec 승인 앞 · 로드맵 끝은 지금 문장을 두고 spec 쪽 다시 보내기 표지에 설계문서 커밋만 더한다(설계 Non-goals · D6).
@@ -26,8 +27,8 @@
 - 고친 문서는 `plugins/spec-distill/tests/test_repo_literals.sh` 규칙(기본 브랜치 이름 · 접두 · 구조 경로 · 모델 이름을 박지 않음)과 `shared/style/plain-language.md` 를 따른다. 문구 락을 새로 둘 때는 `docs/testing.md` 「글자 대조 말고 쓰는 확인」 을 따른다(실행 블록은 뽑아 돌리고, 예시 · 틀은 읽는 코드에 먹여 꼴을 잰다). `plugins/spec-distill/tests/evals/` 에는 이 일이 닿는 글을 지키는 케이스가 없다(계획 때 확인) — 새로 생겼으면 그 PR 에서 돌린다.
 - 커밋: Conventional Commits(`type`·`scope` 영어 · 설명 한국어), pathspec 커밋, 구현 커밋마다 트레일러 `Spec: docs/superpowers/specs/2026-11-24-conductor-qg-review-edges-design.md` 와 지휘자가 보내는 글에 준 끝 줄. 레포에 커밋하는 파일에 사용자 이름이 든 절대경로를 넣지 않는다.
 - 금지: 공유 임시 폴더 glob 삭제 · `git stash` · 다른 worktree 의 git · HEAD 뒤로 옮기기(reset · rebase · force) · push(지휘자가 한다).
-- 임시 파일은 지휘자가 준 `TMPDIR`(`/Users/jeonghokim/Downloads/devbrew/.claude/spec-distill/conductor/2026-11-14-qg-epic-roadmap-intent-review-brief/files/tmp/<담당자 이름>`)에 쓴다.
-- **전체 스위트는 공유 잠금 아래서만:** `python3 "/Users/jeonghokim/.claude/plugins/cache/devbrew/spec-distill/9.3.0"/scripts/suite_lock.py run --lock /Users/jeonghokim/Downloads/devbrew/.claude/spec-distill/conductor/2026-11-14-qg-epic-roadmap-intent-review-brief/files/suite-lock --owner <담당자 이름> --wait 1800 -- bash -c 'bash tools/suite/run-all.sh'`. 하위 agent 에게 보내는 글에도 이 줄과 경로를 그대로 싣는다. 못 잡으면 주인 · 잡은 시각을 보고한다. 과제 안에서는 그 과제의 좁은 테스트만 잠금 없이 돌린다 — `cd plugins/spec-distill/tests && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest <모듈> -v` 또는 `bash plugins/spec-distill/tests/<파일>.sh`.
+- 임시 파일은 지휘자가 준 `TMPDIR`(`<지휘 자원>/tmp/<담당자 이름>`)에 쓴다.
+- **전체 스위트는 공유 잠금 아래서만:** `python3 "<spec-distill 설치본>"/scripts/suite_lock.py run --lock <지휘 자원>/suite-lock --owner <담당자 이름> --wait 1800 -- bash -c 'bash tools/suite/run-all.sh'`. 하위 agent 에게 보내는 글에도 이 줄과 경로를 그대로 싣는다. 못 잡으면 주인 · 잡은 시각을 보고한다. 과제 안에서는 그 과제의 좁은 테스트만 잠금 없이 돌린다 — `cd plugins/spec-distill/tests && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest <모듈> -v` 또는 `bash plugins/spec-distill/tests/<파일>.sh`.
 
 ## Review Focus
 
@@ -455,7 +456,7 @@
 - [ ] **Step 2: 전체 리뷰.** 실행 방식의 마지막 전체 리뷰(쓰기 도구가 없는 리뷰어)에 설계문서 `## Acceptance Criteria` 의 AC1–AC33 을 글자 그대로 싣고, AC 마다 한 줄 `AC<n>: <구현됨 | 미룸 | 빠짐> — <근거(파일:줄 · 테스트 이름)>` 로 보고하게 한다. 같은 리뷰에 묻는다 — 설계문서 `## 있는 것 검토` 가 고른 것(보관 폴더와 자원 줄 · 결과 파일의 범위 · 판정 절과 합쳐지기 전 지적 목록 · `nofollow_write` · `qg_answered.py` 의 원자 쓰기 · 알림 파일 · `ledger human-check` · 에픽 보고 폴더 · 기록 브랜치 · 살아 있는 담당자의 원천)을 실제로 썼는지, 같은 것을 다시 만들지 않았는지(새 자원 폴더 규칙 · 새 원자 쓰기 · 새 알림 목록 · 새 원장 명령이 없는지). 이음매를 명시해 묻는다 — `open` 이 낸 범위 → 호출 줄 → qg `result.md` · `findings-pre-merge.yaml` · `intent-return.md` → `back` → `record` → `gate` · `next` → `render` 가 끝에서 끝으로 같은 이름 · 같은 범위 꼴 · 같은 대상 꼴을 말하는지, 각 명령의 rc 를 지휘 절차 문서가 읽는지, 「다음」 이 낸 `열기` 를 `open` 이 거절하는 상태가 없는지. 이 계획이 시킨 테스트 코드(Task 3 의 줄 목록 · Task 13 의 걸어 보기)는 「계획이 쓴 테스트」 라고 라벨을 붙여 따로 보게 한다.
 - [ ] **Step 3: 보고 파일.** 리뷰의 AC 줄들을 `TMPDIR/ac-report.md` 에 쓴다.
 - [ ] **Step 4: 미룸 표.** 리뷰가 미룸 · 빠짐으로 낸 AC 와 리뷰 후속으로 미룬 것을 설계문서 `## 미룸` 표에 `| 항목 | 이유 | 받는 곳 |` 행으로 더한다(받는 곳은 로드맵의 에픽 번호 또는 `#<PR 번호>`). 커밋: `git commit -m "docs(spec): R9 구현 뒤 미룸을 적는다" -- docs/superpowers/specs/2026-11-24-conductor-qg-review-edges-design.md`
-- [ ] **Step 5: 덮음 확인.** PR 을 만들기 전에 `python3 /Users/jeonghokim/.claude/plugins/cache/devbrew/spec-distill/9.3.0/scripts/check_bundle_coverage.py --impl docs/superpowers/specs/2026-11-24-conductor-qg-review-edges-design.md "$TMPDIR/ac-report.md"` 를 돌려 출력 전부를 마지막 보고에 싣는다(경고는 지휘자가 사용자에게 보인다).
+- [ ] **Step 5: 덮음 확인.** PR 을 만들기 전에 `python3 <spec-distill 설치본>/scripts/check_bundle_coverage.py --impl docs/superpowers/specs/2026-11-24-conductor-qg-review-edges-design.md "$TMPDIR/ac-report.md"` 를 돌려 출력 전부를 마지막 보고에 싣는다(경고는 지휘자가 사용자에게 보인다).
 - [ ] **Step 6: PR 본문 재료.** 제안 열다섯(§7)의 가름 — 「들어감」 은 그 AC, 「계획이 가림」(24 · 27 · 32 · 33 · 34 · 35 · 23 의 가드)은 「받음 — Task 9 · 14」, 「남김(받는 곳 없음)」(25 의 사유 나누기)은 그대로 — 과 `TMPDIR/lock-map.md` 를 마지막 보고에 싣는다(AC22).
 
 ---
