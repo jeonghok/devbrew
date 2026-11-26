@@ -108,6 +108,13 @@ class QgNonceTest(unittest.TestCase):
             "-o\n"
             "+n\n"
         )
+        # 옛 이름에 " b/" 가 들어 머리 줄만으로는 가를 수 없다 — rename to 줄로 맞춘다.
+        rename_spaced = (
+            "diff --git a/x b/y.py b/z.py\n"
+            "similarity index 90%\n"
+            "rename from x b/y.py\n"
+            "rename to z.py\n"
+        )
         quoted = (
             'diff --git "a/x y.py" "b/x y.py"\n'
             "--- \"a/x y.py\"\n"
@@ -118,6 +125,8 @@ class QgNonceTest(unittest.TestCase):
         )
         # core.quotePath=false 의 git 은 공백만 든 경로를 따옴표 없이 쓴다.
         spaced = self._chunk("p q.py", "S")
+        # 경로 안의 " b/" — 앞뒤 절반이 같은 머리로 가른다.
+        spaced_b = self._chunk("dir b/f.py", "D")
         # 따옴표 꼴의 C 이스케이프(탭 · 8진 UTF-8 바이트)를 풀어 맞춘다.
         escaped = (
             'diff --git "a/t\\tab \\352\\260\\200.py" "b/t\\tab \\352\\260\\200.py"\n'
@@ -127,15 +136,19 @@ class QgNonceTest(unittest.TestCase):
         )
         other = self._chunk("keep/out.py", "K")
         diff = self.tmp / "review.diff"
-        diff.write_text(other + rename + quoted + spaced + escaped, encoding="utf-8")
+        diff.write_text(
+            other + rename + rename_spaced + quoted + spaced + spaced_b + escaped,
+            encoding="utf-8")
         out = self.tmp / "bundle.txt"
-        r = run("split", diff, out, "--",
-                "new.py", "x y.py", "p q.py", "t\tab 가.py")
+        r = run("split", diff, out, "--", "new.py", "z.py", "x y.py",
+                "p q.py", "dir b/f.py", "t\tab 가.py")
         self.assertEqual(r.returncode, 0, r.stderr)
         data = out.read_bytes().decode("utf-8")
         m = END_RE.search(data)
         self.assertIsNotNone(m)
-        self.assertEqual(data[: m.start()], rename + quoted + spaced + escaped)
+        self.assertEqual(
+            data[: m.start()],
+            rename + rename_spaced + quoted + spaced + spaced_b + escaped)
 
     def test_split_unknown_path_fails(self):
         diff = self.tmp / "review.diff"
@@ -387,6 +400,9 @@ class QgNonceTest(unittest.TestCase):
             r = self._check_reviewer(rd, rv, bad)
             self.assertEqual(r.returncode, 2, bad)
             self.assertEqual(r.stdout, "", bad)
+            # 칸 사본이 없다는 rc 2 와 사유 줄로 가른다.
+            self.assertEqual(
+                r.stderr, "[qg_nonce] 리뷰어 이름이 꼴 밖이다 — %s\n" % bad, bad)
 
 
 if __name__ == "__main__":
