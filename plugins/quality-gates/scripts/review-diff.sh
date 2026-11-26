@@ -238,6 +238,7 @@ QG_NAMES='result\.md|intent\.md|differential\.yaml|differential-not-counted\.md|
 QG_NAMES="$QG_NAMES"'|topic-scope\.txt|range-scope\.txt|review-tree\.txt'
 QG_NAMES="$QG_NAMES"'|comment-head\.md|comment\.md|publish\.out|publish\.err|publish-at\.txt'
 QG_NAMES="$QG_NAMES"'|other-teams\.md'
+QG_NAMES="$QG_NAMES"'|suite-lock-path\.txt|suite-overlap\.txt'
 QG_NAMES="$QG_NAMES"'|e2e-record\.md|e2e-flip\.md|e2e-evidence\.tsv|e2e-cmd\.txt|e2e-gate\.txt'
 QG_NAMES="$QG_NAMES"'|e2e-before\.txt|e2e-after\.txt|e2e-app\.pgid|e2e-app\.log'
 QG_NAMES="$QG_NAMES"'|review-i[1-9][0-9]*\.(names|full\.diff|diff|doc-paths|self-state|mode)'

@@ -13,7 +13,7 @@ description: >
   on the current branch (no push).
 metadata:
   cost_class: variable
-argument-hint: "[branch|--paths <glob>...|range <시작>[..<끝>]] [--origin <경로>] [--answered <경로>]"
+argument-hint: "[branch|--paths <glob>...|range <시작>[..<끝>]] [--suite-lock <경로>] [--origin <경로>] [--answered <경로>]"
 allowed-tools:
   - Bash(python3 "${CLAUDE_SKILL_DIR}/../../scripts/entry_preflight.py" quality-gates quality-pipeline)
 ---
@@ -100,7 +100,7 @@ RD="${TOP}/.claude/quality-gates/<session-id>"
 "$QG/scripts/setup-qg.sh" --ensure $ARGUMENTS || exit
 if grep -q '^## 판정$' "$RD/result.md" 2>/dev/null; then "$QG/scripts/setup-qg.sh" $ARGUMENTS || exit; fi
 bash "$QG/scripts/e2e-state.sh" stop --dir "$RD"; echo "preflight-stop rc=$?"
-rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/range-scope.txt" "$RD/review-tree.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/publish-at.txt" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt" "$RD/other-teams.md" "$RD/findings-pre-merge.yaml"
+rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md" "$RD/verdict.out" "$RD/intent.md" "$RD/topic-scope.txt" "$RD/range-scope.txt" "$RD/review-tree.txt" "$RD/comment-head.md" "$RD/comment.md" "$RD/publish.out" "$RD/publish.err" "$RD/publish-at.txt" "$RD/e2e-record.md" "$RD/e2e-flip.md" "$RD/e2e-evidence.tsv" "$RD/e2e-cmd.txt" "$RD/e2e-gate.txt" "$RD/e2e-before.txt" "$RD/e2e-after.txt" "$RD/other-teams.md" "$RD/findings-pre-merge.yaml" "$RD/suite-overlap.txt"
 ( cd "$RD" && find . ! -name . -prune -type f -name 'review-i*' -exec rm -f {} + )
 ( cd "$RD" && find . ! -name . -prune -type f -name 'intent-*' -exec rm -f {} + )
 ```
@@ -114,9 +114,10 @@ Every run then starts without the previous run's `differential.yaml` · `differe
 (`e2e-record.md` · `e2e-flip.md` · `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt`),
 the intent-critic stage's other-teams record (`other-teams.md`),
 the pre-merge findings list (`findings-pre-merge.yaml`),
+the differential test's overlap record (`suite-overlap.txt`),
 the review diff files of Review Step 1c (`review-i1.*` — the first `find` line, which also works when there are none)
 and the intent-critic stage's run files (`intent-*` — the second `find` line).
-`e2e-app.pgid` is kept. The `stop` line brings down an app a cut-off earlier walk left running; show its output, and a non-zero `preflight-stop rc` does not stop the run — `## e2e` E0 tries again with the same record. Setup refuses an empty or malformed session id (E1). A gone
+`e2e-app.pgid` is kept, and so is `suite-lock-path.txt` — setup itself removes it at every start and writes it again when `--suite-lock` is given. The `stop` line brings down an app a cut-off earlier walk left running; show its output, and a non-zero `preflight-stop rc` does not stop the run — `## e2e` E0 tries again with the same record. Setup refuses an empty or malformed session id (E1). A gone
 argument (`branch <name>` · `--reset` · `--gc` · `--pr-url` · `--plan` · `critique`) prints one line on stdout and exits 2 —
 the run does not start. Non-zero exit → show its output (stdout and stderr) verbatim and stop.
 Below, `RD` is that folder under the **repo root** — setup moves to the git top level itself, so a
@@ -126,6 +127,7 @@ way P2 does (`TOP` from `git rev-parse --show-toplevel`, stop when that fails, t
 
 Arguments: `branch` · `--paths <glob>...` · `range <시작>[..<끝>]` override the review scope (Review Step 1). `range` 의 끝을 생략하면 `origin/HEAD` 다.
 `--origin <경로>` 는 부른 쪽이 넘기는 원문 파일(리포 안 추적 파일)이고 범위 인자가 아니다 — `--paths` 의 glob 으로 읽지 않는다. `--answered <경로>` 는 부른 쪽(지휘자)이 넘기는 「이미 답한 것」 파일의 절대 경로이고 범위 인자가 아니다. 쓰는 곳은 intent-critic 단계 I2 다.
+`--suite-lock <경로>` 는 부른 쪽(지휘자)이 넘기는 공유 스위트 잠금 폴더의 절대 경로이고 범위 인자가 아니다. setup 이 값을 검사하고(값 없음 · `-` 로 시작 · 절대경로 아님 · 부모 폴더 없음이면 멈춘다) 세션 폴더의 `suite-lock-path.txt` 에 남긴다. 차등 테스트가 테스트 명령마다 그 잠금을 쥔다(`references/differential-test.md` 의 D3). 인자가 없으면 잠금을 쓰지 않는다.
 
 **P2b — 범위 (range 인자일 때만 · 실행에 한 번).** 인자에 `range` 가 없으면 건너뛴다(앞 실행의 범위 파일은 P2 가 지웠다). 돌려도 해는 없다 — 그때 스크립트는 범위 파일을 지우고 `range: none` 만 낸다:
 
@@ -1376,6 +1378,12 @@ printf '판정\t%s\n결과\tfinished\n' "$(tail -n 1 "$RD/verdict.out")" \
 <Step 4.5 의 고칠 목록 — ### 막는 지적 · ### 제안 · ### 차등 회귀 세 절, 빈 절은 (없음). trivia 실행과 걸러진 diff 가 빈 실행은 세 절 모두 (없음)>
 QG_FIX_LIST_<8 hex>
   printf '\n## 차등 테스트\n\n'; if [ -f "$RD/differential.yaml" ]; then cat "$RD/differential.yaml"; else echo "(이번 실행에 차등 출력 없음)"; fi
+  OV="$RD/suite-overlap.txt"
+  if [ -s "$OV" ]; then
+    IFS="$(printf '\t')" read -r OV_KIND OV_WHO OV_AT < "$OV"
+    if [ "$OV_KIND" = busy ]; then OV_IN="잠금 주인: ${OV_WHO} · ${OV_AT}"; else OV_IN="잠금을 쓸 수 없었다"; fi
+    printf '\n- 겹침: 차등 테스트가 다른 전체 테스트와 겹쳐 돌았다 — 결과가 경합일 수 있다(%s)\n' "$OV_IN"
+  fi
   if [ -s "$RD/differential-not-counted.md" ]; then printf '\n커버리지로 세지 않은 테스트:\n\n'; cat "$RD/differential-not-counted.md"; fi
   if [ -s "$RD/e2e-record.md" ]; then printf '\n## e2e\n\n'; cat "$RD/e2e-record.md"; fi
   if [ -s "$RD/e2e-flip.md" ]; then printf '\n## 뒤집기\n\n'; cat "$RD/e2e-flip.md"; fi

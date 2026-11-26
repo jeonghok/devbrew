@@ -248,4 +248,67 @@ h="$("$SCRIPT" --help)"
 assert "--help 가 --answered 를 안내한다" "printf '%s' \"\$h\" | grep -qF -- \"--answered <path>    Conductor's already-answered file for the intent critic (absolute path)\""
 cd / && rm -rf "$TMPDIR"
 
+# --- --suite-lock (R7 §4 · AC11 · AC15): 값 검사 넷 · 잠금 자리 파일을 시작마다 지우고 인자가 있으면 다시 쓴다 ---
+TMPDIR=$(mktemp -d); cd "$TMPDIR"
+unset CLAUDE_CODE_SESSION_ID
+lpf() { printf '.claude/quality-gates/%s/suite-lock-path.txt' "$1"; }
+folder_sig() { ( cd ".claude/quality-gates/$1" && ls -A && cksum result.md && stat -f %m result.md 2>/dev/null || stat -c %Y result.md ) 2>&1; }
+# suite_lock_value_checks — 각각 rc 1 · 이유 한 줄 · 세션 폴더 그대로(잠금 자리 파일도 생기지 않는다)
+SID="test-slcheck-$$"
+"$SCRIPT" --session-id "$SID" >/dev/null 2>&1
+mkdir -p "$TMPDIR/locks"
+before="$(folder_sig "$SID")"
+check_refused() {   # check_refused <이름> <기대 줄> <인자...>
+  local name="$1" want="$2" out rc; shift 2
+  out="$("$SCRIPT" --ensure --session-id "$SID" "$@" 2>&1)"; rc=$?
+  assert "suite_lock_value_checks($name): rc 1" "[ $rc = 1 ]"
+  assert "suite_lock_value_checks($name): 이유 한 줄" "printf '%s\n' \"\$out\" | grep -qxF -- \"\$want\""
+  assert "suite_lock_value_checks($name): 세션 폴더가 그대로다" "[ \"\$(folder_sig \"$SID\")\" = \"\$before\" ]"
+  assert "suite_lock_value_checks($name): 잠금 자리 파일이 생기지 않는다" "! test -e '$(lpf "$SID")'"
+}
+check_refused "값 없음" '❌ --suite-lock 뒤에 잠금 폴더 경로가 없다.' --suite-lock
+check_refused "-x" '❌ --suite-lock 뒤에 잠금 폴더 경로가 없다.' --suite-lock -x
+check_refused "--ensure 가 값 자리" '❌ --suite-lock 뒤에 잠금 폴더 경로가 없다.' --suite-lock --ensure
+check_refused "상대경로" '❌ --suite-lock 은 절대경로여야 한다: locks/suite-lock' --suite-lock locks/suite-lock
+check_refused "없는 부모" "❌ --suite-lock 의 부모 폴더가 없다: $TMPDIR/nope/deeper" --suite-lock "$TMPDIR/nope/deeper/suite-lock"
+# suite_lock_written — 새로 만든 세션 폴더에 한 줄로 남는다
+SID="test-slwrite-$$"; L="$TMPDIR/locks/suite-lock"
+out="$("$SCRIPT" --session-id "$SID" --suite-lock "$L" 2>&1)"; rc=$?
+assert "suite_lock_written: rc 0" "[ $rc = 0 ]"
+assert "suite_lock_written: 잠금 자리 파일이 그 경로 한 줄이다" "[ \"\$(cat '$(lpf "$SID")')\" = '$L' ] && [ \"\$(wc -l < '$(lpf "$SID")' | tr -d ' ')\" = 1 ]"
+assert "suite_lock_written: 잠금 폴더 자체는 만들지 않는다" "! test -e '$L'"
+# ensure_rewrites — --ensure 가 폴더를 그대로 두는 갈래에서도 지우고 다시 쓴다
+SID="test-slensure-$$"; A="$TMPDIR/locks/a"; B="$TMPDIR/locks/b"
+"$SCRIPT" --ensure --session-id "$SID" --suite-lock "$A" >/dev/null 2>&1
+assert "ensure_rewrites: 처음 --ensure --suite-lock A → A" "[ \"\$(cat '$(lpf "$SID")')\" = '$A' ]"
+m1=$(stat -f %m ".claude/quality-gates/$SID/result.md" 2>/dev/null || stat -c %Y ".claude/quality-gates/$SID/result.md")
+sleep 1
+"$SCRIPT" --ensure --session-id "$SID" >/dev/null 2>&1
+assert "ensure_rewrites: 같은 세션 --ensure 인자 없이 → 잠금 자리 파일 없음" "! test -e '$(lpf "$SID")'"
+"$SCRIPT" --ensure --session-id "$SID" --suite-lock "$B" >/dev/null 2>&1
+assert "ensure_rewrites: --ensure --suite-lock B → B 만" "[ \"\$(cat '$(lpf "$SID")')\" = '$B' ]"
+m2=$(stat -f %m ".claude/quality-gates/$SID/result.md" 2>/dev/null || stat -c %Y ".claude/quality-gates/$SID/result.md")
+assert "ensure_rewrites: --ensure 는 그동안 결과 파일을 다시 쓰지 않았다" "[ '$m1' = '$m2' ]"
+"$SCRIPT" --session-id "$SID" --suite-lock "$A" >/dev/null 2>&1
+assert "ensure_rewrites: --ensure 없이 다시 만든 폴더에도 새 경로가 남는다" "[ \"\$(cat '$(lpf "$SID")')\" = '$A' ]"
+# no_arg_no_files — 인자가 없으면 잠금 자리 · 겹침 기록 파일이 없고 출력 글자가 그대로다
+SID="test-slnoarg-$$"
+base_out="$("$SCRIPT" --session-id "$SID" 2>&1)"
+assert "no_arg_no_files: 잠금 자리 파일이 없다" "! test -e '$(lpf "$SID")'"
+assert "no_arg_no_files: 겹침 기록 파일이 없다" "! test -e '.claude/quality-gates/$SID/suite-overlap.txt'"
+assert "no_arg_no_files: 인자 없는 출력은 시작 줄 하나다" "[ \"\$base_out\" = '🔄 Quality Gates 를 시작한다 — 이 턴 안에서 끝까지 돈다.' ]"
+arg_out="$("$SCRIPT" --session-id "$SID" --suite-lock "$L" 2>&1)"
+assert "no_arg_no_files: 인자가 있어도 출력 글자가 같다" "[ \"\$arg_out\" = \"\$base_out\" ]"
+# 범위 인자로 세지 않는다
+out="$("$SCRIPT" --session-id "$SID" range x --suite-lock "$L" 2>&1)"; rc=$?
+assert "range + --suite-lock: rc 0(범위 인자로 세지 않는다)" "[ $rc = 0 ]"
+# lock_path_with_space — 공백 든 경로가 글자 그대로 남는다
+SID="test-slspace-$$"; mkdir -p "$TMPDIR/with space"; LS="$TMPDIR/with space/suite lock"
+"$SCRIPT" --session-id "$SID" --suite-lock "$LS" >/dev/null 2>&1; rc=$?
+assert "lock_path_with_space: rc 0" "[ $rc = 0 ]"
+assert "lock_path_with_space: 경로가 글자 그대로다" "[ \"\$(cat '$(lpf "$SID")')\" = \"\$LS\" ]"
+h="$("$SCRIPT" --help)"
+assert "--help 가 --suite-lock 을 안내한다" "printf '%s' \"\$h\" | grep -qF -- '--suite-lock <path>'"
+cd / && rm -rf "$TMPDIR"
+
 finish

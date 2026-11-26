@@ -103,8 +103,11 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 `verdict.out` · `topic-scope.txt` · `range-scope.txt`(P2b 가 얼린 범위 — 범위 모드일 때만) · `review-tree.txt`(범위 모드에서 리뷰어가 읽는 끝 커밋 임시 트리의 경로 — 범위 모드일 때만, 실행 끝에 트리와 함께 지운다) · `comment-head.md` · `comment.md` · `publish.out` · `publish.err` · `publish-at.txt`(게시 — 마지막 것은 게시 절 자리: 시작 바이트와 길이 바이트를 적은 한 줄) · `e2e-record.md` · `e2e-flip.md` ·
 `e2e-evidence.tsv` · `e2e-cmd.txt` · `e2e-gate.txt` · `e2e-before.txt` · `e2e-after.txt` · `e2e-app.pgid` · `e2e-app.log`(e2e) ·
 `review-i1.names` · `review-i1.full.diff` · `review-i1.diff` · `review-i1.doc-paths` · `review-i1.self-state` · `review-i1.mode`(Review Step 1c 의 리뷰 diff 와 그 실행이 쓴 범위 모드) ·
-`other-teams.md`(intent-critic 단계의 다른 팀 기록 — 팀 지도 · 진행 중인 의도 문서 · 겹치는 diff · 확인 못 함) —
+`other-teams.md`(intent-critic 단계의 다른 팀 기록 — 팀 지도 · 진행 중인 의도 문서 · 겹치는 diff · 확인 못 함) ·
+`suite-overlap.txt`(차등 테스트의 겹침 기록 — 잠금 감싸개가 겹친 테스트 명령마다 탭으로 나눈 한 줄을 덧붙인다: 잡혀 있었으면 busy · 주인 · 잡은 시각, 쓸 수 없었으면 unusable · - · -) —
 도 같은 생명주기를 따른다.
+
+`suite-lock-path.txt`(공유 스위트 잠금 폴더의 절대경로 한 줄 — `--suite-lock` 이 있을 때만)는 쓰는 쪽이 `setup-qg.sh` 하나다 — 시작마다(`--ensure` 로 폴더를 그대로 둘 때도) 지우고 인자가 있으면 다시 쓴다. 그래서 Preflight P2 의 지우기 목록에는 들지 않는다. 읽는 쪽은 잠금 감싸개다.
 
 `review-i1-slot-<리뷰어>-b<B>-t<T>-<칸>.txt`(Review Step 3 · 3.5 가 리뷰어에게 경로로 넘기는 칸 사본 — 원본 끝에 `qg-slot-end: <값>` 줄을 붙였다. 리뷰어는 `security` · `ext-<짧은 이름>` · `recritic`, 칸은 `intent` · `diff` · `findings` · `scope`)도 같은 생명주기를 따른다 — Preflight P2 의 `review-i*` 지우기가 지운다. 리뷰어 응답 사본은 세션 폴더가 아니라 실행 임시 폴더 `RV` 에 있다.
 

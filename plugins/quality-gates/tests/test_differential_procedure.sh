@@ -199,11 +199,133 @@ case_one_pass_vocabulary() {
   done
 }
 
+# ── 공유 스위트 잠금(R7 §4 · AC11 · AC13 · AC31 · AC32) ─────────────────────────────────────────────────
+OVL_RESULT_HEAD='- 겹침: 차등 테스트가 다른 전체 테스트와 겹쳐 돌았다 — 결과가 경합일 수 있다('
+# 테스트를 돌리는 `run` 줄은 모두 감싸개를 거친다 — 도출: 절차 문서에서 `run-test-selection.sh" run` 이 든 줄 전부.
+case_run_lines_wrapped() {
+  local lines n bad
+  lines=$(grep -F 'run-test-selection.sh" run ' "$REF")
+  n=$(printf '%s\n' "$lines" | grep -c .)
+  [ "$n" -ge 5 ] && ok "run_lines_wrapped: run 줄 ${n}개를 도출했다(D3 · D4 · flaky)" || no "run_lines_wrapped: run 줄 도출이 ${n}개뿐이다"
+  bad=$(printf '%s\n' "$lines" | grep -vF '"$QG/scripts/with-suite-lock.sh" "$RD" -- "$QG/scripts/run-test-selection.sh" run ')
+  assert_eq "$bad" "" "run_lines_wrapped: 모든 run 줄이 with-suite-lock.sh \"\$RD\" -- 뒤에 있다"
+  local sec
+  for sec in '## D3 HEAD 축 실행' '## D4 기준선 축 — 아직 돌지 않은 unit 만' '## D5 짝짓기'; do
+    assert_contains "$(section "$REF" "$sec")" '"$QG/scripts/with-suite-lock.sh" "$RD" -- "$QG/scripts/run-test-selection.sh" run ' "run_lines_wrapped: ${sec} 에 감싼 run 줄이 있다"
+  done
+  # 감싼 줄이 든 펜스는 RD 를 정한다 — 펜스마다 따로 돈다
+  local fences; fences=$(awk '/^```bash$/{f=1;b="";next} f&&/^```$/{f=0; if (b ~ /with-suite-lock/) {n++; if (b !~ /\nRD="\$\{TOP\}\/\.claude\/quality-gates\/<session-id>"\n/) print "no-rd"}; next} f{b=b "\n" $0} END{print n " fences"}' "$REF")
+  assert_eq "$fences" "3 fences" "run_lines_wrapped: 감싼 줄이 든 펜스 셋이 모두 RD 를 정한다"
+}
+case_sequential_sentence() {   # AC31
+  assert_contains "$(section "$REF" '## D3 HEAD 축 실행')" '`$RD/suite-lock-path.txt` 가
+있으면 테스트 명령을 나란히 돌리지 않고 하나씩 돌린다 — 러너가 둘이어도 같다.' "sequential_sentence: 잠금 자리가 있으면 하나씩 돌린다 — 러너가 둘이어도"
+  assert_contains "$(section "$REF" '## D3 HEAD 축 실행')" '그대로 보인다' "sequential_sentence: 감싸개의 겹침 줄을 그대로 보인다"
+}
+# 러너 둘인 작은 리포에서 D3 펜스를 러너마다 문서 차례대로 돌린다 — 이 실행이 쥔 잠금을 겹침으로 세지 않는다(AC31).
+d3_fence() { awk '$0 == "## D3 HEAD 축 실행" {on=1; next} on && /^## /{exit} on && /^```bash$/{f=1; b=""; next} on && f && /^```$/{f=0; if (b ~ /run-test-selection.sh" run/) {printf "%s", b; exit}; next} on && f {b=b $0 "\n"}' "$REF"; }
+case_two_runners_sequential_no_overlap() {
+  local T; T=$(mktemp -d) && [ -d "$T" ] || { no "mktemp 실패"; return; }
+  local R="$T/r" SID=sidseq0001 F
+  mkdir -p "$R/tests" "$T/locks" "$T/memo"
+  printf '#!/bin/sh\nexit 0\n' > "$R/tests/test_a.sh"; chmod +x "$R/tests/test_a.sh"
+  printf 'import unittest\n\n\nclass T(unittest.TestCase):\n    def test_ok(self):\n        self.assertTrue(True)\n' > "$R/tests/test_b.py"
+  git -C "$R" init -q && git -C "$R" add -A && git -C "$R" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m init \
+    && git -C "$R" worktree add -q --detach "$T/head" HEAD   # 러너는 일회용 detached 트리에서만 돈다(D1 의 HEAD 축 트리처럼)
+  local RDX="$R/.claude/quality-gates/$SID"; mkdir -p "$RDX"; printf '%s\n' "$T/locks/lk" > "$RDX/suite-lock-path.txt"
+  F=$(d3_fence)
+  [ -n "$F" ] && ok "two_runners: D3 펜스를 뽑았다" || { no "two_runners: D3 펜스가 없다"; rm -rf "$T"; return; }
+  local runner unit err=""
+  for runner in shell unittest; do
+    case "$runner" in shell) unit=tests/test_a.sh ;; unittest) unit=tests/test_b.py ;; esac
+    printf '%s\n' "$F" | sed -e "s|<session-id>|$SID|g" -e "s|<head_tree>|$T/head|g" -e "s|<memo>|$T/memo|g" -e "s|<runner>|$runner|g" \
+      -e "s|<fail·error 인 unit>\.\.\.|$unit|g" -e "s|<unit>\.\.\.|$unit|g" > "$T/d3-$runner.sh"
+    ( cd "$R" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$T/d3-$runner.sh" ) >/dev/null 2>"$T/d3-$runner.err"
+    err="$err$(cat "$T/d3-$runner.err")"
+  done
+  assert_grep "$(cat "$T/memo/head-shell-i1.tsv" 2>/dev/null)" '^tests/test_a\.sh	pass	' "two_runners: shell 러너가 돌았다(행 pass)"
+  assert_grep "$(cat "$T/memo/head-unittest-i1.tsv" 2>/dev/null)" '^tests/test_b\.py	pass	' "two_runners: unittest 러너가 돌았다(행 pass)"
+  [ ! -e "$RDX/suite-overlap.txt" ] && ok "two_runners: 겹침 기록이 없다" || no "two_runners: 겹침 기록이 생겼다: $(cat "$RDX/suite-overlap.txt")"
+  assert_not_contains "$err" '겹쳐 돈다' "two_runners: 겹침 줄이 없다"
+  assert_eq "$(python3 "$PLUGIN_ROOT/scripts/suite_lock.py" show --lock "$T/locks/lk")" "스위트 잠금: 비어 있음" "two_runners: 끝난 뒤 잠금이 비었다"
+  rm -rf "$T"
+}
+# 기록 펜스를 뽑아 겹침 기록 있음 · 없음으로 돌린다 — `## 차등 테스트` 에 겹침 줄이 하나 · 없다(AC13).
+record_fence() { section "$SKILL" '## Final verdict' | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{f=0; if (b ~ /## 판정/) {printf "%s", b; exit}; next} f{b=b $0 "\n"}'; }
+run_record() {   # run_record <디렉토리> <겹침 기록 내용 | -> → 그 디렉토리의 result.md 를 낸다
+  local d="$1" sid=sidrec0001 rd
+  mkdir -p "$d"; git -C "$d" init -q && git -C "$d" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q --allow-empty -m init
+  rd="$d/.claude/quality-gates/$sid"; mkdir -p "$rd"
+  record_fence | sed -e "s/<8 hex>/deadbeef/g" -e "s/<session-id>/$sid/g" -e "s|<Step 3.5 의 RV>|$d|g" > "$d/rec.sh"
+  printf 'verdict: clean\nqg: clean · 막는 지적 0 · 선택 0 · 차등 새 실패 0 · e2e 안 함 · abc1234\n' > "$rd/verdict.out"
+  printf -- '---\nsession_id: "%s"\n---\n\n# qg result\n' "$sid" > "$rd/result.md"
+  printf 'new_failures: 0\n' > "$rd/differential.yaml"
+  [ "$2" = "-" ] || printf '%s' "$2" > "$rd/suite-overlap.txt"
+  (cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$d/rec.sh") >/dev/null 2>&1
+  awk '/^## 차등 테스트$/{f=1;next} f&&/^## /{exit} f' "$rd/result.md"
+}
+case_overlap_line_in_result() {
+  local T; T=$(mktemp -d) && [ -d "$T" ] || { no "mktemp 실패"; return; }
+  [ -n "$(record_fence)" ] && ok "overlap_line_in_result: 기록 펜스를 뽑았다" || { no "overlap_line_in_result: 기록 펜스가 없다"; rm -rf "$T"; return; }
+  local out
+  out=$(run_record "$T/busy" "$(printf 'busy\t4242 merge_check feature/x 2026-11-27 01:02:03\t2026-11-27 01:02:03\nunusable\t-\t-\n')")
+  assert_eq "$(printf '%s\n' "$out" | grep -cF -- "$OVL_RESULT_HEAD")" "1" "overlap_line_in_result: 겹쳤으면 ## 차등 테스트 에 겹침 줄이 하나다"
+  assert_contains "$out" "${OVL_RESULT_HEAD}잠금 주인: 4242 merge_check feature/x 2026-11-27 01:02:03 · 2026-11-27 01:02:03)" "overlap_line_in_result: 첫 겹침의 주인 · 잡은 시각"
+  assert_contains "$out" "new_failures: 0" "overlap_line_in_result: 차등 사본이 그대로 붙는다(겹침 줄은 그 뒤)"
+  out=$(run_record "$T/unusable" "$(printf 'unusable\t-\t-\n')")
+  assert_eq "$(printf '%s\n' "$out" | grep -xF -- "${OVL_RESULT_HEAD}잠금을 쓸 수 없었다)" | grep -c .)" "1" "overlap_line_in_result: 쓸 수 없었으면 괄호 안이 「잠금을 쓸 수 없었다」"
+  out=$(run_record "$T/none" -)
+  assert_contains "$out" "new_failures: 0" "overlap_line_in_result: 겹침 기록이 없을 때도 기록 펜스가 돌았다(양성 짝)"
+  assert_eq "$(printf '%s\n' "$out" | grep -cF -- '- 겹침:')" "0" "overlap_line_in_result: 겹치지 않았으면 겹침 줄이 없다"
+  rm -rf "$T"
+}
+# 겹침은 알리되 판정을 바꾸지 않는다 — 같은 차등 사본이면 겹침 기록이 있어도 판정 줄이 같다(AC13).
+case_verdict_unchanged_with_overlap() {
+  local T; T=$(mktemp -d) && [ -d "$T" ] || { no "mktemp 실패"; return; }
+  { printf 'adapters: [bash]\nverdict_input:\n  confirmed_product_defect: true\n  silent_drop: false\n  baseline_unrunnable: false\n'
+    printf 'attribution_status: closed\ndegrade_causes: []\nnew_failures: 1\nunclaimed: []\nper_adapter: []\n'; } > "$T/differential.yaml"
+  local a b
+  a=$(cd "$T" && python3 "$VERDICT" --emit-args --differential "$T/differential.yaml")
+  printf 'busy\tx\t2026-11-27 01:02:03\n' > "$T/suite-overlap.txt"
+  b=$(cd "$T" && python3 "$VERDICT" --emit-args --differential "$T/differential.yaml")
+  assert_eq "$b" "$a" "verdict_unchanged_with_overlap: 겹침 기록이 있어도 차등 결과 줄이 같다"
+  assert_eq "$a" "qg-verdict-args: --new-failures 1 --defect" "verdict_unchanged_with_overlap: 그 줄이 사본의 값이다(양성 짝)"
+  local readers; readers=$(grep -l 'suite-overlap' "$PLUGIN_ROOT"/scripts/*.py "$PLUGIN_ROOT"/scripts/*.sh 2>/dev/null | sed "s|$PLUGIN_ROOT/||" | tr '\n' ' ')
+  assert_eq "$readers" "scripts/review-diff.sh scripts/with-suite-lock.sh " "verdict_unchanged_with_overlap: 겹침 기록을 아는 스크립트는 감싸개(쓴다)와 리뷰 diff 의 상태 파일 거르기뿐이다 — 판정 · 합성 스크립트는 읽지 않는다"
+  rm -rf "$T"
+}
+# 앞 실행이 남긴 겹침 기록은 다음 실행의 P2 가 지운다 · 잠금 자리 파일은 setup 이 다시 쓴다(AC32 · AC11).
+case_stale_overlap_cleared() {
+  local T; T=$(mktemp -d) && [ -d "$T" ] || { no "mktemp 실패"; return; }
+  local SID=sidstale001 P2F
+  git -C "$T" init -q && git -C "$T" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q --allow-empty -m init
+  mkdir -p "$T/locks"
+  P2F=$(awk '/^\*\*P2 — setup\.\*\*/{p=1} p&&/^```bash$/{f=1;next} f&&/^```$/{exit} f' "$SKILL")
+  [ -n "$P2F" ] && ok "stale_overlap_cleared: P2 펜스를 뽑았다" || { no "stale_overlap_cleared: P2 펜스가 없다"; rm -rf "$T"; return; }
+  local RDX="$T/.claude/quality-gates/$SID"
+  run_p2() {   # run_p2 <인자> — $ARGUMENTS 자리에 인자를 넣어 P2 를 돈다
+    printf '%s\n' "$P2F" | sed -e "s/<session-id>/$SID/g" -e "s|\$ARGUMENTS|$1|g" > "$T/p2.sh"
+    ( cd "$T" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" CLAUDE_CODE_SESSION_ID="$SID" bash "$T/p2.sh" ) >/dev/null 2>&1
+  }
+  run_p2 "--suite-lock $T/locks/lk"
+  printf 'busy\told\t2000-01-01 00:00:00\n' > "$RDX/suite-overlap.txt"
+  run_p2 "--suite-lock $T/locks/lk"
+  [ ! -e "$RDX/suite-overlap.txt" ] && ok "stale_overlap_cleared: 앞 실행의 겹침 기록을 지웠다" || no "stale_overlap_cleared: 앞 실행의 겹침 기록이 남았다"
+  assert_eq "$(cat "$RDX/suite-lock-path.txt" 2>/dev/null)" "$T/locks/lk" "stale_overlap_cleared: 잠금 자리 파일은 남는다(P2 의 지우기 목록이 지우지 않는다)"
+  printf 'busy\told\t2000-01-01 00:00:00\n' > "$RDX/suite-overlap.txt"
+  run_p2 ""
+  [ ! -e "$RDX/suite-lock-path.txt" ] && ok "stale_overlap_cleared: 인자 없이 다시 부르면 잠금 자리 파일이 없다" || no "stale_overlap_cleared: 인자 없이 불렀는데 잠금 자리 파일이 남았다"
+  [ ! -e "$RDX/suite-overlap.txt" ] && ok "stale_overlap_cleared: 인자 없는 실행에서도 겹침 기록을 지운다" || no "stale_overlap_cleared: 인자 없는 실행에 겹침 기록이 남았다"
+  rm -rf "$T"
+}
+
 for c in case_AC28_investigation_runs_are_marked_and_never_feed_the_verdict \
          case_R18_failed_pairing_routes_to_error_axis case_R22_orchestrator_honors_kill_switch \
          case_R24_differential_line_comes_from_the_machine case_R24_final_verdict_takes_the_differential_line \
          case_R6_memo_drop_after_record_before_publish case_skill_section_wires_the_reference \
-         case_reference_steps_are_d0_to_d8 case_topic_path_wiring case_topic_axis_is_read_from_scope_file case_one_pass_vocabulary; do
+         case_reference_steps_are_d0_to_d8 case_topic_path_wiring case_topic_axis_is_read_from_scope_file case_one_pass_vocabulary \
+         case_run_lines_wrapped case_sequential_sentence case_two_runners_sequential_no_overlap \
+         case_overlap_line_in_result case_verdict_unchanged_with_overlap case_stale_overlap_cleared; do
   echo "== $c"; $c
 done
 finish

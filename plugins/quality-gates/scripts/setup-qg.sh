@@ -24,6 +24,7 @@ ENSURE_MODE="false"
 SESSION_ID=""
 SCOPE_ARGS=0      # 범위 인자(branch · --paths · range) 개수
 RANGE_SEEN=0      # range 인자 개수 — range 는 다른 범위 인자와 함께 줄 수 없다(branch + --paths 조합은 v9 부터 허용)
+SUITE_LOCK=""     # --suite-lock 의 잠금 폴더 절대경로 — 끝나기 직전에 잠금 자리 파일로 남긴다
 
 gone() {   # gone <인자 표기> <안내>
   GONE_ARGS="${GONE_ARGS}> [quality-gates] \`${1}\` 인자는 없어졌다 — ${2}. 실행하지 않는다."$'\n'
@@ -96,6 +97,25 @@ while [[ $# -gt 0 ]]; do
       fi
       shift
       ;;
+    --suite-lock)
+      # 공유 스위트 잠금 폴더 — 범위 인자가 아니다. 값 하나를 소비한다. 잠금 스크립트는 없는 부모 폴더를 만들어 버리므로
+      # 오타 난 경로가 아무도 보지 않는 잠금이 되지 않게 부모 폴더가 있는지도 본다.
+      shift
+      if [[ $# -eq 0 ]] || [[ "$1" =~ ^- ]]; then
+        echo "❌ --suite-lock 뒤에 잠금 폴더 경로가 없다." >&2
+        exit 1
+      fi
+      if [[ "$1" != /* ]]; then
+        echo "❌ --suite-lock 은 절대경로여야 한다: $1" >&2
+        exit 1
+      fi
+      if [[ ! -d "$(dirname -- "$1")" ]]; then
+        echo "❌ --suite-lock 의 부모 폴더가 없다: $(dirname -- "$1")" >&2
+        exit 1
+      fi
+      SUITE_LOCK="$1"
+      shift
+      ;;
     --reset)
       gone "--reset" "세션 폴더는 /quality-gates:quality-pipeline 을 시작할 때마다 지우고 다시 만든다"
       shift
@@ -147,6 +167,7 @@ OPTIONS:
   --origin <path>      Caller's origin file for the intent critic (tracked file in this repo)
                        If that file has no roadmap: line, the other-teams map reports 「로드맵 없음」.
   --answered <path>    Conductor's already-answered file for the intent critic (absolute path)
+  --suite-lock <path>  Shared suite lock folder (absolute path) — each differential test command holds it
   --session-id <id>    Session ID when CLAUDE_CODE_SESSION_ID is unset (if it is set, must equal it)
   --ensure             Keep this session's folder if it already exists (skill preflight)
   -h, --help           Show this help message
@@ -222,8 +243,17 @@ fi
 STATE_DIR="$STATE_ROOT/$SESSION_ID"
 STATE_FILE="$STATE_DIR/result.md"
 
-# --ensure: 이 세션 폴더가 이미 있으면 아무것도 하지 않는다.
+# 잠금 자리 파일 — 시작마다 지우고 --suite-lock 이 있으면 다시 쓴다. 끊긴 앞 실행의 자리가 이 실행에 쓰이지 않는다.
+write_suite_lock_path() {
+  rm -f -- "$STATE_DIR/suite-lock-path.txt"
+  if [[ -n "$SUITE_LOCK" ]]; then
+    printf '%s\n' "$SUITE_LOCK" > "$STATE_DIR/suite-lock-path.txt"
+  fi
+}
+
+# --ensure: 이 세션 폴더가 이미 있으면 잠금 자리 파일 말고는 아무것도 하지 않는다.
 if [[ "$ENSURE_MODE" == "true" ]] && [[ -f "$STATE_FILE" ]]; then
+  write_suite_lock_path
   exit 0
 fi
 
@@ -307,6 +337,7 @@ started_at: "$TIMESTAMP"
 # qg result
 EOF
 mv "$TEMP_FILE" "$STATE_FILE"
+write_suite_lock_path
 
 echo "🔄 Quality Gates 를 시작한다 — 이 턴 안에서 끝까지 돈다."
 for a in $REMOVED_ARGS; do

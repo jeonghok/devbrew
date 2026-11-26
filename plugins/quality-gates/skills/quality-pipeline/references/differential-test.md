@@ -185,12 +185,21 @@ printf '%s\n' <고른 파일들> | "$QG/scripts/run-test-selection.sh" assign "<
 ## D3 HEAD 축 실행
 
 배정 파일의 러너마다(unclaimed 제외) 그 러너의 unit 을 bulk 로 돌리고, fail 이나 error 행이 있으면 그 unit 만
-per-unit 으로 다시 돌린다. 다시 돈 행이 bulk 행을 교체한다:
+per-unit 으로 다시 돌린다. 다시 돈 행이 bulk 행을 교체한다.
+
+테스트를 돌리는 명령(D3 · D4 의 `run` · D5 의 flaky 재실행)은 감싸개 `with-suite-lock.sh` 를 거친다. 세션 폴더에
+`suite-lock-path.txt` 가 없으면 감싸개는 명령만 돌린다. 있으면 그 명령이 도는 동안 공유 스위트 잠금을 쥐고, 다른 쪽이 쥐고
+있거나 잠금을 쓸 수 없으면 기다리지 않고 잠금 없이 돌린다 — 종료 코드는 언제나 명령의 것이다. `$RD/suite-lock-path.txt` 가
+있으면 테스트 명령을 나란히 돌리지 않고 하나씩 돌린다 — 러너가 둘이어도 같다. 나란히 돌리면 둘째 명령이 이 실행이 쥔
+잠금을 다른 쪽의 것으로 센다. 감싸개가 내는 겹침 줄(`> [quality-gates] 차등 테스트가 다른 전체 테스트와 겹쳐 돈다 — …`)은
+그대로 보인다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" bulk "<memo>/head-<runner>-i1.tsv" <unit>...
-"$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" per-unit "<memo>/head-<runner>-i1.tsv" <fail·error 인 unit>...
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
+"$QG/scripts/with-suite-lock.sh" "$RD" -- "$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" bulk "<memo>/head-<runner>-i1.tsv" <unit>...
+"$QG/scripts/with-suite-lock.sh" "$RD" -- "$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" per-unit "<memo>/head-<runner>-i1.tsv" <fail·error 인 unit>...
 ```
 
 D1 의 `head_tree` 가 비었으면(봉인이나 트리 생성 실패 — `head_commit=-`) stderr 를 그대로 보이고, 지금 작업 트리로 대신 돌리지 않는다. 대신 그
@@ -222,8 +231,10 @@ printf 'base_tree=%s\n' "$base_tree"
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/run-test-selection.sh" run "<base_tree>" "<runner>" bulk "<memo>/baseline-<runner>.tsv" <pending unit>...
-"$QG/scripts/run-test-selection.sh" run "<base_tree>" "<runner>" per-unit "<memo>/baseline-<runner>.tsv" <fail·error 인 unit>...
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
+"$QG/scripts/with-suite-lock.sh" "$RD" -- "$QG/scripts/run-test-selection.sh" run "<base_tree>" "<runner>" bulk "<memo>/baseline-<runner>.tsv" <pending unit>...
+"$QG/scripts/with-suite-lock.sh" "$RD" -- "$QG/scripts/run-test-selection.sh" run "<base_tree>" "<runner>" per-unit "<memo>/baseline-<runner>.tsv" <fail·error 인 unit>...
 ```
 
 기준선 커밋이 `-` 이거나 `base_tree` 가 비면 stderr 를 보이고 pending unit 을 관측 없음으로 채운다 — 커밋 칸에는
@@ -270,7 +281,9 @@ fi
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" flaky "<memo>/head-<runner>-i1.tsv" <NEW_REGRESSION unit>...
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
+"$QG/scripts/with-suite-lock.sh" "$RD" -- "$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" flaky "<memo>/head-<runner>-i1.tsv" <NEW_REGRESSION unit>...
 ```
 
 ## D6 트리 정리 — 모든 종료 경로
