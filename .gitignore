@@ -226,3 +226,6 @@ reference/
 
 # understand-anything: regenerable knowledge-graph analysis output (/understand)
 .understand-anything/
+
+# plugin eval results — 커밋하지 않는다
+plugins/*/tests/evals/results/
