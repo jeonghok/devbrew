@@ -305,4 +305,74 @@ if nine == 9: ok("G1 을 달아야 하는 진입 skill 이 아홉이다")
 else: no("G1 을 달아야 하는 진입 skill 이 %d 개다(기대 9)" % nine)
 '
 
+note "F. retired_names_absent"
+# 은퇴 이름은 표의 은퇴 행에서 도출한다(절 B2 가 표를 기대값에 묶는다). 코퍼스는 git ls-files 의 보통 파일(mode 120000 링크는 뺀다) 본문 전체.
+run_section F '
+ret, kept_names, tokens = set(), set(), {}
+for p in plugins:
+    try: rows = rd(p)
+    except m.TableError: no(p + " 표를 못 읽어 은퇴 이름을 도출하지 못한다"); continue
+    for r in rows:
+        for n in r["names"]:
+            if r["state"] == "남음": kept_names.add(n)
+            elif r["state"] == "은퇴": ret.add(n)
+ret -= kept_names
+SKIPNAME = "DEVBREW_SKIP_HOOKS"
+for n in sorted(ret):
+    if n.startswith(SKIPNAME + "="): tokens[n] = n[len(SKIPNAME) + 1:]
+def bound(x): return re.compile(r"(?<![A-Za-z0-9_])" + re.escape(x) + r"(?![A-Za-z0-9_])")
+def tokbound(x): return re.compile(re.escape(SKIPNAME) + r"=[\x22\x27 ]*" + re.escape(x) + r"(?![A-Za-z0-9_-])")
+def retired_pats():
+    pats = []
+    for n in sorted(ret):
+        pats.append((n, bound(n)))
+        if n in tokens: pats.append((n, tokbound(tokens[n])))
+    return pats
+def hits_in(text, pats):
+    return sorted(set(n for n, rx in pats if rx.search(text)))
+raw = subprocess.run(["git", "-C", root, "ls-files", "-s", "-z"], stdout=subprocess.PIPE, check=True).stdout.decode("utf-8").split("\0")
+corpus = []
+for ent in raw:
+    if not ent or "\t" not in ent: continue
+    meta, f = ent.split("\t", 1)
+    if meta.split()[0] not in ("100644", "100755"): continue   # 링크는 보통 파일이 아니다
+    base = os.path.basename(f)
+    plug = re.match(r"^plugins/[^/]+/(skills|references|templates|scripts|hooks|agents)/", f)
+    sh = f.startswith("shared/") and "/tests/" not in f and base not in ("switches.md", "CHANGELOG.md") and not base.startswith("README")
+    tl = f.startswith("tools/") and "/tests/" not in f and "/test_" not in f
+    gw = f.startswith("docs/git-workflow/")
+    if not (plug or sh or tl or gw): continue
+    try:
+        with open(os.path.join(root, f), "rb") as fh: txt = fh.read().decode("utf-8")
+    except (OSError, UnicodeDecodeError): continue
+    corpus.append((f, txt))
+if len(corpus) > 50 and len(ret) >= 20: ok("코퍼스 %d 파일 · 은퇴 이름 %d 개(별칭 포함)를 도출했다" % (len(corpus), len(ret)))
+else: no("코퍼스 %d 파일 · 은퇴 이름 %d 개 — 도출이 비었거나 너무 작다" % (len(corpus), len(ret)))
+pats = retired_pats()
+bad = [(f, hits_in(t, pats)) for f, t in corpus if hits_in(t, pats)]
+if not bad: ok("어느 은퇴 이름도 코퍼스에 없다")
+else:
+    for f, h in bad: no("은퇴 이름이 남았다: %s %s" % (f, " ".join(h)))
+bare = re.compile(r"(?<![A-Za-z0-9_])" + SKIPNAME + r"(?![A-Za-z0-9_])")
+got = sorted(f for f, t in corpus if bare.search(t))
+want = ["plugins/spec-distill/scripts/review_entry.py", "shared/entry/entry_preflight.py"]
+if got == want: ok("맨이름 " + SKIPNAME + " 가 나오는 파일이 정확히 둘이다")
+else: no("맨이름 " + SKIPNAME + " 가 나오는 파일 집합이 다르다: " + repr(got))
+alltext = "\n".join(t for _, t in corpus)
+for n in sorted(kept_names):
+    if bound(n).search(alltext): ok("남는 이름 " + n + " 가 코퍼스에 있다(양성 짝)")
+    else: no("남는 이름 " + n + " 가 코퍼스에 없다")
+if len(kept_names) == 7 + 1: ok("남는 이름이 일곱에 별칭 하나를 더한 여덟이다")
+else: no("남는 이름이 %d 개다(기대 8: 일곱 + 별칭 하나)" % len(kept_names))
+# 계측기 양성 대조 — 은퇴 이름 하나를 넣은 사본 코퍼스를 같은 검사가 잡는다(정확 경계도: 이름 뒤에 글자를 붙이면 안 잡힌다)
+probe = sorted(ret)[0]
+if hits_in("x " + probe + " y", pats) == [probe]: ok("계측기 양성 대조: 은퇴 이름을 넣으면 검사가 잡는다")
+else: no("계측기 양성 대조 실패: 은퇴 이름을 넣어도 검사가 못 잡는다")
+if not hits_in("x " + "DEVBREW_QUALITY_GATES_DISABLE_CODEX y", pats): ok("계측기 경계 대조: 남는 이름은 은퇴 이름으로 잡히지 않는다")
+else: no("계측기 경계 대조 실패: 남는 이름이 은퇴 이름에 걸린다")
+tk = [n for n in sorted(tokens)]
+if tk and all(n in hits_in(SKIPNAME + "=" + tokens[n] + " ", pats) for n in tk): ok("계측기 양성 대조: 토큰 글자로도 잡는다")
+else: no("계측기 양성 대조 실패: 토큰 글자를 못 잡는다")
+'
+
 finish
