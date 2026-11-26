@@ -71,7 +71,7 @@ case_R24_final_verdict_takes_the_differential_line() {
   local fv; fv=$(section "$SKILL" '## Final verdict')
   local final; final=$(awk '$0 == "<!-- final-verdict:begin -->" {on=1; next} $0 == "<!-- final-verdict:end -->" {exit} on' "$SKILL")
   [ -n "$final" ] && ok "Final verdict: 최종 판정 펜스를 표지로 찾았다" || no "Final verdict: 최종 판정 펜스 표지가 없다"
-  assert_contains "$final" "<<'QG_ARGS_D'" "Final verdict: 차등 결과 줄을 따옴표 heredoc 자리로 받는다"
+  assert_contains "$final" "<<'QG_ARGS_D_<8 hex>'" "Final verdict: 차등 결과 줄을 따옴표 heredoc 자리로 받는다"
   assert_contains "$final" '"${D_ARGS[@]}"' "Final verdict: 차등 결과 줄을 배열로 넘긴다"
   assert_not_contains "$final" 'differential.yaml' "Final verdict: 판정 펜스가 차등 사본을 다시 읽지 않는다"
   assert_not_contains "$final" 'new_failures:' "Final verdict: 판정 펜스가 new_failures: 를 다시 뽑지 않는다"

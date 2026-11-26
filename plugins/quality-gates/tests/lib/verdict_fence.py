@@ -4,7 +4,8 @@
 사용: verdict_fence.py <SKILL.md> <표지> <출력 .sh> [이름=값 ...]
 
 - 표지: `<!-- <표지>:begin -->` 와 `<!-- <표지>:end -->` 사이의 첫 ```bash 펜스를 뽑는다.
-- 이름이 `QG_` 로 시작하면 그 heredoc(`<<'QG_ARGS_R'` · `<<'QG_EXCLUDED_ADD'` …)의 몸을 값으로 바꾼다.
+- 이름이 `QG_` 로 시작하면 그 heredoc(`<<'QG_ARGS_R_<8 hex>'` …)의 몸을 값으로 바꾸고,
+  끝 표지의 `<8 hex>` 는 시험 값 `deadbeef` 로 바꾼다.
   값 안의 줄바꿈은 여러 줄이 된다. 빈 값은 빈 줄 하나다.
 - 그 밖의 이름은 글자 그대로 바꿀 자리표시다(예: `<session-id>=sid1` · `<N>=2`).
 
@@ -36,18 +37,23 @@ def extract(text, marker):
     return window[o + 1:c]
 
 
+NONCE = "deadbeef"
+
+
 def fill_heredoc(body, name, value):
+    # 끝 표지는 `<name>_<8 hex>` 다 — 값 자리를 실행처럼 16진수 8자(고정 시험 값)로 바꾸고 몸을 채운다.
     # 여는 줄의 따옴표 꼴은 가리지 않는다 — 따옴표가 빠진 펜스도 채워 돌려야 위조 줄 케이스가 그 결함을 잰다.
-    openers = (f"<<'{name}'", f'<<"{name}"', f"<<{name}")
+    # 같은 이름을 두 번 채우면(호출부가 기본값 뒤에 덮어쓸 값을 줄 때) 이미 채운 꼴도 찾아 뒤 값이 이긴다.
+    term, real = f"{name}_<8 hex>", f"{name}_{NONCE}"
+    openers = tuple(o for t in (term, real) for o in (f"<<'{t}'", f'<<"{t}"', f"<<{t}"))
     starts = [i for i, l in enumerate(body) if l.rstrip().endswith(openers)]
     if len(starts) != 1:
-        die(f"heredoc {name} 가 {len(starts)}번 있다(정확히 한 번이어야 한다)")
+        die(f"heredoc {term} 가 {len(starts)}번 있다(정확히 한 번이어야 한다)")
     i = starts[0]
-    try:
-        j = body.index(name, i + 1)
-    except ValueError:
-        die(f"heredoc {name} 의 끝 줄이 없다")
-    return body[:i + 1] + value.split("\n") + body[j:]
+    ends = [k for k in range(i + 1, len(body)) if body[k] in (term, real)]
+    if not ends:
+        die(f"heredoc {term} 의 끝 줄이 없다")
+    return body[:i] + [body[i].replace(term, real)] + value.split("\n") + [real] + body[ends[0] + 1:]
 
 
 def main(argv):

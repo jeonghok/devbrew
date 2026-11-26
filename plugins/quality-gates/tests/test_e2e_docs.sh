@@ -143,7 +143,7 @@ case_final_verdict_goes_through_verdict_py_with_e2e() {
     [ -n "$f" ] && ok "R24: 판정 펜스 $m 을 표지로 찾았다(아래 부재 단언이 공허하지 않다)" || no "R24: 판정 펜스 $m 이 없다"
     assert_contains "$s" "<!-- $m:begin -->" "R24: $m 표지가 ## Final verdict 안에 있다"
     for ax in R D S E; do
-      assert_contains "$f" "<<'QG_ARGS_$ax'" "R24($m): $ax 결과 줄은 따옴표 heredoc 자리로 받는다"
+      assert_contains "$f" "<<'QG_ARGS_${ax}_<8 hex>'" "R24($m): $ax 결과 줄은 따옴표 heredoc 자리로 받는다"
     done
     assert_not_contains "$f" "QG_ARGS_X" "R24($m): 제외 결과 줄 자리가 없다(한 실행은 고치지 않는다 — 위 양성 짝)"
     for ax in R D S; do
@@ -174,7 +174,7 @@ case_final_verdict_goes_through_verdict_py_with_e2e() {
   assert_contains "$(marked final-verdict)" '[ -n "$R_LINE" ] && [ -n "$D_LINE" ] ||' "R24: 최종 판정 펜스는 리뷰 · 차등 결과 줄이 없으면 멈춘다"
   assert_contains "$(marked final-verdict)" '[ -n "$E_LINE" ] || {' "R24: 최종 판정 펜스는 e2e 결과 줄이 없으면 멈춘다(기본값 안 함 없음)"
   assert_not_contains "$(marked final-verdict)" "E_ARGS=(--e2e '안 함')" "R24: 최종 판정 펜스에 e2e 기본값이 없다"
-  assert_contains "$(marked final-verdict)" "<<'QG_ARGS_RR'" "R24: 최종 판정 펜스는 되올린 뒤 리뷰 결과 줄을 따로 받는다"
+  assert_contains "$(marked final-verdict)" "<<'QG_ARGS_RR_<8 hex>'" "R24: 최종 판정 펜스는 되올린 뒤 리뷰 결과 줄을 따로 받는다"
   assert_contains "$(marked final-verdict)" '[ "$B1" -ge "$B0" ]' "R24: 되올린 뒤 줄의 막는 지적 수가 앞 줄보다 적으면 멈춘다"
   assert_contains "$(marked trivia-verdict)" '--reason trivia --line' "trivia 펜스는 trivia 사유로 판정한다"
   assert_contains "$(marked scope-empty-verdict)" '--reason scope-empty --line' "걸러진 diff 빈 실행 펜스는 scope-empty 사유로 판정한다"

@@ -159,12 +159,13 @@ res, skip = [], None
 for l in lines:
     if skip is not None:
         if l == skip:
-            res.append(l); skip = None
+            res.append(skip.replace("<8 hex>", "deadbeef")); skip = None
         continue
     res.append(l)
     for name, val in fill.items():
-        if l.rstrip().endswith("<<'%s'" % name):
-            res.append(val); skip = name
+        term = name + "_<8 hex>"
+        if l.rstrip().endswith("<<'%s'" % term):
+            res[-1] = l.replace(term, name + "_deadbeef"); res.append(val); skip = term
 src = "\n".join(res).replace("<session-id>", sid).replace("<N>", "1")
 with open(out, "w", encoding="utf-8") as f:
     f.write(src + "\n")

@@ -840,14 +840,16 @@ D="${TOP}/.claude/quality-gates/<session-id>"
 호출의 timeout 은 부팅 상한보다 길게 준다: 기본이면 150000 ms, `DEVBREW_QUALITY_GATES_E2E_BOOT_TIMEOUT` 이 있으면
 그 초 + 60 초.
 
+값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 두 자리에 넣는다.
+
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
 rm -f "$D/e2e-evidence.tsv" "$D/e2e-after.txt" "$D/e2e-before.txt"
-cat > "$D/e2e-cmd.txt" <<'E2E_CMD'
+cat > "$D/e2e-cmd.txt" <<'E2E_CMD_<8 hex>'
 <승인된 부팅 명령 — 한 줄, 글자 그대로>
-E2E_CMD
+E2E_CMD_<8 hex>
 "$QG/scripts/e2e-state.sh" fingerprint --out "$D/e2e-before.txt" && "$QG/scripts/e2e-state.sh" boot --dir "$D" --cmd "$(cat "$D/e2e-cmd.txt")" <--ready-port <포트> 또는 --ready-log '<정규식>'>; echo "boot rc=$?"
 ```
 
@@ -884,13 +886,15 @@ rm -f "$D/e2e-evidence.tsv" "$D/e2e-after.txt" "$D/e2e-before.txt"
 
 **E2 — 걷기.** 레퍼런스 3 절의 규칙대로 걷고, 4 절의 증거표를 `$D/e2e-evidence.tsv` 에 쓴다(칸 사이는 탭).
 
+값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 두 자리에 넣는다.
+
 ```bash
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
-cat > "$D/e2e-evidence.tsv" <<'E2E_EVIDENCE'
+cat > "$D/e2e-evidence.tsv" <<'E2E_EVIDENCE_<8 hex>'
 기대 상태	판정	증거
 <기대 상태>	<충족|불충족|미확인>	<증거 원문 인용 또는 ->
-E2E_EVIDENCE
+E2E_EVIDENCE_<8 hex>
 ```
 
 **E3 — 내리고 다시 재기.** 걷기가 어떻게 끝났든(도중 오류 포함) 이 펜스를 돈다.
@@ -928,25 +932,29 @@ e2e 칸과 「사람이 뒤집음」을 정한다. 어느 결과든 E5 로 기�
 **E5 — 기록.** 레퍼런스 7 절대로 걷기마다 세션 폴더의 `e2e-record.md` 에 덧붙인다. 걷는 동안 `result.md` 에는 쓰지
 않는다 — `## Final verdict` 의 기록 펜스가 옮긴다.
 
+값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 두 자리에 넣는다.
+
 ```bash
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
-cat >> "$D/e2e-record.md" <<'E2E_RECORD'
+cat >> "$D/e2e-record.md" <<'E2E_RECORD_<8 hex>'
 ### 걷기 <n>
 
 <시나리오(번호 · 표면 · 부팅 명령 · 명령 출처 · 준비 신호) · 증거표 원문 · 판정안 · 게이트 선택 · stop-failed 줄(있으면)>
 
-E2E_RECORD
+E2E_RECORD_<8 hex>
 ```
 
 뒤집었으면 `e2e-flip.md` 에 한 줄을 덧붙인다.
 
+값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 두 자리에 넣는다.
+
 ```bash
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 D="${TOP}/.claude/quality-gates/<session-id>"
-cat >> "$D/e2e-flip.md" <<'E2E_FLIP'
+cat >> "$D/e2e-flip.md" <<'E2E_FLIP_<8 hex>'
 - e2e: <판정안> → <결과> — <사람의 한 줄 사유>
-E2E_FLIP
+E2E_FLIP_<8 hex>
 ```
 
 **E6 — e2e 결과 줄.** `## Final verdict` 로 가기 직전에 한 번 돈다 — 어느 길로 가든: 걸었든, E0 · E1 · E3 의 갈래나 질문의 답으로 e2e 칸이
@@ -983,26 +991,28 @@ printf 'qg-verdict-args: --e2e %s%s\n' '<e2e 칸>' '<뒤집음>'
 
 펜스는 줄마다 모양과 그 자리에 올 수 있는 이름을 검사한다 — 맞지 않으면 판정 줄 없이 0 이 아닌 값으로 끝난다.
 
+값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 자리에 넣는다 — here-doc 이 여럿인 이 펜스는 값 하나를 모든 자리에 함께 써도 된다.
+
 <!-- final-verdict:begin -->
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
-IFS= read -r R_LINE <<'QG_ARGS_R'
+IFS= read -r R_LINE <<'QG_ARGS_R_<8 hex>'
 <리뷰 결과 줄 — Step 3.9 펜스가 낸 줄>
-QG_ARGS_R
-{ IFS= read -r RR_LINE; RR_EXTRA="$(cat)"; } <<'QG_ARGS_RR'
+QG_ARGS_R_<8 hex>
+{ IFS= read -r RR_LINE; RR_EXTRA="$(cat)"; } <<'QG_ARGS_RR_<8 hex>'
 <되올린 뒤 리뷰 결과 줄 — 되올리지 않았으면 되올림 없음>
-QG_ARGS_RR
-IFS= read -r D_LINE <<'QG_ARGS_D'
+QG_ARGS_RR_<8 hex>
+IFS= read -r D_LINE <<'QG_ARGS_D_<8 hex>'
 <차등 결과 줄>
-QG_ARGS_D
-IFS= read -r S_LINE <<'QG_ARGS_S'
+QG_ARGS_D_<8 hex>
+IFS= read -r S_LINE <<'QG_ARGS_S_<8 hex>'
 <범위 결과 줄 — 없으면 빈 줄>
-QG_ARGS_S
-IFS= read -r E_LINE <<'QG_ARGS_E'
+QG_ARGS_S_<8 hex>
+IFS= read -r E_LINE <<'QG_ARGS_E_<8 hex>'
 <e2e 결과 줄>
-QG_ARGS_E
+QG_ARGS_E_<8 hex>
 [ -n "$R_LINE" ] && [ -n "$D_LINE" ] || { echo "[quality-gates] 판정에 넘길 리뷰 결과 줄이나 차등 테스트 결과 줄이 비었다 — 판정 줄을 만들지 않는다" >&2; exit 4; }
 [ -n "$RR_LINE" ] || { echo "[quality-gates] 되올리기 여부가 비었다 — 되올리지 않았으면 되올림 없음 을 적어라. 판정 줄을 만들지 않는다" >&2; exit 4; }
 [ -z "$RR_EXTRA" ] || { echo "[quality-gates] 되올린 뒤 리뷰 자리에 줄이 둘 이상이다 — 한 줄만 넣는다(되올리지 않았으면 되올림 없음). 판정 줄을 만들지 않는다" >&2; exit 4; }
@@ -1072,23 +1082,25 @@ echo "verdict rc=$?"; cat "$RD/verdict.out"
 
 trivia 실행에는 리뷰 · 차등 · e2e 결과 줄이 없다 — 범위 모드면 범위 결과 줄만 넣고 같은 네 자리로 판정을 바로 만든다:
 
+값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 자리에 넣는다 — here-doc 이 여럿인 이 펜스는 값 하나를 모든 자리에 함께 써도 된다.
+
 <!-- trivia-verdict:begin -->
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
-IFS= read -r R_LINE <<'QG_ARGS_R'
+IFS= read -r R_LINE <<'QG_ARGS_R_<8 hex>'
 <리뷰 결과 줄 — 없으면 빈 줄>
-QG_ARGS_R
-IFS= read -r D_LINE <<'QG_ARGS_D'
+QG_ARGS_R_<8 hex>
+IFS= read -r D_LINE <<'QG_ARGS_D_<8 hex>'
 <차등 결과 줄 — 없으면 빈 줄>
-QG_ARGS_D
-IFS= read -r S_LINE <<'QG_ARGS_S'
+QG_ARGS_D_<8 hex>
+IFS= read -r S_LINE <<'QG_ARGS_S_<8 hex>'
 <범위 결과 줄 — 없으면 빈 줄>
-QG_ARGS_S
-IFS= read -r E_LINE <<'QG_ARGS_E'
+QG_ARGS_S_<8 hex>
+IFS= read -r E_LINE <<'QG_ARGS_E_<8 hex>'
 <e2e 결과 줄 — 없으면 빈 줄>
-QG_ARGS_E
+QG_ARGS_E_<8 hex>
 R_ARGS=(--blocking 0 --optional 0); D_ARGS=(--new-failures 0); S_ARGS=(--sha "$(git rev-parse --short HEAD)"); E_ARGS=(--e2e '안 함')
 for AX in R D S; do
   case "$AX" in
@@ -1143,23 +1155,25 @@ RD="${TOP}/.claude/quality-gates/<session-id>"
 rm -f "$RD/differential.yaml" "$RD/differential-not-counted.md"
 ```
 
+값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 자리에 넣는다 — here-doc 이 여럿인 이 펜스는 값 하나를 모든 자리에 함께 써도 된다.
+
 <!-- scope-empty-verdict:begin -->
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
-IFS= read -r R_LINE <<'QG_ARGS_R'
+IFS= read -r R_LINE <<'QG_ARGS_R_<8 hex>'
 <리뷰 결과 줄 — 없으면 빈 줄>
-QG_ARGS_R
-IFS= read -r D_LINE <<'QG_ARGS_D'
+QG_ARGS_R_<8 hex>
+IFS= read -r D_LINE <<'QG_ARGS_D_<8 hex>'
 <차등 결과 줄 — 없으면 빈 줄>
-QG_ARGS_D
-IFS= read -r S_LINE <<'QG_ARGS_S'
+QG_ARGS_D_<8 hex>
+IFS= read -r S_LINE <<'QG_ARGS_S_<8 hex>'
 <범위 결과 줄 — 없으면 빈 줄>
-QG_ARGS_S
-IFS= read -r E_LINE <<'QG_ARGS_E'
+QG_ARGS_S_<8 hex>
+IFS= read -r E_LINE <<'QG_ARGS_E_<8 hex>'
 <e2e 결과 줄 — 없으면 빈 줄>
-QG_ARGS_E
+QG_ARGS_E_<8 hex>
 R_ARGS=(--blocking 0 --optional 0); D_ARGS=(--new-failures 0); S_ARGS=(--sha "$(git rev-parse --short HEAD)"); E_ARGS=(--e2e '안 함')
 for AX in R D S; do
   case "$AX" in
@@ -1207,6 +1221,8 @@ A non-zero rc is not a verdict — report and stop.
 
 Then render the summary and record the local result (a trivia run and an empty-filtered-diff run set `SYN=""`). `## 문서 경로` 는 Step 1c 공시 요약 줄(출처 · 쓰인 패턴 · 읽지 못한 패턴 · 뺀 수 · 남긴 수)과 건너뛴 qg 상태 파일 수만 옮긴다(경로 목록은 옮기지 않는다):
 
+값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 두 자리에 넣는다.
+
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
@@ -1225,9 +1241,9 @@ printf '판정\t%s\n결과\tfinished\n' "$(tail -n 1 "$RD/verdict.out")" \
   printf '\n## 지적\n\n'; if [ -f "$SYN" ] && grep -q '^| 심각도 |' "$SYN"; then sed -n '/^| 심각도 |/,/^$/p' "$SYN"; else echo "(없음)"; fi
   if [ -f "$SYN" ] && grep -q '^| 번호 | 위치 | 원래 심각도 |' "$SYN"; then printf '\n## 낮춘 지적\n\n'; sed -n '/^| 번호 | 위치 | 원래 심각도 |/,/^$/p' "$SYN"; fi
   printf '\n## 고칠 목록\n\n'
-  cat <<'QG_FIX_LIST'
+  cat <<'QG_FIX_LIST_<8 hex>'
 <Step 4.5 의 고칠 목록 — ### 막는 지적 · ### 제안 · ### 차등 회귀 세 절, 빈 절은 (없음). trivia 실행과 걸러진 diff 가 빈 실행은 세 절 모두 (없음)>
-QG_FIX_LIST
+QG_FIX_LIST_<8 hex>
   printf '\n## 차등 테스트\n\n'; if [ -f "$RD/differential.yaml" ]; then cat "$RD/differential.yaml"; else echo "(이번 실행에 차등 출력 없음)"; fi
   if [ -s "$RD/differential-not-counted.md" ]; then printf '\n커버리지로 세지 않은 테스트:\n\n'; cat "$RD/differential-not-counted.md"; fi
   if [ -s "$RD/e2e-record.md" ]; then printf '\n## e2e\n\n'; cat "$RD/e2e-record.md"; fi
@@ -1288,13 +1304,15 @@ corpus(변경 파일 내용 + 커밋 메시지) 밖의 낯선 값을 알려진 �
     **전 → 후**  <짧은 표 또는 두 줄>
     **어떻게 확인했나**  <차등 테스트·e2e 를 한두 줄로>
 
+값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 두 자리에 넣는다.
+
 ```bash
 SID="<session-id>"
 [[ "$SID" =~ ^[A-Za-z0-9_-]{8,}$ ]] || { echo "[quality-gates] 세션 id 가 패턴 밖이다 — 이해글을 쓰지 않는다" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] 리포 루트를 못 찾았다 — 이해글을 쓰지 않는다" >&2; exit 1; }
-cat > "$TOP/.claude/quality-gates/$SID/comment-head.md" <<'QG_COMMENT_HEAD'
+cat > "$TOP/.claude/quality-gates/$SID/comment-head.md" <<'QG_COMMENT_HEAD_<8 hex>'
 <위 형식의 이해글>
-QG_COMMENT_HEAD
+QG_COMMENT_HEAD_<8 hex>
 ```
 
 **2. 게시** — `OUTCOME` 에 `## Final verdict` 표의 결과 칸 값(Outcome)을, `<session-id>` 에 이 세션의 id 를 그대로 넣고 돌린다. sink 는 리포 루트에서 돈다(펜스가 `cd` 한다). 마지막 줄을 그대로 보인다.

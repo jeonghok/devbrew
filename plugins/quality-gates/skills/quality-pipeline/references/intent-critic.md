@@ -77,19 +77,21 @@ fi
 
 리뷰 트리 루트는 PR 범위면 리포 루트(`git rev-parse --show-toplevel`), 범위 모드면 I1 의 트리다 — `config` 는 그곳의 설정을, `prepare` 는 그곳의 docs 답 자리를 읽고 그 루트를 계획 파일에 적는다. 리뷰한 커밋은 PR 범위면 `HEAD`, 범위 모드면 끝 커밋이다.
 
+값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 자리에 넣는다 — here-doc 이 여럿인 이 펜스는 값 하나를 모든 자리에 함께 써도 된다.
+
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
 RD="${TOP}/.claude/quality-gates/<session-id>"
-cat > "$RD/intent-specs.json" <<'QG_INTENT_JSON'
+cat > "$RD/intent-specs.json" <<'QG_INTENT_JSON_<8 hex>'
 <P3 이 낸 JSON 한 줄 — 없으면 빈 줄>
-QG_INTENT_JSON
-IFS= read -r ORIGIN_ARG <<'QG_INTENT_ORIGIN'
+QG_INTENT_JSON_<8 hex>
+IFS= read -r ORIGIN_ARG <<'QG_INTENT_ORIGIN_<8 hex>'
 <인자의 --origin 경로 — 없으면 빈 줄>
-QG_INTENT_ORIGIN
-IFS= read -r ANSWERED_ARG <<'QG_INTENT_ANSWERED'
+QG_INTENT_ORIGIN_<8 hex>
+IFS= read -r ANSWERED_ARG <<'QG_INTENT_ANSWERED_<8 hex>'
 <인자의 --answered 경로 — 없으면 빈 줄>
-QG_INTENT_ANSWERED
+QG_INTENT_ANSWERED_<8 hex>
 if [ -f "$RD/range-scope.txt" ]; then
   MODE=range; RS="$RD/range-scope.txt"
   BASE="$(sed -n 's/^start: //p' "$RS")"; REVIEW="$(sed -n 's/^end: //p' "$RS")"; TREE="$(cat "$RD/intent-review-tree.txt")"
@@ -146,7 +148,7 @@ Agent({
 })
 ```
 
-**응답 쓰기.** 응답을 글자 그대로 세션 폴더에 쓰고 읽을 수 있는지 본다. `N` 은 첫째 호출이면 `1`, 둘째 호출 · 한 번에 넣은 호출이면 `2` 다. 구분자의 `<8 hex>` 는 쓸 때마다 새로 고른 16진수 8자(두 자리 같은 값)로 바꾼다. 리뷰어가 죽어 응답이 없으면 몸을 빈 줄로 둔다:
+**응답 쓰기.** 응답을 글자 그대로 세션 폴더에 쓰고 읽을 수 있는지 본다. `N` 은 첫째 호출이면 `1`, 둘째 호출 · 한 번에 넣은 호출이면 `2` 다. 값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 두 자리에 넣는다. 리뷰어가 죽어 응답이 없으면 몸을 빈 줄로 둔다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -269,7 +271,7 @@ AskUserQuestion({ questions: [ <묻는 질문마다 — 최대 3> {
 
 질문 창을 닫거나 답하지 않은 질문은 머리 줄을 쓰지 않는다. 질문 창을 보였으면 답한 질문이 하나도 없어도 `record` 를 돈다 — 입력 파일을 머리 줄 없이 비워 둔다. `record` 가 돈 실행의 답하지 않은 질문은 돌려주는 꼴에 `답하지 않음` 으로 남고 결과 줄이 `답하지 않음 <k>개` 로 가른다 — 할 일은 [I7](#i7-돌려주기).
 
-**답 기록.** 답마다 `record` 입력 꼴의 머리 줄 하나를 쓴다 — `=== n: <그 항목의 n> · id: <그 항목의 id> · pick: <고른 것>`. 번호 없는 머리 줄 · 번호와 정체가 맞지 않는 머리 줄은 받지 않는다 — 그 줄과 아래 글은 어느 답에도 실리지 않고 `정체가 맞지 않는 답 머리 <n>개` 로 공시된다. 선택지를 골랐으면 `pick:` 은 그 라벨이고 머리 아래 줄은 없다. 직접 입력 칸에 썼으면 `pick: typed` 이고, 머리 아래에 입력 글을 글자 그대로(여러 줄이면 여러 줄) 둔다. 구분자의 `<8 hex>` 는 실행마다 새로 고른 16진수 8자(두 자리 같은 값)다. `record` 는 답 파일을 docs 답 자리에 쓰고 그 파일만 지금 브랜치에 커밋한다(push 하지 않는다). 한 실행에 한 번만 돈다 — 다시 돌리면 같은 답의 파일이 둘 생긴다:
+**답 기록.** 답마다 `record` 입력 꼴의 머리 줄 하나를 쓴다 — `=== n: <그 항목의 n> · id: <그 항목의 id> · pick: <고른 것>`. 번호 없는 머리 줄 · 번호와 정체가 맞지 않는 머리 줄은 받지 않는다 — 그 줄과 아래 글은 어느 답에도 실리지 않고 `정체가 맞지 않는 답 머리 <n>개` 로 공시된다. 선택지를 골랐으면 `pick:` 은 그 라벨이고 머리 아래 줄은 없다. 직접 입력 칸에 썼으면 `pick: typed` 이고, 머리 아래에 입력 글을 글자 그대로(여러 줄이면 여러 줄) 둔다. 값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 두 자리에 넣는다. `record` 는 답 파일을 docs 답 자리에 쓰고 그 파일만 지금 브랜치에 커밋한다(push 하지 않는다). 한 실행에 한 번만 돈다 — 다시 돌리면 같은 답의 파일이 둘 생긴다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }

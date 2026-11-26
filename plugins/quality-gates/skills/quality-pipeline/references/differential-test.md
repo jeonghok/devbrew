@@ -154,10 +154,12 @@ fi
 없다고 판단되면 그 사실도 여기에 적는다 — 0 단위면 D5 가 scope-empty 를 낸다. 실행 끝의 `result.md` `## 차등 테스트` 가
 이 목록을 싣는다:
 
+값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 두 자리에 넣는다.
+
 ```bash
-cat > "<memo>/not-counted-i1.md" <<'QG_NOT_COUNTED'
+cat > "<memo>/not-counted-i1.md" <<'QG_NOT_COUNTED_<8 hex>'
 <- <테스트 경로> — <이유 한 줄> 줄들, 없으면 (없음)>
-QG_NOT_COUNTED
+QG_NOT_COUNTED_<8 hex>
 ```
 
 D3/D4 밖에서 스위트나 테스트를 돌릴 수 있다 — 원인을 찾는 조사용이다. 돌리기 전에 `> [quality-gates] 조사용 실행 — 판정에 안 씀: <명령>` 한 줄을 내고, 결과를 판정 입력 어디에도(배정 · 커버리지로 세지 않을 목록 · 행 파일 · D5 · 합성기) 넣지 않고, D3/D4 의 트리(기준선 · head 트리)에서는 돌리지 않는다. `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 조사용 실행도 하지 않는다 — 저장소 코드를 호스트에서 돌리기 때문이다.

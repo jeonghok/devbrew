@@ -57,7 +57,7 @@ text = sys.stdin.read()
 lines = text.splitlines()
 open_re = re.compile(r'^[ \t]*```bash\s*$')
 close_re = re.compile(r'^[ \t]*```\s*$')
-slot_line = "IFS= read -r S_LINE <<'QG_ARGS_S'"
+slot_line = "IFS= read -r S_LINE <<'QG_ARGS_S_<8 hex>'"
 default_line = 'S_ARGS=(--sha "$(git rev-parse --short HEAD)")'
 fences = []
 i = 0

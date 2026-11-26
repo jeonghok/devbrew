@@ -63,7 +63,7 @@ assert_file_grep "$S" '^argument-hint: ".*\[--origin <경로>\] \[--answered <�
 assert_contains "$SF" '`--origin <경로>` 는 부른 쪽이 넘기는 원문 파일(리포 안 추적 파일)이고 범위 인자가 아니다 — `--paths` 의 glob 으로 읽지 않는다.' "Arguments: --origin 은 범위 인자가 아니다"
 assert_contains "$SF" '`--answered <경로>` 는 부른 쪽(지휘자)이 넘기는 「이미 답한 것」 파일의 절대 경로이고 범위 인자가 아니다.' "Arguments: --answered 는 범위 인자가 아니다"
 IR="$(fenced "$PROC")"
-assert_contains "$IR" "<<'QG_INTENT_ANSWERED'" "I2 펜스: QG_INTENT_ANSWERED heredoc"
+assert_contains "$IR" "<<'QG_INTENT_ANSWERED_<8 hex>'" "I2 펜스: QG_INTENT_ANSWERED heredoc"
 assert_contains "$IR" 'A_ARGS=(--answered "$ANSWERED_ARG")' "I2 펜스: A_ARGS 목록"
 assert_contains "$IR" '"${A_ARGS[@]}"' "I2 펜스: prepare 줄 끝의 A_ARGS"
 assert_file_grep "$S" '^ ├ Publish ── ' "Flow: Publish 는 마지막 가지가 아니다"
