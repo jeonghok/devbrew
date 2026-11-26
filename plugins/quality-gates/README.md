@@ -14,7 +14,7 @@
 - **Law 3 (Compounding)** — 기본 substrate 는 reviewer-persona 편집이다 — 그 버그를 더 잘 잡는 자리가 락 · 스크립트 · skill 이면 그것을 고친다.
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — 한 문장으로 설명되는 diff(typo · rename · 주석만 · 포매팅 — 파일 수와 무관)를 오케스트레이터가 판단해 trivia 로 닫는다(판정 `not-certified (trivia)`). 토픽 · 범위면 그 전체 diff 로 판단하고, 선언이 깨졌으면(`declaration-invalid`) trivia escape 를 쓰지 않는다.
 - **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — 파이프라인은 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), 리뷰어 상한 없이 실행마다 찍는 두 공시 줄(dispatch 전 시작 줄: 계획한 수와 더한 수 · 모두 돌아온 뒤 끝 줄: 다시 부른 수와 실패)로 subagent spray를 드러낸다.
-- **P18 — 루프 상한은 남기고 넘는 길은 사용자 승인 하나(문서 비평 라운드)** — 코드 파이프라인(`/quality-gates:quality-pipeline`)은 한 번 보고 끝나는 흐름이라 되풀이도 상한도 없다. 상한이 있는 루프는 문서 비평(`/quality-gates:artifact-critique`)뿐이고, 상한 라운드에서 사용자가 라운드를 하나씩 더 연다. kill switch 는 그대로다.
+- **P18 — 루프 상한은 남기고 넘는 길은 사용자 승인 하나(문서 비평 라운드)** — 코드 파이프라인(`/quality-gates:quality-pipeline`)은 한 번 보고 끝나는 흐름이라 되풀이도 상한도 없다. 상한이 있는 루프는 문서 비평(`/quality-gates:artifact-critique`)뿐이고, 상한 라운드에서 사용자가 라운드를 하나씩 더 연다.
 - **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (따로 무시되지 않는다 — 「파이프라인 state」 절; `/quality-gates:quality-pipeline` 시작마다 자기 폴더를 다시 만들고 TTL sweep 으로 폴더 GC).
 - **P8 determinism-economy (harness lightness — trust the model)** (v2.5.0) — 암묵 session scope로 파이프라인이 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**. 버려진 결정론적 under-coverage 경고를 결정론 가드가 아니라 *모델 행동*으로 대체(git 비교·차단 없음). 자연어 scope 의도는 별도 parser 없이 모델이 branch scope로 해석 — `/quality-gates:quality-pipeline branch`는 결정론적 escape hatch로 유지. devbrew P8 determinism-economy refinement("Zero hooks" 일반화) instantiation.
 - **P8 determinism-economy — self-honest verdict floor** (v2.6.0; routing 제거·단순화 v2.7.0) — 파이프라인이 *검토받았다고 믿는 scope*와 *resolve한 scope*가 발산할 때(빈 세션 → resolved scope 0 → "clean"의 false-clean)를 봉쇄. read-only `scripts/check-review-scope.sh`가 `changes_exist`를 결정론으로 emit하고, SKILL이 실행마다 1회 호출·캐시해 **정직-verdict floor**(load-bearing, kill 불가)가 `resolved scope 0 AND changes_exist == yes`이면 판정이 `not-certified (scope-empty)` 가 된다. **무엇을 리뷰할지(routing)는 모델이 소유** — v2.7.0에서 v2.6.0의 redirect 게이트·`$effective_diff_scope` 배선·redirect kill switch를 제거하고 `/quality-gates:quality-pipeline branch` escape hatch + honesty norm 한 줄로 대체(dogfood 5버그가 전부 routing 재구성에서 나왔고 floor의 load-bearing 입력 `changes_exist`는 틀린 적 없음). 결정론은 무결성 floor 한 점에만; routing/자연어는 모델 신뢰. session 기본값·`/quality-gates:quality-pipeline branch` 자체의 스코프 **선택**(routing)은 무변경이지만, 이 floor 가 보는 것과 **별개로** ② 차등 테스트가 상시 도는 v9.0.0 이후는 차등 테스트가 고르는 test unit 이 0개인 실행도 `expected-empty` → `not-certified (scope-empty)` 다(관측 없음은 음성 결과가 아니다 — §6.4.3 P23 재결정, 2026-09-26) — **진짜 무변경(genuine no-op)과 docs/config-only 변경을 포함한다.** regression: `tests/test_check_review_scope.sh`, `tests/test_qg_false_clean_floor.sh`.
@@ -36,7 +36,7 @@
 - **P8 (이식성) — 의존 판** — 의존의 최소 판을 손으로 적지 않는다. `scripts/check_deps.py measure` 가 개발 당시 깔린 판을 재서 `dependencies.md` 에 쓰고, 진입은 그 표와 지금 판을 대조해 없거나 낮으면 멈춘다(`check_deps.py entry`).
 - **P21 (출력값 유출 차단 · kill switch 는 가장 안쪽 sink 에서) — 게시 sink** (v10 ③) — `scripts/publish-comment.sh` 하나가 게시의 통제를 모두 쥔다: kill switch(`DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`) → gh 존재 · origin(`scripts/gh-repo.sh`) → 인증 → 열린 PR → corpus(변경 파일 내용 + 커밋 메시지) 위의 `secret-scan.py`(첫 줄 리터럴 `scan_ok: yes` 로만 통과 · degraded corpus 는 fail-closed) → 이미지·HTML 태그 차단(`![` · `<img` · `<image` · `<picture` · `<source` · `<svg` · `<video` · `<audio` — 렌더링이 본문 속 URL 을 클릭 없이 불러 값이 밖으로 새는 길이라 `scan-failed`) → 65,536자 상한 → `gh pr comment --body-file`. 마지막 줄은 `posted: <url>` · `skipped: <사유>` · `failed: gh-unavailable`(gh 없음) · `failed: gh-unauthenticated`(gh 미로그인) · `failed: no-origin`(origin 없음 · 못 읽음 · gh 가 그 레포를 다루지 못함) 리터럴이다. gh 를 부르는 qg 파일은 이 sink 와 `discover-spec.sh`(읽기 전용 `gh pr view`) · `other_teams.py`(intent-critic 단계의 다른 팀 읽기 — 읽기 전용 `gh pr list` 한 번) 셋뿐이고, 셋 다 gh 를 찾고 `-R` 에 넣을 origin 을 `scripts/gh-repo.sh` 한 곳에서 받는다. regression: `tests/test_publish_comment_sink.sh` · `tests/test_publish_gh_two_files.sh` · `tests/test_gh_repo.sh` · `tests/test_secret_scan.py` · `tests/test_secret_scan_fp.py`.
 - **P17 (상시 동의)** (v10 ③) — 열린 PR 이 있으면 `/quality-gates:quality-pipeline` 실행마다 새 코멘트 하나(이해글 + 판정 줄)를 남긴다. 게시마다 묻지 않는다 — `/quality-gates:quality-pipeline` 실행이 그 동의이고 게시만 끄는 길은 kill switch `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` 하나다. 이해글은 오케스트레이터가 쓴다. secret-scan 은 corpus 밖의 낯선 비밀값을 알려진 패턴으로만 잡는다(오케스트레이터가 읽은 e2e 로그 · 환경 파일 등 — 남는 위험). 매 실행 새 코멘트라 구독자 알림이 실행마다 간다.
-- **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/quality-gates:artifact-critique` 가 비-코드 산출물에 대해 tier-unpinned `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 범위 고르기 · 규모 공시; Law 2=read-only 리뷰어(`tools:` allowlist)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate+kill switch(`DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE`); P8=NL 라우팅 모델-소유, 결정론은 `/quality-gates:artifact-critique <path>`+§10 스키마. 별도 skill `artifact-critique`로 위임(코드 파이프라인 무변경).
+- **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/quality-gates:artifact-critique` 가 비-코드 산출물에 대해 tier-unpinned `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 범위 고르기 · 규모 공시; Law 2=read-only 리뷰어(`tools:` allowlist)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate; P8=NL 라우팅 모델-소유, 결정론은 `/quality-gates:artifact-critique <path>`+§10 스키마. 별도 skill `artifact-critique`로 위임(코드 파이프라인 무변경).
 - **LD3 (floor 는 실행이다) — 영향분 테스트의 실제 실행** (v3.0.0) — ② 차등 테스트의 floor
   가 "전체 앱 부팅"이 아니라 *"레포에 이미 있는 테스트 중 영향분을 실제로 돌리는 것"*이다.
   `run-test-selection.sh` 가 러너 어댑터 9종을 **집합으로** 감지해 전부 실행한다 — 폴리글랏
@@ -230,7 +230,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 두 줄**로 억�
 ```
 /quality-gates:quality-pipeline  (single assistant turn)
  ├ setup-qg.sh ── .claude/quality-gates/<sid>/result.md
- ├ SKILL preflight ── kill switch · setup --ensure · 범위(range 면 두 커밋으로 얼림) · intent: 한 줄
+ ├ SKILL preflight ── setup --ensure · 범위(range 면 두 커밋으로 얼림) · intent: 한 줄
  ├ trivia escape? ── yes ──▶ not-certified (trivia) ──────▶ Final verdict
  │   (토픽 · 범위 모드는 여기서 판단하지 않고 Step 1c 뒤에 거르기 전 diff 전체로 판단)
  ├ ① 리뷰 ── 한 번만 지난다(되돌아가는 반복 · 상한 없음)
@@ -409,6 +409,7 @@ JSON 한 줄(`intent_source` · `intent_note` · `intent_file` · `specs`)을 �
 1. **통째 끄기.** Claude Code 의 플러그인 끄기를 쓴다 — `/plugin` 화면, `claude plugin disable quality-gates`, 또는 설정의 `enabledPlugins`. 끄면 skill 과 훅이 함께 꺼지고 새 세션부터 먹는다. `claude plugin disable` 로 끈 뒤의 효과는 이 레포에서 재지 않았다 — 잰 것은 설정의 `enabledPlugins` 다. 도는 세션은 `/reload-plugins` 뒤에 먹는다. 한 번 실행에만 끄려면 `claude --settings <파일>` 로 연 파일의 `enabledPlugins` 에 `"quality-gates@<마켓플레이스>": false` 를 적는다. worktree 안에서 연 세션은 본 체크아웃의 `.claude/settings.local.json` 을 쓴다(공식 설정 문서 기준이다 — 이 레포에서 재지 않았다).
 
 2. **끄기 변수를 주는 두 길.** 셸 환경변수로 주거나, Claude Code 설정(`settings.json`)의 `env` 칸에 적는다. `env` 칸의 값이 Bash 로 도는 스크립트에 닿는지는 재지 않았다. 확인하는 법: 적은 뒤 이 플러그인의 진입 skill 을 부르면 첫머리에 `[devbrew-switch] 꺼져 있다 — …` 줄이 보인다. 보이지 않으면 셸 환경변수로 준다. 이 줄은 사전 검사가 값을 본 것이다 — 같은 세션의 Bash 로 도는 스크립트가 같은 환경을 물려받는다는 전제에 선다. 실제로 건너뛰었는지는 그 단계의 건너뜀 알림으로 본다.
+   사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
 
 3. **표.**
 
@@ -516,7 +517,7 @@ intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용
 
 ### Kill switches (보안 컨트롤)
 
-CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component 비활성화 경로는 환경 변수 한 번으로 cover되어야 함. 아래는 source-of-truth 인벤토리.
+CLAUDE.md Plugin Shape: *"끄기 변수는 보안 컨트롤이다"*. 아래는 source-of-truth 인벤토리.
 
 **보안 — 기본값이 대상 저장소의 코드를 호스트 권한으로 실행한다.** ② 차등 테스트가 매
 `/quality-gates:quality-pipeline` 마다 상시 도는 v9.0.0 이후,

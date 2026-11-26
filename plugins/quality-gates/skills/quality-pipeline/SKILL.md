@@ -202,7 +202,7 @@ reviewers, and it never lowers or skips a finding.
 
 ```
 /quality-gates:quality-pipeline
- ├ Preflight ── kill switch · setup · 범위(range 일 때 두 커밋으로 얼림) · intent: 한 줄
+ ├ Preflight ── setup · 범위(range 일 때 두 커밋으로 얼림) · intent: 한 줄
  ├ trivia 판단 ── 한 문장 diff 면 not-certified (trivia) 로 끝 (토픽 · 범위는 Step 1c 뒤에 전체 diff 로)
  │   ① 리뷰        Review Step 1 · 1b · 3 · 3.5  (시작 구성 + 근거를 적어 더한 리뷰어 → code-recritic)
  │       Step 1c 의 걸러진 diff 가 비면 → not-certified (scope-empty) 로 끝

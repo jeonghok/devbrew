@@ -498,7 +498,7 @@ brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안�
 
 **이 skill 의 degrade 채널**:
 `reviewing-brief` 의 `## degrade 채널` 다섯 — 엔진의 `fin.json` `advisory[]`·`blocks`·`gate --render` 첫 줄 +
-state 의 `brief_review_degradations` 원장(BRIEF_REVIEW skip record 포함)·두 번째 채널 파일 — 과 웹 한 줄.
+state 의 `brief_review_degradations` 원장·두 번째 채널 파일 — 과 웹 한 줄.
 `advisory[]` 원문은 하나하나가 `gate --render` 첫 줄의 경고 줄 중 하나에 대응하므로, 경고(목록 4)에는 그 첫 줄의
 경고 줄을 그대로 쓰고 `advisory[]` 원문을 다시 늘어놓지 않습니다. 질문의 경고 줄은 엔진의 상태 줄과 다른 채널의 짧은 줄을 이은 것이다 — 개수를 더하지 않는다.
 렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)는 문서 리뷰 엔진 몫의 결론이다. 다른 채널에 경고가 있으면 첫 줄 아래에 그 줄들을 따로 쓴다.
