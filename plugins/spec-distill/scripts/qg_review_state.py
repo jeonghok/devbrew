@@ -32,6 +32,7 @@ sys.path.insert(0, str(HERE))
 import conductor_ledger as L  # noqa: E402
 import qg_review_archive as A  # noqa: E402
 import qg_review_file as F  # noqa: E402
+import team_layout as T  # noqa: E402
 
 RC_OK, RC_CLOSED, RC_USAGE, RC_FILE, RC_REFUSED = 0, 1, 2, 3, 4
 
@@ -142,13 +143,13 @@ def glob_literal(path: str) -> str:
 
 
 def exclusions(spec: Optional[str] = None, job_dir: Optional[str] = None) -> List[str]:
-    """리더가 쓰는 기록 파일 — 옛 형식은 설계문서, team 형식은 과제 폴더의 INTENT.md 와 `results/review-*`."""
+    """리더가 쓰는 기록 파일 — 옛 형식은 설계문서, team 형식은 과제 폴더의 의도 파일과 결과 폴더의 리뷰 결과(이름은 team_layout)."""
     if (spec is None) == (job_dir is None):
         raise ValueError("spec 과 job_dir 가운데 하나만 준다")
     if spec is not None:
         return [glob_literal(spec)]
     job = glob_literal(job_dir.rstrip("/"))
-    return [job + "/INTENT.md", job + "/results/review-*"]
+    return ["/".join((job, T.INTENT_FILE)), "/".join((job, T.RESULTS_DIR, T.STAGES[-1] + "-*"))]
 
 
 def base_commits(repo, start: str, end: str, exclude: List[str]) -> List[str]:
