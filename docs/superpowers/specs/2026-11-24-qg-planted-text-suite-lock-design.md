@@ -544,6 +544,7 @@ qg 는 리뷰받는 글(diff · 커밋 메시지 · PR 본문 · 리뷰어가 �
 - spec 승인 · 2026-11-26 · 「승인 — 계획 담당자에게 (권장)」
 - 2026-11-26 계획 검토 — 계획(`docs/superpowers/plans/2026-11-26-qg-planted-text-suite-lock.md`)을 설계와 대조했다(조사 담당자 Opus · 읽기만). 설계에 없던 결정 열 가운데 판정 · 화면 · 레포 규칙에 닿는 넷을 사용자에게 물었고(D60–D63) 나머지는 지휘자가 정했다(D64). 테스트가 얇은 수용 기준 다섯(AC3 · AC27 · AC32 · AC35 · AC36)은 계획 담당자가 보강했다. 실행 방식은 writing-plans 가 권한 Subagent-driven 이다(미리 받은 답 — 사용자 답 아님).
 - 2026-11-27 · 구현 물음 1 — 지원 파일이 spike · fixture 앱 폴더 안일 때 · 사용자 답 「길 위 폴더에서 spike · fixtures 성분 아래 폴더는 넓히지 않는다」 · relay/R7/relay-2.md
+- 2026-11-27 · 구현 담당자 돌아옴(06b3874a) — 기본 브랜치를 합쳤다(0f2f38cf · 충돌 넷은 두 플러그인의 판 칸과 CHANGELOG 머리 — 이 브랜치의 판을 지키고 변경 기록은 양쪽을 차례로 뒀다) · `## 판정` · `## 구현 대조` 절을 썼다 · 구현 대조의 「받는 곳 없는 미룸」 여덟 가운데 「로드맵 후속」 여섯은 받는 에픽을 사용자에게 물어 정한다
 
 ## Metadata
 
@@ -590,3 +591,36 @@ qg 는 리뷰받는 글(diff · 커밋 메시지 · PR 본문 · 리뷰어가 �
 | 2e6610eb#r2.1 | 참고(testing) #verification-plan — 손 확인을 「실제 지휘 리뷰」 에 싣는다고 했는데 지휘자가 부르는 qg 는 늘 범위 모드라 게시 sink 를 부르지 않는다 — 게시 표지와 GitHub 확인(댓글 번호가 든 url · 돌려받은 본문이 보낸 본문과 같은지)을 실제 GitHub 에서 보는 자리가 없고 가짜 gh 테스트뿐이다. |
 | ef79c297#r3.1 | 참고(handoff_incomplete) #deferred-to-plan — 계획으로 넘긴 목록에 이미 뒤집힌 결정의 말이 남아 있어 이 문서만 읽고 계획을 짜면 없앤 것을 다시 짓게 된다 — 「새 세션 파일 이름(게시 표지 · … 응답 사본 포함)」(게시 표지는 없앴고 응답 사본은 세션 파일이 아니다) · 「잠금 자리 값을 세션 파일에 남기는 펜스의 자리」(쓰는 쪽은 시작 스크립트 하나로 정했다) · 「확인 갈래가 쓰는 gh 호출(그 번호의 댓글 · 그 댓글이 달린 PR · 지금 계정)」 과 다시 확인할 것의 「`gh pr comment` 가 내는 url 에 댓글 번호가 있다는 것」(번호로 확인하는 길은 없앴고 지금은 댓글 목록의 본문 대조다). 세 줄을 지금 설계의 말로 고친다. |
 | 9986768a#r3.1 | 참고(handoff_incomplete) #미룸 — 미룸 표의 손 확인 행이 고친 설계와 어긋난다 — 아직 「게시 표지」 를 「실제 지휘 리뷰」 에서 돌려 본다고 하고 받는 곳도 로드맵 끝 확인 목록의 다섯째 줄 하나뿐인데, 검증 계획은 게시 확인을 지휘 리뷰가 아니라 실제 PR 에 qg 를 직접 돌리는 첫째 줄에서 본다고 한다(지휘자가 부르는 qg 는 게시하지 않는다). 결정 기록도 이 표의 「게시 표지」 를 낡은 말이라 적었지만 표는 그대로다. 로드맵 폴더의 end-checks.md 다섯째 줄도 같은 낡은 말(「게시 표지」)이고 첫째 줄에는 게시 확인이 없다 — 표의 행을 둘로 가르고(게시 확인 → 첫째 줄 · 나머지 → 다섯째 줄), 그 목록 파일을 누가 고치는지 적는다. |
+
+## 판정
+
+### docs/superpowers/plans/2026-11-26-qg-planted-text-suite-lock.md
+
+- Ruling: task reviewers dispatched as feature-dev:code-reviewer (tools Read/Grep/Glob, no Write/Edit/Bash) — relay requires write-less reviewers (Law 2); such a reviewer cannot write a report file, so it returns a compact report (<~50 lines) in its final message — cost if wrong: some extra controller context.
+- Ruling: Tasks 4–8 run by one implementer agent resumed per task (plan line 246); per-task review still happens; test_agent_input_slots.sh RED allowed until Task 8 — cost if wrong: one bigger fix round at Task 8.
+- Task 1: implementer DONE_WITH_CONCERNS (cae5ac1d, 4aff37f0). Ruling: qg_nonce stderr reason lines (`[qg_nonce] …`) are script diagnostics, not spec-fixed user text — acceptable; symlink refusal + fail-closed on empty slot list are within spec §1 fail-closed intent — cost: none. Pyright "os undefined" was stale (import os at :17).
+- Task 3: implementer DONE (b289b7fb; also edited test_codex_runner_degrade_contract.sh + test_artifact_codex_reviewer.sh stubs — Ruling: legitimate consequence of qg_nonce import, accepted); review dispatched
+- Task 4: minor → carried into Task 5 dispatch (Ruling: cheap, same implementer, security lock coverage): (1) pin intent-critic.md:75 exception sentence whole-line + widening mutation in test_slot_files.sh; (2) security-reviewer.md:300 wording to include the unreadable line as allowed outside YAML; (4) note lock gap in test header.
+- Ruling: bundle implementer context ~444k tokens → Tasks 7–8 go to a fresh Opus implementer that reads the handoff note in task-6-report.md (plan's "same implementer" was for the RED-in-between continuity, which the reports carry) — cost if wrong: some re-reading.
+- Task 7: minors → carried into Task 8 dispatch (same implementer ab0f497): retry must refresh intent slot copies (new value per call, AC25 — Ruling: re-run `slots --call k` before a retry); cmd_doubts_append runs _checked_output on OUT1; test for doubts-append neutralization; move marker block after _DOUBT_HEADS.
+- Security review (automated, post-push) on intent_origin.py `_marker_like`: blacklist neutralizer bypassable (interspersed `-`/`!`/whitespace, Unicode Cf/Zs, NFKC lookalikes). Ruling: real (AC6 "only script-written markers survive"); fix = escape every `<!` in untrusted body text placed into intent slot files (not only marker-looking ones), keep script-written markers; add bypass tests (`<!---- origin-source`, `< !--`, NFKC/zero-width variants) — routed to the Task 8 implementer as a follow-up item after its Task 8 report (slot files are model-read only, no user-visible change) — cost if wrong: legitimate HTML comments in reviewed text shown escaped to the reviewer.
+- Ruling: my Task 14 follow-up (2) (stderr note on failed overlap-record write) adds a new screen line — conflicts with Global Constraint/AC24 「새 줄 없음」; spec wins → revert 108bc4b7 with `git revert` (no HEAD rewind); the gap (session folder unwritable → result file lacks overlap line) goes to the 미룸 table at the final step — cost: an unlikely silent omission stays disclosed only in 미룸.
+- Ruling: conductor re-call rule restricted to `--answered`/`--suite-lock` (otherwise report the stop line, no re-call) — conductor-procedure detail that only narrows retries, not user-visible output; accepted pending review — cost if wrong: a re-call that spec intended for another arg doesn't happen (none exists today).
+- Ruling: --answered stays unquoted (qg copies value verbatim; pre-existing space issue) → 미룸 candidate.
+- Task 15: revert f6df8b04 (of 108bc4b7); bash redirect error left as pre-existing (Ruling: matches pre-Task-15 state); review dispatched
+- Ruling: spec-distill version = 9.4.0 (minor: new surface — conductor call line carries --suite-lock; shared suite-lock canonical) — origin/main already at 9.3.3, conductor re-aligns before merge per relay — cost: none (conductor adjusts).
+- Task 18: implementer DONE_WITH_CONCERNS (3468f6b4). Ruling: superpowers row 7.0.0→7.0.2 is what measure wrote (cells are measured, not hand-edited) — keep; review dispatched
+- Fix wave re-review: Approved (F1–F8 addressed). Residual minors: qg CHANGELOG 17.2.0 lacks F7 behavior line (--ensure refuses when .claude/state root/session dir is a link and result.md lies beyond it) — Ruling: add one Fixed line after the suite (docs-only) ; README.md:609 & state-file-format.md:107 say `<주인>` for the overlap record field → `<주인 이름>` (same docs commit) — cost: none.
+- Ruling: Task 1 의 stderr 진단 줄은 받아들인다(새 화면 줄이 아니라 도구의 오류 사유).
+- Ruling: Task 3 이 qg_nonce import 때문에 고친 stub 시험 둘(test_codex_runner_degrade_contract.sh · test_artifact_codex_reviewer.sh)은 정당한 결과 — 받아들인다.
+- Ruling: Task 4 Minor 셋은 같은 구현자의 Task 5 로 넘겨 고친다.
+- Ruling: 자동 보안 리뷰가 짚은 intent_origin.py 표지 무해화(막는 목록 꼴)는 진짜다(AC6) — 의도 칸 파일에 싣는 믿지 못할 글의 `<!` 를 모두 이스케이프한다(38f16479).
+- Ruling: Task 13 Minor 는 Task 14 로 넘겨, 잠금 꼴이 아닌 폴더는 바쁜 갈래 앞에서 rc 3 으로 거절한다.
+- Ruling: Task 18 의 superpowers 의존 행 7.0.0→7.0.2 는 measure 가 잰 값이라 둔다.
+- Ruling: 마지막 수리 묶음 뒤 남은 Minor 둘(qg CHANGELOG 의 F7 공시 줄 · 겹침 기록 칸 `<주인 이름>`)은 스위트 뒤 문서 커밋으로 고친다(a0abede7 · 1181d85f).
+- Ruling: check_bundle_coverage 가 「해당 없음」 줄을 꼴 밖으로 거절해(rc 3) AC8 · AC29 줄을 AC 보고에서 빼고 머리 문장으로 옮긴다 — 남는 경고 「보고에 없는 AC — AC8 · AC29」 는 없앤 번호라 그대로 보고한다.
+
+## 구현 대조 — docs/superpowers/plans/2026-11-26-qg-planted-text-suite-lock.md
+
+- 구현 대조: 경고 10개 — 보고에 없는 AC 2개 · 미룸 표에 없는 미룸/빠짐 0개 · 받는 곳 없는 미룸 8개 · 받는 곳 검사 불가 0개 · 빠짐 0개 (보고에 없는 AC 둘은 없앤 번호 AC8 · AC29)
+- 보고: AC 34개 중 구현됨 34 · 미룸 0 · 빠짐 0
