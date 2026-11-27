@@ -15,6 +15,8 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(HERE, "run_evals.py")
+sys.path.insert(0, HERE)
+import run_evals  # noqa: E402 — 허용 목록 이름을 NEEDED 와 대조한다
 
 FAKE_CLAUDE = """#!/bin/sh
 . "$(dirname "$0")/fake.conf"
@@ -40,6 +42,48 @@ OUTSIDE_TEXT = "outside the plugin\n"
 # 가짜 claude(sh) 와 OS 가 스스로 두는 이름 — 스크립트가 넘긴 것이 아니다.
 SHELL_SET = frozenset(("PWD", "OLDPWD", "SHLVL", "_", "__CF_USER_TEXT_ENCODING",
                        "LC_CTYPE"))
+
+# 넘어가야 하는 이름과 값 — 공식 env-vars 문서에서 고른 것. HOME · CLAUDE_CONFIG_DIR 는 테스트가 채운다.
+NEEDED = {
+    "USER": "someone", "LOGNAME": "someone", "SHELL": "/bin/zsh",
+    "LANG": "ko_KR.UTF-8", "LC_ALL": "ko_KR.UTF-8", "TERM": "xterm-256color",
+    "ANTHROPIC_API_KEY": "<REDACTED>",
+    "ANTHROPIC_BASE_URL": "https://gateway.example.invalid",
+    "CLAUDE_CODE_USE_POWERSHELL_TOOL": "0",
+    "CLAUDE_CODE_SKIP_BEDROCK_AUTH": "1",
+    "CLAUDE_CODE_SKIP_ANTHROPIC_GOOGLE_CLOUD_AUTH": "1",
+    "CLAUDE_CODE_OAUTH_TOKEN": "<REDACTED>",
+    "CLAUDE_CODE_OAUTH_REFRESH_TOKEN": "<REDACTED>",
+    "CLAUDE_CODE_OAUTH_SCOPES": "user:inference",
+    "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "60000",
+    "CLAUDE_CODE_AWS_CHAIN_RESOLVE_TIMEOUT_MS": "60000",
+    "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST": "1",
+    "CLAUDE_CODE_CERT_STORE": "bundled,system",
+    "CLAUDE_CODE_CLIENT_CERT": "/etc/ssl/client.pem",
+    "CLAUDE_CODE_CLIENT_KEY": "/etc/ssl/client.key",
+    "CLAUDE_CODE_CLIENT_KEY_PASSPHRASE": "<REDACTED>",
+    "CLAUDE_CODE_PROXY_RESOLVES_HOSTS": "1",
+    "CLAUDE_CODE_GZIP_REQUEST_BODIES": "0",
+    "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
+    "CLAUDE_CODE_GATEWAY_MODEL_DISCOVERY_TIMEOUT_MS": "3000",
+    "CLAUDE_CODE_GATEWAY_HINT_HEADERS": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_DISABLE_AUTH_REFRESH_LOCK": "1",
+    "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1",
+    "DISABLE_AUTOUPDATER": "1",
+    "DO_NOT_TRACK": "1", "CLAUDE_CODE_SEND_FEEDBACK": "0",
+    "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+    "DEVBREW_SKIP_HOOKS": "spec-distill:review-entry",
+    "HTTPS_PROXY": "http://proxy.example.invalid:3128",
+    "https_proxy": "http://proxy.example.invalid:3128",
+    "HTTP_PROXY": "http://proxy.example.invalid:3128",
+    "http_proxy": "http://proxy.example.invalid:3128",
+    "ALL_PROXY": "socks5://proxy.example.invalid:1080",
+    "all_proxy": "socks5://proxy.example.invalid:1080",
+    "NO_PROXY": "localhost", "no_proxy": "localhost",
+    "NODE_EXTRA_CA_CERTS": "/etc/ssl/corp.pem",
+    "SSL_CERT_FILE": "/etc/ssl/cert.pem", "SSL_CERT_DIR": "/etc/ssl/certs",
+}
 
 
 def _case(n_runs):
@@ -198,47 +242,55 @@ class RunEvalsTest(unittest.TestCase):
                 self.assertNotIn(name, got)
         self.assert_names_within(got, ())
 
+    def needed_env(self):
+        env = dict(NEEDED)
+        env["HOME"] = os.path.join(self.root, "home")
+        env["CLAUDE_CONFIG_DIR"] = os.path.join(self.root, "claude-work")
+        return env
+
     def test_env_passes_needed(self):
-        needed = {
-            "HOME": os.path.join(self.root, "home"),
-            "USER": "someone",
-            "LOGNAME": "someone",
-            "SHELL": "/bin/zsh",
-            "LANG": "ko_KR.UTF-8",
-            "LC_ALL": "ko_KR.UTF-8",
-            "TERM": "xterm-256color",
-            "CLAUDE_CONFIG_DIR": os.path.join(self.root, "claude-work"),
-            "ANTHROPIC_API_KEY": "<REDACTED>",
-            "ANTHROPIC_BASE_URL": "https://gateway.example.invalid",
-            "CLAUDE_CODE_OAUTH_TOKEN": "<REDACTED>",
-            "CLAUDE_CODE_OAUTH_REFRESH_TOKEN": "<REDACTED>",
-            "CLAUDE_CODE_OAUTH_SCOPES": "user:inference",
-            "CLAUDE_CODE_SKIP_BEDROCK_AUTH": "1",
-            "CLAUDE_CODE_SKIP_ANTHROPIC_GOOGLE_CLOUD_AUTH": "1",
-            "CLAUDE_CODE_CERT_STORE": "bundled,system",
-            "CLAUDE_CODE_CLIENT_CERT": "/etc/ssl/client.pem",
-            "CLAUDE_CODE_CLIENT_KEY": "/etc/ssl/client.key",
-            "CLAUDE_CODE_CLIENT_KEY_PASSPHRASE": "<REDACTED>",
-            "CLAUDE_CODE_PROXY_RESOLVES_HOSTS": "1",
-            "CLAUDE_CODE_GATEWAY_HINT_HEADERS": "1",
-            "HTTPS_PROXY": "http://proxy.example.invalid:3128",
-            "https_proxy": "http://proxy.example.invalid:3128",
-            "HTTP_PROXY": "http://proxy.example.invalid:3128",
-            "http_proxy": "http://proxy.example.invalid:3128",
-            "ALL_PROXY": "socks5://proxy.example.invalid:1080",
-            "all_proxy": "socks5://proxy.example.invalid:1080",
-            "NO_PROXY": "localhost",
-            "no_proxy": "localhost",
-            "NODE_EXTRA_CA_CERTS": "/etc/ssl/corp.pem",
-            "SSL_CERT_FILE": "/etc/ssl/cert.pem",
-            "SSL_CERT_DIR": "/etc/ssl/certs",
-        }
-        got = self.env_run(needed)
+        needed = self.needed_env()
+        p = self.run_script([], result="ok", extra_env=needed)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        got = self.child_env()
         for name, value in needed.items():
             with self.subTest(name=name):
                 self.assertEqual(got.get(name), value)
         self.assertEqual(got.get("TMPDIR"), self.root)
         self.assert_names_within(got, needed)
+        self.assertEqual(p.stderr.count("\n"), 1, p.stderr)
+
+    def test_needed_covers_every_listed_name(self):
+        """허용 목록의 이름 · 접두마다 넘어가는지 보는 값이 NEEDED 에 있다."""
+        needed = self.needed_env()
+        for name in run_evals.PASS_NAMES:
+            with self.subTest(name=name):
+                self.assertIn(name, set(needed) | {"PATH", "TMPDIR"})
+        for prefix in run_evals.PASS_PREFIXES:
+            with self.subTest(prefix=prefix):
+                self.assertTrue(any(k.startswith(prefix) for k in needed))
+
+    def test_dropped_provider_vars_are_named_without_values(self):
+        creds = {
+            "AWS_SECRET_ACCESS_KEY": "aws-value-not-shown",
+            "GOOGLE_APPLICATION_CREDENTIALS": "/nowhere/google-value-not-shown",
+            "AZURE_CLIENT_SECRET": "azure-value-not-shown",
+        }
+        p = self.run_script([], result="ok", extra_env=creds)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        notice = [line for line in p.stderr.splitlines()
+                  if "AWS_SECRET_ACCESS_KEY" in line]
+        self.assertEqual(len(notice), 1, p.stderr)
+        for name, value in creds.items():
+            with self.subTest(name=name):
+                self.assertIn(name, notice[0])
+                self.assertNotIn(value, p.stderr + p.stdout)
+        self.assertIn("CLAUDE_CODE_USE_", notice[0])
+        p = self.run_script([], result="ok", extra_env=dict(
+            creds, CLAUDE_CODE_USE_BEDROCK="1", CLAUDE_CODE_USE_VERTEX="1",
+            CLAUDE_CODE_USE_FOUNDRY="1"))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertNotIn("AWS_SECRET_ACCESS_KEY", p.stderr)
 
     def test_env_passes_kill_switches(self):
         switches = {

@@ -25,24 +25,22 @@ PASS_NAMES = frozenset((
     "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
     "CLAUDE_CODE_OAUTH_SCOPES", "CLAUDE_CODE_API_KEY_HELPER_TTL_MS",
     "CLAUDE_CODE_AWS_CHAIN_RESOLVE_TIMEOUT_MS",
-    "CLAUDE_CODE_DISABLE_AUTH_REFRESH_LOCK",
     "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
     "CLAUDE_CODE_CERT_STORE", "CLAUDE_CODE_CLIENT_CERT",
     "CLAUDE_CODE_CLIENT_KEY", "CLAUDE_CODE_CLIENT_KEY_PASSPHRASE",
-    "CLAUDE_CODE_DISABLE_MTLS_RELOAD_ON_STALE_CONNECTION",
-    "CLAUDE_CODE_PROXY_RESOLVES_HOSTS", "CLAUDE_CODE_DISABLE_PROXY_SCHEME_REPAIR",
-    "CLAUDE_CODE_DISABLE_RESPONSE_COMPRESSION", "CLAUDE_CODE_GZIP_REQUEST_BODIES",
+    "CLAUDE_CODE_PROXY_RESOLVES_HOSTS", "CLAUDE_CODE_GZIP_REQUEST_BODIES",
     "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY",
     "CLAUDE_CODE_GATEWAY_MODEL_DISCOVERY_TIMEOUT_MS",
-    "CLAUDE_CODE_GATEWAY_HINT_HEADERS", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS",
-    "CLAUDE_CODE_DISABLE_STRUCTURED_OUTPUTS",
-    "CLAUDE_CODE_DISABLE_BEDROCK_CONTENT_TYPE_DEFAULT",
-    "CLAUDE_CODE_DISABLE_BEDROCK_CONTENT_TYPE_GUARD",
+    "CLAUDE_CODE_GATEWAY_HINT_HEADERS",
+    # Claude Code 의 개인정보 · 바깥 통신 끄기 가운데 DISABLE_ 접두 밖의 것.
+    "DO_NOT_TRACK", "CLAUDE_CODE_SEND_FEEDBACK", "ENABLE_CLAUDEAI_MCP_SERVERS",
     "DEVBREW_SKIP_HOOKS",
 ))
-# CLAUDE_CODE_USE_* 는 공급자 선택, CLAUDE_CODE_SKIP_* 는 인증 · 확인 건너뛰기다.
+# CLAUDE_CODE_USE_* 는 공급자 선택, CLAUDE_CODE_SKIP_* 는 인증 · 확인 건너뛰기,
+# DISABLE_* · CLAUDE_CODE_DISABLE_* 는 Claude Code 의 끄기(텔레메트리 · 오류 보고 · 갱신 등)다.
 # 세션 안의 값(CLAUDE_CODE_SESSION_ID · CLAUDE_CODE_MESSAGING_*)은 이 접두에 걸리지 않는다.
-PASS_PREFIXES = ("LC_", "ANTHROPIC_", "CLAUDE_CODE_USE_", "CLAUDE_CODE_SKIP_")
+PASS_PREFIXES = ("LC_", "ANTHROPIC_", "CLAUDE_CODE_USE_", "CLAUDE_CODE_SKIP_",
+                 "DISABLE_", "CLAUDE_CODE_DISABLE_")
 # devbrew 끄기 변수 — DEVBREW_<플러그인>_DISABLE[_<기능>] 꼴과 옛 DEVBREW_DISABLE_<플러그인>.
 KILL_SWITCH = re.compile(r"DEVBREW_(?:[A-Z0-9]+_)*DISABLE(?:_[A-Z0-9]+)*")
 # 클라우드 공급자의 변수는 그 공급자를 고른 때만 넘긴다(선택 변수, 이름들, 접두들).
@@ -62,18 +60,25 @@ def _chosen(value: Optional[str]) -> bool:
     return (value or "").strip().lower() in TRUTHY
 
 
-def child_env(environ, dev: Optional[str]) -> dict:
+def child_env(environ, dev: Optional[str]) -> Tuple[dict, List[str]]:
+    """넘길 환경과, 공급자를 켜지 않아 버린 공급자 자격 변수의 이름."""
     names = set(PASS_NAMES)
     prefixes = PASS_PREFIXES
+    closed_names, closed_prefixes = set(), ()
     for selectors, extra_names, extra_prefixes in PROVIDER_VARS:
         if any(_chosen(environ.get(s)) for s in selectors):
             names.update(extra_names)
             prefixes = prefixes + extra_prefixes
+        else:
+            closed_names.update(extra_names)
+            closed_prefixes = closed_prefixes + extra_prefixes
     env = {k: v for k, v in environ.items()
            if k in names or k.startswith(prefixes) or KILL_SWITCH.fullmatch(k)}
+    dropped = sorted(k for k in environ if k not in env and (
+        k in closed_names or k.startswith(closed_prefixes)))
     if dev:
         env["PATH"] = dev + os.pathsep + env.get("PATH", "")
-    return env
+    return env, dropped
 
 
 def dev_tool_bin() -> Optional[str]:
@@ -250,7 +255,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(not_run("상한(--max-cost-usd)은 0 보다 큰 수여야 한다"))
         return 1
 
-    env = child_env(os.environ, dev_tool_bin())
+    env, dropped = child_env(os.environ, dev_tool_bin())
+    if dropped:
+        print("plugin-evals: 셸에서 공급자를 켜지 않아 넘기지 않은 자격 변수 — "
+              + ", ".join(dropped) + " (설정 파일로 공급자를 골랐다면 셸에서 "
+              "그 CLAUDE_CODE_USE_* 를 켜고 다시 돈다)", file=sys.stderr)
     claude = shutil.which("claude", path=env.get("PATH"))
     if not claude:
         print(not_run("평가 명령(claude)을 찾지 못했다"))
