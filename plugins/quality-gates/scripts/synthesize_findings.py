@@ -595,6 +595,7 @@ def load_recritic(recritic_path, map_path, diff_path, ledger, slot_paths=None):
     `slot_paths`(`--recritic-slot`)가 있으면 응답을 그 칸 사본들의 끝 값과 먼저 견준다 — 하나라도
     없거나 틀리면 재비판자는 칸을 끝까지 읽지 않은 것이라 죽은 것으로 센다(사유 `끝 값 없음` ·
     `읽지 못함`). 끝 값이 모두 맞으면 `QG_INPUT_UNREADABLE:` 줄을 인용해도 실패가 아니다.
+    빈 응답(공백만 — 죽은 재비판자)은 대조의 실패가 아니라 지금의 블록 읽기 사유로 죽는다.
     """
     text, why = _read_text(recritic_path)
     if text is None:
@@ -602,7 +603,7 @@ def load_recritic(recritic_path, map_path, diff_path, ledger, slot_paths=None):
     if slot_paths:
         import qg_nonce
         reason = qg_nonce.check(text, list(slot_paths))
-        if reason is not None:
+        if reason is not None and reason != qg_nonce.NO_RESPONSE:
             return _dead(ledger, reason)
     mtext, why = _read_text(map_path)
     if mtext is None:

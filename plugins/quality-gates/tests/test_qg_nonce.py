@@ -355,6 +355,16 @@ class QgNonceTest(unittest.TestCase):
             (r.returncode, r.stdout),
             (1, "b1: fail: 끝 값 없음\nsecurity: fail: 끝 값 없음\n"))
 
+    def test_check_reviewer_ok_then_dead_retry_is_fail(self):
+        # 다시 부른 호출이 죽어 응답 사본이 없다 — 앞 시도가 ok 여도 그 묶음은 실패다.
+        rd, rv = self._dirs()
+        self._try(rd, rv, "security", 1, 1)
+        self._try(rd, rv, "security", 1, 2, respond=False)
+        r = self._check_reviewer(rd, rv, "security")
+        self.assertEqual(
+            (r.returncode, r.stdout),
+            (1, "b1: fail: 응답 없음\nsecurity: fail: 응답 없음\n"))
+
     def test_check_reviewer_last_try_decides_by_number(self):
         # 시도 번호가 두 자리여도 글자 차례가 아니라 수 차례로 마지막을 고른다(t2 < t10).
         rd, rv = self._dirs()

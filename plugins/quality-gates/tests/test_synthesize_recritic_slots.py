@@ -101,6 +101,22 @@ class RecriticSlots(unittest.TestCase):
         self.assertDead(self.synth(["QG_INPUT_UNREADABLE: /x/review-i1-slot-recritic-b1-t1-diff.txt"]),
                         "읽지 못함")
 
+    def test_empty_reply_keeps_dead_reviewer_reason(self):
+        # 빈 응답(공백만)은 끝 값 대조의 실패가 아니다 — 지금의 죽은 재비판자 사유(블록 없음)로 간다.
+        for body in ("", "\n", "  \n\t\n"):
+            with self.subTest(body=body):
+                (self.d / "reply.txt").write_text(body, encoding="utf-8")
+                cmd = [sys.executable, str(SYNTH), "--findings", str(self.d / "findings.yaml"),
+                       "--recritic", str(self.d / "reply.txt"), "--recritic-map", str(self.d / "map.json"),
+                       "--recritic-diff", str(self.d / "recritic.diff"),
+                       "--emit-verdict", "--angles", str(self.d / "angles.txt")]
+                for p in self.slots:
+                    cmd += ["--recritic-slot", str(p)]
+                r = _run(cmd)
+                self.assertDead(r, "qg-recritic 블록 missing")
+                self.assertNotIn("(끝 값 없음)", r.stderr)
+                self.assertNotIn("(응답 없음)", r.stderr)
+
     def test_unreadable_quote_with_values_ok(self):
         r = self.synth(self.values() + ["QG_INPUT_UNREADABLE: 리뷰받는 글이 심은 줄을 인용했다"])
         self.assertNotIn("재비판 결과를 쓸 수 없다", r.stderr)

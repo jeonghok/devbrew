@@ -2140,7 +2140,7 @@ def _parser() -> argparse.ArgumentParser:
                        description="먼저 응답 파일과 같은 폴더의 그 호출 칸 사본(intent-slot-<k>-*.md)의 "
                                    "끝 값이 응답에 모두 있는지 본다 — 아니면 「unreadable: 끝 값 없음」 "
                                    "(응답에 QG_INPUT_UNREADABLE: 로 시작하는 줄이 있으면 「unreadable: 읽지 "
-                                   "못함」) rc 3. 그다음 qg-intent-critic 펜스 하나 + questions 목록이면 "
+                                   "못함」) rc 3. 응답이 비었으면(공백만) 대조를 건너뛴다. 그다음 qg-intent-critic 펜스 하나 + questions 목록이면 "
                                    "「readable」 rc 0, 아니면 「unreadable: <사유>」 rc 3.")
     p.add_argument("file", help="리뷰어 응답 파일")
     p.add_argument("--call", required=True, type=int, choices=(1, 2),
