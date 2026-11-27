@@ -17,7 +17,8 @@ SPECL="spec 승인 · 2026-11-20 · 「승인 — 계획 담당자에게」"
 # ── 0 — 한 번 지어 복사하는 팀 레포(repo_copy): 사본은 원격을 따로 갖고 견본 경로를 품지 않는다 ──
 repo_copy "$T0/c0a" new && repo_copy "$T0/c0b" new && ok "0: 견본에서 사본 둘을 떴다" || { no "0: 사본을 뜨지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 assert_eq "$(git -C "$T0/c0a/repo" remote get-url origin)" "$T0/c0a/origin.git" "0: 사본의 원격은 그 사본의 bare 레포다"
-assert_eq "$(grep -rlF --exclude-dir=objects -- "$TEAM_TPL" "$T0/c0a/repo" "$T0/c0a/origin.git" "$T0/c0a/claude" 2>/dev/null)" "" "0: 사본의 레포 · 원격 · 세션 기록에 견본 경로가 남지 않는다"
+assert_eq "$(grep -rlF --exclude-dir=objects -- "$TEAM_TPL" "$T0/c0a/repo" "$T0/c0a/origin.git" 2>/dev/null)" "" "0: 사본의 레포 · 원격에 견본 경로가 남지 않는다"
+assert_eq "$(unset RD TM RM; repo_copy "$T0/c0d" new 2>&1 && printf '%s|%s|%s' "$RD" "$TM" "$RM")" "${RD}|${TM}|${RM}" "0: 견본을 짓지 않은 셸에서 부르면 견본의 RD · TM · RM 을 세운다"
 use_repo "$T0/c0a" && g checkout -q -b c0/only-a main && g push -q origin c0/only-a
 assert_eq "$(git -C "$T0/c0a/origin.git" for-each-ref --format='%(refname)' refs/heads/c0/only-a)" "refs/heads/c0/only-a" "0: 양성 대조 — 그 사본의 원격에는 올라갔다"
 assert_eq "$(git -C "$T0/c0b/repo" ls-remote origin refs/heads/c0/only-a; echo "rc=$?")" "rc=0" "0: 한 사본의 push 가 다른 사본의 원격에 보이지 않는다"

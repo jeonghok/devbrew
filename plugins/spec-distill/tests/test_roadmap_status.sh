@@ -109,7 +109,7 @@ assert_eq "$(stage "$T/fresh.json" Z1)" "가" "보고 캐시: 처음 읽은 값"
 printf '{"blocks": [{"id": "Z1", "stage": "나", "reason": "따"}]}\n' > "$T/fresh.json"
 assert_eq "$(stage "$T/fresh.json" Z1)" "나" "보고 캐시: 같은 경로를 같은 초에 다시 쓰면 새 글을 읽는다"
 assert_eq "$(reason "$T/fresh.json" Z1)" "따" "보고 캐시: 같은 경로를 다시 쓰면 다른 칸(reason)도 새 글을 읽는다"
-assert_eq "$(stage "$T/fresh.json" Z9)" "" "보고 캐시: 블록이 없으면 빈 출력"
+assert_eq "$(stage "$T/fresh.json" Z9; echo "rc=$?")" "rc=1" "보고 캐시: 블록이 없으면 빈 출력"
 
 # ── 픽스처: brief · audit · 묶음 · 로드맵 ─────────────────────────────────────
 write_brief() {  # write_brief <디렉토리>

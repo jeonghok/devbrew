@@ -158,7 +158,7 @@ assert_eq "$(jget "$T/fresh.json" Z1 stage)" "가" "보고 캐시: 처음 읽은
 printf '{"blocks": [{"id": "Z1", "stage": "나"}]}\n' > "$T/fresh.json"
 assert_eq "$(jget "$T/fresh.json" Z1 stage)" "나" "보고 캐시: 같은 경로를 같은 초에 다시 쓰면 새 글을 읽는다"
 assert_eq "$(jget "$T/fresh.json" Z1 reason)" "칸 없음" "보고 캐시: 블록은 있고 칸이 없으면 칸 없음"
-assert_eq "$(jget "$T/fresh.json" Z9 stage)" "" "보고 캐시: 블록이 없으면 빈 출력"
+assert_eq "$(jget "$T/fresh.json" Z9 stage; echo "rc=$?")" "rc=0" "보고 캐시: 블록이 없으면 빈 출력"
 J1="$TM/jobs/E1"
 R1="$J1/results/implement-plan-1-1.md"
 BLK="$J1/results/BLOCKED.md"
