@@ -254,7 +254,7 @@ python3 "<위 kit 폴더>/qzp_run.py"
 
 이 문서만으로 도구를 다시 만들려면 «도구 전문» 의 파일을 제목에 적힌 경로대로 한 폴더 아래에 두면 된다. python 3.9 와 bash 3.2 에서 돈다. Claude Code 는 2.1.259 이상이어야 한다(`--permission-prompts`).
 
-도구의 확인 상태: 2026-11-15 에 세션 밖 터미널에서 `--clean` 으로 한 번 돌렸다. 19회 모두 rc 0 이었고 요약 표 256줄에 「재지 못함」 이 없었다 — 여러 차례를 넣는 세션, 스트림에 보이는 하위 agent 의 도구 호출, 허용 규칙이 스크립트 명령에 맞는지까지 모두 돌았다. `p9-bypass` 와 `--installed` 는 아직 한 번도 돌리지 않았다. 도구는 그 실행 뒤에 고치지 않았다 — 아래 전문이 그때 돈 그대로다.
+도구의 확인 상태: 2026-11-15 에 세션 밖 터미널에서 `--clean` 으로 한 번 돌렸다. 19회 모두 rc 0 이었고 요약 표 256줄에 「재지 못함」 이 없었다 — 여러 차례를 넣는 세션, 스트림에 보이는 하위 agent 의 도구 호출, 허용 규칙이 스크립트 명령에 맞는지까지 모두 돌았다. `p9-bypass` 와 `--installed` 는 아직 한 번도 돌리지 않았다. 2026-11-22 리뷰 지적으로 아래 전문의 세 자리를 고쳤고, 고친 뒤 다시 재지 않았다 — 위 실측 표의 숫자와 판정은 고치기 전 도구로 잰 것이다. 고친 자리: ① 샌드박스를 끄는 실행이 설정 파일에 `sandbox.enabled: false` 를 적는다(`--clean` 없이 돌면 사용자 설정의 샌드박스가 켜진 채 「끔」 으로 기록되던 것 — 그래서 이제 모든 실행에 `--settings` 가 붙는다. 실측 표에 「`--settings` 없음」 으로 적힌 실행도 고친 도구로는 이 한 키를 받는다) ② 여러 차례 세션에서 한 차례가 시간 안에 답하지 못하면 남은 차례를 보내지 않고 「재지 못함」 으로 남긴다(늦은 답이 다음 차례의 답으로 밀리던 것) ③ 씨앗 파일이 없을 때 실패한 데이터 폴더 읽기와 판정 기록이 없는 데이터 폴더 쓰기를 「재지 못함」 으로 낸다(「안 됨」 · 「막힘」 으로 내던 것).
 
 ### 기계에 생기는 것과 바뀌는 것
 
@@ -565,7 +565,11 @@ def refuse_bad_work_root(work):
 
 def build_settings(run, ctx):
     settings = {}
-    if run["sandbox"] != "off":
+    if run["sandbox"] == "off":
+        # Write "off" outright: without --clean the user's own settings still load,
+        # and a sandbox they turned on there would stay on.
+        settings["sandbox"] = {"enabled": False}
+    else:
         sbx = {"enabled": True, "failIfUnavailable": True,
                "autoAllowBashIfSandboxed": True, "allowUnsandboxedCommands": False}
         if run["sandbox"] == SBX_ALLOW:
@@ -650,10 +654,11 @@ def run_multi(argv, cwd, steps, out_path, err_path, turn_timeout=150):
         thread = threading.Thread(target=reader, daemon=True)
         thread.start()
         alive = True
+        stop = "skipped-session-ended"
         for step in steps:
             if not alive:
                 turns.append({"kind": step["kind"], "label": step["label"],
-                              "status": "skipped-session-ended"})
+                              "status": stop})
                 continue
             if step["kind"] == "action":
                 res = step["fn"]()
@@ -676,8 +681,11 @@ def run_multi(argv, cwd, steps, out_path, err_path, turn_timeout=150):
             try:
                 ev = results.get(timeout=turn_timeout)
             except queue.Empty:
+                # The late result would be read as the next turn's; send no more.
                 turn["status"] = "no-result-within-%ss" % turn_timeout
                 turns.append(turn)
+                alive = False
+                stop = "skipped-after-timeout"
                 continue
             turn["result_at"] = time.time()
             if ev is None:
@@ -876,7 +884,10 @@ def installed_step(args, work, evid, plugin_src):
 
     run = dict(zip(FIELDS, ("installed", 4, "ping", "qz-ping", "dontAsk", "off", [],
                             False, [], False, "installed plugin")))
-    flags = common_flags(run, {}, args, None)
+    ictx = {"settings_path": os.path.join(base, "settings.json")}
+    write_json(ictx["settings_path"], build_settings(run, ictx))
+    write_json(os.path.join(edir, "settings.json"), build_settings(run, ictx))
+    flags = common_flags(run, ictx, args, None)
     ping = "/%s:qz-ping" % PLUGIN
     total = 0.0
 
@@ -1350,14 +1361,19 @@ def write_rows(R, run, tsv):
         verdict, why = UNK, "샌드박스가 걸리지 않았다(작업 폴더 밖 쓰기가 성공) · "
     elif run["sandbox"].endswith("allowWrite") and alw != "ok":
         verdict, why = UNK, "allowWrite 양성 대조 실패(설정이 먹지 않았을 수 있다) · "
+    elif data_v not in ("ok", "fail"):
+        verdict, why = UNK, "데이터 폴더 쓰기 판정 기록이 없다 · "
     else:
         verdict, why = (OK if data_v == "ok" else BLOCKED), ""
     R.add(1, run["id"], what, verdict, why + detail("data") + " · " + extra)
     for label, name in (("outside", "작업 폴더 밖 파일"), ("data_seed", "데이터 폴더 파일")):
         res = tsv.get("read.%s.result" % label, "")
+        if tsv.get("read.%s.exists" % label) == "no":
+            verdict, res = UNK, "읽을 파일이 없었다 · " + res
+        else:
+            verdict = OK if res.startswith("rc=0") else NO
         R.add(2, run["id"], "스크립트 안의 %s 읽기 - %s (%s)" % (name, where, tag),
-              OK if res.startswith("rc=0") else NO,
-              "%s · %s" % (tsv.get("read.%s.path" % label, ""), res))
+              verdict, "%s · %s" % (tsv.get("read.%s.path" % label, ""), res))
 
 
 def hook_rows(R, run, edir):
@@ -1451,12 +1467,22 @@ OUTSIDE_STEPS = (
 )
 
 
+def seed_read_verdict(run, what, verdict, ev):
+    """A data-folder read that failed while the seed file was not there yet
+    measured nothing: report it as not judged."""
+    files = (run.get("data_before") or {}).get("files") or {}
+    if "데이터 폴더" in what and "읽기" in what and verdict == ERR \
+            and "qzp-seed.txt" not in files:
+        return UNK, "실행 시작 때 데이터 폴더에 씨앗 파일이 없었다 · " + ev
+    return verdict, ev
+
+
 def outside_run(R, run, edir, s):
     arts = load_json(os.path.join(edir, "artifacts.json"), {}) or {}
     tag = "권한 모드 %s · 샌드박스 %s" % (run["mode"], run["sandbox"])
     for what, names, pred, art in OUTSIDE_STEPS:
         call = find_call(s["calls"], names, pred)
-        verdict, ev = call_verdict(call)
+        verdict, ev = seed_read_verdict(run, what, *call_verdict(call))
         if call:
             target = fp(call["input"]) or cmd(call["input"])
             ev += " · 대상: " + short(target, 150)
@@ -1491,7 +1517,7 @@ def agent_run(R, run, edir, s):
     )
     for what, names, pred in steps:
         call = find_call(subs, names, pred)
-        verdict, ev = call_verdict(call)
+        verdict, ev = seed_read_verdict(run, what, *call_verdict(call))
         if call is None:
             ev += " · " + seen
         else:
@@ -1913,6 +1939,11 @@ try_read() {
   _label="$1"
   _path="$2"
   rec "read.$_label.path" "$_path"
+  if [ -e "$_path" ]; then
+    rec "read.$_label.exists" "yes"
+  else
+    rec "read.$_label.exists" "no"
+  fi
   _e="$( { head -n 1 "$_path"; } 2>&1 )"
   _rc=$?
   rec "read.$_label.result" "rc=$_rc $_e"

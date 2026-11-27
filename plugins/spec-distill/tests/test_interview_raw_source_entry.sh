@@ -35,6 +35,9 @@ python3 -I "$SDP/scripts/raw_source.py" locate --interview "$BAD_STATE" --absolu
 [ "$?" = 2 ] && ! grep -q '^raw-source: ' "$W/bad.probe" && ok "전제: 깨진 상태 파일에서 locate 가 판결 줄 없이 2 로 끝난다" \
   || no "전제: 깨진 상태 파일이 종료 코드 2 를 내지 않는다 — fence_no_verdict 가 공허하다"
 
+# 예외로 죽는 raw_source.py(권한 오류 같은 것) — 판결 줄도 [raw_source] 줄도 없이 종료 코드 1.
+CRASH_ROOT="$W/crash-root"; mkdir -p "$CRASH_ROOT/scripts"
+printf 'raise PermissionError(13, "가짜")\n' > "$CRASH_ROOT/scripts/raw_source.py"
 SHELLS="/bin/bash"
 [ -x /bin/zsh ] && SHELLS="$SHELLS /bin/zsh"
 
@@ -48,7 +51,7 @@ run_fence() {
        grab && $0=="```" {exit}
        grab {print}' "$1" >> "$body"
   case "$sh" in */zsh) flag="-f" ;; esac
-  env -i PATH="$PATH" CLAUDE_PLUGIN_ROOT="$SDP" PYTHONDONTWRITEBYTECODE=1 "$sh" $flag "$body" > "$W/$5.out" 2> "$W/$5.err"
+  env -i PATH="$PATH" CLAUDE_PLUGIN_ROOT="${FENCE_ROOT:-$SDP}" PYTHONDONTWRITEBYTECODE=1 "$sh" $flag "$body" > "$W/$5.out" 2> "$W/$5.err"
   echo "$?" > "$W/$5.rc"
 }
 verdicts() { grep -c '^raw-source: ' "$W/$1.out"; }
@@ -72,6 +75,10 @@ fence_fails() {
     tag="noverdict-$nm"; run_fence "$sf" "$sh" "" "$BAD_STATE" "$tag"
     { [ "$(cat "$W/$tag.rc")" = 0 ] && [ "$(verdicts "$tag")" = 0 ] \
       && grep -qF '[spec-distill] 판결 종료 코드 2 — 판결 줄이 없다. 아래 「판결 줄이 없다」 갈래대로 간다' "$W/$tag.err"; } || echo "fence_no_verdict:$nm"
+    tag="crash-$nm"; FENCE_ROOT="$CRASH_ROOT" run_fence "$sf" "$sh" "$REC_SEED" "$REC_STATE" "$tag"
+    { [ "$(cat "$W/$tag.rc")" = 0 ] && [ "$(verdicts "$tag")" = 0 ] && ! grep -qF '멈추지 않는다' "$W/$tag.err" \
+      && grep -qF '[spec-distill] 판결 종료 코드 1 — 판결 줄이 없다. 「seed 원문 대조」 줄은 audit=없음(' "$W/$tag.err" \
+      && grep -qF '[spec-distill] 판결 종료 코드 1 — 판결 줄이 없다. 아래 「판결 줄이 없다」 갈래대로 간다' "$W/$tag.err"; } || echo "fence_crash:$nm"
   done
 }
 
@@ -150,7 +157,7 @@ want("state_resume_seed", len(resume_row) == 1
      and "「seed 원문 대조」 줄" in resume_row[0]
      and "`STATE` 만 채워" not in resume_row[0])
 want("state_no_verdict",
-     "`[spec-distill] 원자료: 찾지 못함 — 판결 줄이 없다(종료 코드 <n>: <[raw_source] 줄>)`" in sec
+     "`[spec-distill] 원자료: 찾지 못함 — 판결 줄이 없다(종료 코드 <n>: <[raw_source] 줄 — 없으면 오류 출력의 마지막 줄>)`" in sec
      and "끝맺음은 같은 판결 없이는 멈추므로(`finishing.md` Step A 3) 그 사유를 첫 라운드에 함께 밝힌다" in sec)
 stf = re.sub(r"\n[ \t]*", " ", st_raw)
 want("state_sentences",
@@ -177,7 +184,7 @@ ENTRY_WORDS_PY
 }
 
 EF="$(entry_fails "$SDP")"
-[ -z "$EF" ] && ok "entry_fails: 실제 파일 전 항목 통과(펜스 실행 다섯 × 셸 $(echo $SHELLS | wc -w | tr -d ' '))" \
+[ -z "$EF" ] && ok "entry_fails: 실제 파일 전 항목 통과(펜스 실행 여섯 × 셸 $(echo $SHELLS | wc -w | tr -d ' '))" \
   || no "entry_fails 실패 항목: $(printf '%s' "$EF" | tr '\n' ' ')"
 
 # ── 변이 — 묶음 사본을 만들고 한 자리를 깨 같은 판정에 먹인다 ─────────────────────
@@ -242,7 +249,10 @@ B="$(bundle)"
 break_at "$B/skills/context-build/references/state-file.md" '`NEW-SEED` 또는 `ASK` 의 「새로 시작」 — ' '`NEW-SEED` — ' \
   && bites state_section "$B" "ASK 새로 시작 갈래 삭제" || no "변이 준비 실패: state_section(ASK)"
 B="$(bundle)"
-break_at "$B/skills/context-build/references/state-file.md" '(종료 코드 <n>: <[raw_source] 줄>)' '(종료 코드 <n>)' \
+break_at "$B/skills/context-build/references/state-file.md" '(종료 코드 <n>: <[raw_source] 줄 — 없으면 오류 출력의 마지막 줄>)' '(종료 코드 <n>)' \
   && bites state_no_verdict "$B" "판결 없음 줄의 사유 삭제" || no "변이 준비 실패: state_no_verdict"
+B="$(bundle)"
+break_at "$B/skills/context-build/references/state-file.md" '"[spec-distill] 판결 종료 코드 ${rc} — 판결 줄이 없다. 아래 「판결 줄이 없다」 갈래대로 간다"' '"[spec-distill] 판결 종료 코드 ${rc} — 위 판결 줄대로 간다(멈추지 않는다)"' \
+  && bites fence_crash:bash "$B" "0 · 3 밖의 종료 코드를 옛 「멈추지 않는다」 로" || no "변이 준비 실패: fence_crash"
 
 finish

@@ -23,12 +23,14 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from check_brief import SPLIT_LINE_PREFIX, payload_is_split  # noqa: E402
 import legacy_names  # noqa: E402
+from state_path import frontmatter_scalars  # noqa: E402
 
 PLAN_HEADING = "## 분해안"
 LOG_HEADING = "## 생성 기록"
 HEAD_NAME = "머리"
 VERDICT = "roadmap-entry: "
 SAID = "[spec-distill] "
+POSIX_SPACE = " \t\n\v\f\r"   # 커밋 펜스 sed 의 `[[:space:]]` (POSIX 로캘)
 
 
 class InternalError(Exception):
@@ -73,12 +75,16 @@ def sections(text: str) -> "list[tuple[str, list[str]]]":
 
 
 def outside_two_sections(head_text: str, work_text: str) -> "list[str]":
-    """두 절(분해안 · 생성 기록)을 떼고 남은 글이 다르면 다른 절의 이름들. 같으면 빈 목록."""
+    """두 절(분해안 · 생성 기록)을 떼고 남은 글이 다르면 다른 절의 이름들. 같으면 빈 목록.
+    줄바꿈 꼴(CRLF · LF)과 절 끝의 빈 줄은 견주지 않는다 — 작업 트리는 줄바꿈을 접어 읽고, 마지막 절 뒤에
+    새 절을 빈 줄 없이 붙이면 끝 줄바꿈 뒤의 빈 칸이 새 절로 옮겨 갈 뿐 앞 절의 글자는 그대로다."""
     def kept(text: str) -> "dict[str, str]":
         bodies: "dict[str, str]" = {}
-        for title, body in sections(text):
+        for title, body in sections(text.replace("\r\n", "\n")):
             if title in (PLAN_HEADING, LOG_HEADING):
                 continue
+            while body and body[-1] == "":
+                body = body[:-1]
             bodies[title] = bodies.get(title, "") + "\n".join(body) + "\x00"
         return bodies
 
@@ -118,7 +124,7 @@ def roadmap_path(brief_text: str) -> str:
             s = s[1:]
         if s.startswith(SPLIT_LINE_PREFIX):
             val = s[len(SPLIT_LINE_PREFIX):]
-            return val.split("`", 1)[0].rstrip(" \t")
+            return val.split("`", 1)[0].rstrip(POSIX_SPACE)
     return ""
 
 
@@ -204,7 +210,9 @@ def run(brief: str) -> int:
     check(audit, "audit 이", "audit 에")
     state_status = check(state, "상태 파일이", None)  # 커밋 뒤 변경은 아래에서 두 절 안 · 밖으로 가른다
     state_text = _read(state) if os.path.isfile(state) else ""
-    if state_status != "never" and os.path.isfile(state):
+    if state_status != "never" and not os.path.isfile(state):
+        stops.append("상태 파일이 커밋된 뒤 작업 트리에서 지워졌다: %s" % state)
+    elif state_status != "never":
         sfolder, sname = _split_path(state)
         hrc, head_text = _git(sfolder, "show", "HEAD:./" + sname)
         if hrc != 0:
@@ -215,7 +223,10 @@ def run(brief: str) -> int:
 
     if raw_line.startswith("raw-source: FOUND "):
         raw_audit = raw_line[len("raw-source: FOUND "):]
-        raw_seed = raw_audit[:-len(".audit.md")] + ".md" if raw_audit.endswith(".audit.md") else ""
+        # seed 경로는 기록 경로에서 거꾸로 짓지 않는다 — raw_source 가 읽은 그 상태 파일의 `seed:` 값이다.
+        fm = frontmatter_scalars(state) or {}
+        seed_val = fm.get("seed", "")
+        raw_seed = os.path.join(top, seed_val) if seed_val and seed_val != "없음" else ""
         for p in (raw_audit, raw_seed):
             if p and os.path.exists(p):
                 check(p, "원자료가", "원자료에")
@@ -225,9 +236,33 @@ def run(brief: str) -> int:
         stops.append("결과물 §7 에 분해됨 줄이 없다 — 나눌지는 컨텍스트 쌓기에서 정한다")
     else:
         rel = roadmap_path(brief_text)
-        if rel:
+        if not rel:
+            stops.append("결과물 §7 의 분해됨 줄에 로드맵 경로가 없다")
+        else:
+            # 커밋 펜스가 path-inside 에 넘기는 그 폴더 — 상대값은 레포 루트에 잇고 절대값은 그대로 둔다.
+            rdir = os.path.dirname(rel if os.path.isabs(rel) else os.path.join(top, rel))
             if os.path.isabs(rel):
                 rel = os.path.relpath(os.path.realpath(rel), os.path.realpath(top))
+            # 로드맵 폴더 꼴 — 커밋 펜스가 늦게 거는 같은 판정(check-path roadmaps_dir)을 진입에서 먼저 본다.
+            form = ""
+            if os.path.basename(rel) != "roadmap.md":
+                form = "파일 이름이 roadmap.md 가 아니다 — " + rel
+            else:
+                frc, _, ferr = _run_err([sys.executable, str(HERE / "repo_defaults.py"), "check-path", "roadmaps_dir",
+                                         os.path.join(top, os.path.dirname(rel)), "--root", top])
+                if frc == 3:
+                    form = _last_said(ferr) or "repo_defaults.py check-path 가 사유 없이 거절했다"
+                elif frc != 0:
+                    raise InternalError("repo_defaults.py check-path 가 판정하지 못했다 (rc %d): %s" % (frc, ferr.strip()))
+            if not form:
+                # 작업 트리 밖 · 링크 성분 · `..` — 커밋 펜스가 늦게 거는 같은 판정(path-inside)을 진입에서 먼저 본다.
+                irc, _, ierr = _run_err([sys.executable, str(HERE / "state_path.py"), "path-inside", "--root", top, rdir])
+                if irc != 0:
+                    form = _last_said(ierr)
+                    if not form:
+                        raise InternalError("state_path.py path-inside 가 판정하지 못했다 (rc %d): %s" % (irc, ierr.strip()))
+            if form:
+                stops.append("결과물 §7 의 로드맵 자리가 꼴에 맞지 않다: " + form)
             drc, dout, derr = _run_err([sys.executable, str(HERE / "repo_defaults.py"), "default-branch", "--root", top])
             default = dout.strip().split("\n")[0] if drc == 0 else ""
             if not default:

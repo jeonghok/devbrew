@@ -108,6 +108,29 @@ echo keep > "$REPO/.claude/worktrees/qg-base-brhold12/f"
 [ -f "$REPO/.claude/worktrees/qg-base-brhold12/f" ] && ok "그 worktree 가 그대로다" || no "브랜치를 쥔 worktree 를 지웠다"
 rm -rf "$REPO"
 
+# 목록을 읽지 못하는 git — `worktree list` 만 실패하고 나머지는 진짜 git 으로 넘긴다.
+mk_list_fail_git() {   # → 그 git 이 든 폴더 경로
+  local d real; d=$(mktemp -d); real=$(command -v git)
+  [ -n "$d" ] && [ -d "$d" ] && [ -n "$real" ] || { echo "가짜 git 을 만들지 못했다" >&2; exit 1; }
+  printf '#!/bin/sh\nif [ "$1" = worktree ] && [ "$2" = list ]; then echo "fatal: 가짜 — 목록을 읽지 못함" >&2; exit 128; fi\nexec "%s" "$@"\n' "$real" > "$d/git"
+  chmod +x "$d/git"
+  printf '%s' "$d"
+}
+echo "[worktree_list_unreadable_stops]"
+mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)
+mkdir -p "$REPO/.claude/worktrees"
+(cd "$REPO" && git worktree add -q -b mine2 "$REPO/.claude/worktrees/qg-base-wtlist12" "$sha")
+echo keep > "$REPO/.claude/worktrees/qg-base-wtlist12/f"
+SHIM_DIR=$(mk_list_fail_git)
+err=$(cd "$REPO" && PATH="$SHIM_DIR:$PATH" "$WT" remove "$REPO/.claude/worktrees/qg-base-wtlist12" 2>&1 >/dev/null); rc=$?
+assert_eq "$rc" "2" "등록된 worktree 목록을 읽지 못하면 remove 는 지우지 않고 rc 2"
+assert_contains "$err" "등록된 worktree 목록을 읽지 못했다" "remove 가 목록을 읽지 못한 사유를 알린다"
+err=$(cd "$REPO" && PATH="$SHIM_DIR:$PATH" "$WT" create-baseline "$sha" "wtlist12" 2>&1 >/dev/null); rc=$?
+assert_eq "$rc" "2" "등록된 worktree 목록을 읽지 못하면 만들기도 앞 사본을 지우지 않고 rc 2"
+assert_contains "$err" "등록된 worktree 목록을 읽지 못했다" "만들기가 목록을 읽지 못한 사유를 알린다"
+[ -f "$REPO/.claude/worktrees/qg-base-wtlist12/f" ] && ok "목록을 읽지 못했을 때 그 worktree 가 그대로다" || no "목록을 읽지 못했는데 worktree 를 지웠다"
+rm -rf "$REPO" "$SHIM_DIR"
+
 echo "[recover_same_name]"
 mk_repo; TOP=$(cd "$REPO" && pwd -P); sha=$(cd "$REPO" && git rev-parse HEAD)
 OUT=$(mktemp -d); [ -n "$OUT" ] && [ -d "$OUT" ] || exit 1

@@ -340,8 +340,10 @@ def build_questions(views: list[dict], width: int = docreview_config.ASK_WIDTH_D
             options.append({"label": "%d번 그대로 둔다" % n + (" (권장)" if v["recommend"] else ""),
                             "description": keep_desc(v, width), "hunk_id": n})
         first, last = group[0]["id"], group[-1]["id"]
-        out.append({"header": "저자 편집" if len(sizes) == 1 else "편집 %d–%d" % (first, last),
-                    "question": MULTI_QUESTION, "multi": True,
+        span = "편집 %d–%d" % (first, last)
+        out.append({"header": "저자 편집" if len(sizes) == 1 else span,
+                    "question": MULTI_QUESTION if len(sizes) == 1 else "%s 가운데 %s" % (span, MULTI_QUESTION),
+                    "multi": True,
                     "hunk_ids": [v["id"] for v in group], "options": options})
     return out
 

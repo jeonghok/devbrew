@@ -262,9 +262,9 @@ rc="$(sync E1 implement-2.md --role worker --bundle-at abc1234 --job-at "$J")"; 
 # ── place 문장 (AC17) ────────────────────────────────────────────────────────
 place() { (cd "$W" && python3 "$WSP" place --root "$W" "$@") > "$T/place.txt" 2>&1; echo $?; }
 assert_eq "$(place --roadmap "$TM/roadmap.md" --job E1 --stage design)" "0" "place: design rc 0"
-assert_eq "$(cat "$T/place.txt")" "사용자 선호: 설계문서는 기본 자리 대신 $TM/jobs/E1/design.md 에 쓴다." "place: 설계문서 문장"
+assert_eq "$(cat "$T/place.txt")" "설계문서는 기본 자리 대신 $TM/jobs/E1/design.md 에 쓴다." "place: 설계문서 문장"
 assert_eq "$(place --roadmap "$TM/roadmap.md" --job E1 --stage plan --plan 2)" "0" "place: plan rc 0"
-assert_eq "$(cat "$T/place.txt")" "사용자 선호: 계획은 기본 자리 대신 $TM/jobs/E1/plan-2.md 에 쓴다." "place: 계획 문장"
+assert_eq "$(cat "$T/place.txt")" "계획은 기본 자리 대신 $TM/jobs/E1/plan-2.md 에 쓴다." "place: 계획 문장"
 assert_eq "$(place --roadmap "$TM/roadmap.md" --job E1 --stage plan)" "2" "place: plan 단계에 --plan 이 없으면 2"
 assert_eq "$(place --roadmap "$TM/roadmap.md" --job E1 --stage plan --plan 0)" "2" "place: 계획 번호 0 은 2"
 assert_eq "$(place --roadmap "$TM/roadmap.md" --job E1 --stage implement)" "2" "place: 다른 단계는 2"

@@ -214,7 +214,7 @@ assert_eq "$(files_of_head "$c")" "$STEM.state.md $RREL/R1.md $RREL/plan.md " "�
 # 생성기 · 해결자는 받은 인자를 적는 가짜로 바꾼다 — 재는 것은 펜스가 넘기는 --brief 하나다.
 gf="$(awk '/^## 5\. 생성/{f=1;next} f&&/^## /{exit} f&&/^```bash$/{c=1;b="";next}
   f&&c&&/^```$/{c=0; if (index(b, "roadmap_write.py\" create")) {printf "%s", b; exit}; next} f&&c{b=b $0 "\n"}' "$SK")"
-case "$gf" in *'BRIEF_REL="$(git -C "$(dirname -- "<결과물 절대경로>")" ls-files --full-name -- "<결과물 절대경로>")"'*) ok "brief_rel_from_git: 전제 — 생성 펜스를 뽑았고 BRIEF_REL 을 git 에서 얻는다" ;;
+case "$gf" in *'BRIEF_REL="$(git -C "$(dirname -- "<결과물 절대경로>")" -c core.quotePath=false ls-files --full-name -- "<결과물 절대경로>")"'*) ok "brief_rel_from_git: 전제 — 생성 펜스를 뽑았고 BRIEF_REL 을 git 에서 얻는다" ;;
   *) no "brief_rel_from_git: 생성 펜스를 못 뽑았거나 BRIEF_REL 을 git 에서 얻지 않는다 — 아래 칸이 공허하다" ;; esac
 assert_not_contains "$gf" 'IDIR' "brief_rel_from_git: 생성 펜스에 의도 폴더 변수(IDIR)가 없다"
 GSTUB="$T/gen-stub"; mkdir -p "$GSTUB/scripts"
@@ -235,10 +235,48 @@ mkdir -p "$c/docs/superpowers/intent"; for s in .md .audit.md .state.md; do cp "
 git -C "$c" add -- docs; git -C "$c" commit -q -m new-form
 assert_eq "$(gen_brief "$c" "$c/$NSTEM.md")" "0|$NSTEM.md|$NSTEM.audit.md|" "brief_rel_from_git: 새 폴더의 새 꼴 결과물 — 레포 상대 경로 그대로"
 assert_eq "$(gen_brief "$c/docs" "$c/$NSTEM.md")" "0|$NSTEM.md|$NSTEM.audit.md|" "brief_rel_from_git: cwd 가 하위 폴더여도 레포 루트 기준 경로"
+# 영어가 아닌 글자가 든 의도 폴더 — git 의 core.quotePath 기본값은 0x80 이상 바이트를 따옴표 · 8진 이스케이프로 감싼다.
+# 그 글자가 그대로 생성기에 가면 없는 경로다. 레포 설정에서 quotePath 를 켜 두어 사용자 설정과 무관하게 잰다.
+KSTEM="docs/의도 폴더/2026-11-24-t-context"
+mkdir -p "$c/docs/의도 폴더"; for s in .md .audit.md .state.md; do cp "$c/$STEM$s" "$c/$KSTEM$s"; done
+git -C "$c" config core.quotePath true
+git -C "$c" add -- docs; git -C "$c" commit -q -m korean-folder
+assert_eq "$(gen_brief "$c" "$c/$KSTEM.md")" "0|$KSTEM.md|$KSTEM.audit.md|" "brief_rel_from_git: 영어가 아닌 글자 · 빈칸이 든 의도 폴더도 레포 상대 경로를 글자 그대로 넘긴다"
 printf 'x\n' > "$c/docs/superpowers/intent/untracked-context.md"
 r="$(gen_brief "$c" "$c/docs/superpowers/intent/untracked-context.md")"
 assert_eq "$r" "1|" "brief_rel_from_git: 추적되지 않는 결과물이면 생성기를 부르지 않고 멈춘다"
 assert_contains "$(cat "$T/gen.log")" "결과물의 레포 상대경로를 git 에서 얻지 못했다" "brief_rel_from_git: 그 사유를 보인다"
+
+# 커밋 뒤 끊겨 다시 부른 로드맵 잡기 — 이미 커밋된 로드맵이면 새 커밋 없이 그 사실을 낸다(상태 파일 · 로드맵 폴더가 그대로일 때만)
+c="$(mk again "$DEC")"; generated "$c"; runc "$c" >/dev/null; o="$(runc "$c")"
+assert_eq "$(nhead "$c")" "3" "다시 돌린 커밋 펜스: 새 커밋이 생기지 않는다"
+assert_contains "$o" "[spec-distill] 로드맵 폴더 · 상태 파일은 이미 커밋돼 있다 — " "다시 돌린 커밋 펜스: 이미 커밋됐다는 줄을 낸다"
+assert_not_contains "$o" "커밋이 실패했다" "다시 돌린 커밋 펜스: 실패 줄을 내지 않는다"
+# 양의 짝 — 상태 파일만 바뀌면 새 커밋이 생긴다(「이미 커밋」 이 모든 재실행을 삼키지 않는다)
+c="$(mk again-state "$DEC")"; generated "$c"; runc "$c" >/dev/null
+awk '{print} /^고친 횟수: /{print "승인: 「다시」"}' "$c/$STEM.state.md" > "$c/state.tmp" && mv -- "$c/state.tmp" "$c/$STEM.state.md"
+o="$(runc "$c")"
+assert_eq "$(nhead "$c")" "4" "상태 파일만 바뀜: 새 커밋이 생긴다"
+assert_contains "$o" "[spec-distill] 로드맵 폴더 · 상태 파일을 커밋했다 — " "상태 파일만 바뀜: 커밋했다 줄을 낸다"
+# 양의 짝 — 로드맵 폴더에 추적 안 된 새 파일이 생기면 새 커밋이 생기고 그 파일이 든다
+c="$(mk again-new "$DEC")"; generated "$c"; runc "$c" >/dev/null
+printf '# R2\n' > "$c/$RREL/R2.md"
+o="$(runc "$c")"
+assert_eq "$(nhead "$c")" "4" "추적 안 된 새 파일: 새 커밋이 생긴다"
+assert_eq "$(files_of_head "$c")" "$RREL/R2.md " "추적 안 된 새 파일: 그 커밋에 새 파일이 든다"
+# 사용자 설정 status.showUntrackedFiles=no 에서도 같다 — 추적 안 된 새 파일을 놓치지 않는다
+c="$(mk again-new-no "$DEC")"; generated "$c"; runc "$c" >/dev/null
+git -C "$c" config status.showUntrackedFiles no
+printf '# R2\n' > "$c/$RREL/R2.md"
+o="$(runc "$c")"
+assert_eq "$(nhead "$c")" "4" "표시 설정 no · 추적 안 된 새 파일: 새 커밋이 생긴다"
+assert_contains "$o" "[spec-distill] 로드맵 폴더 · 상태 파일을 커밋했다 — " "표시 설정 no · 추적 안 된 새 파일: 커밋했다 줄을 낸다"
+assert_eq "$(files_of_head "$c")" "$RREL/R2.md " "표시 설정 no · 추적 안 된 새 파일: 그 커밋에 새 파일이 든다"
+# 상태 파일이 인덱스에서 빠지고 git 이 무시하면 「이미 커밋」 을 내지 않는다
+c="$(mk again-ign "$DEC")"; generated "$c"; runc "$c" >/dev/null
+git -C "$c" rm -q --cached -- "$STEM.state.md"; git -C "$c" commit -q -m drop; printf '%s\n' "$STEM.state.md" >> "$c/.git/info/exclude"
+o="$(runc "$c")"
+assert_not_contains "$o" "이미 커밋돼 있다" "무시된 상태 파일: 이미 커밋됐다고 하지 않는다"
 
 # AC19 — 판 · 변경 기록 · README
 ver=$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8"))["version"])' "$SD/.claude-plugin/plugin.json")
