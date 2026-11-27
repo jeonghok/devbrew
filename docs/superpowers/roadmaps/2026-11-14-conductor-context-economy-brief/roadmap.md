@@ -87,14 +87,14 @@ test_failure_pattern: "^FAILED (.+)$"
 
 ### E4 — 새 형식 켜기 전 수리
 - 의도: 새 형식을 켜기 전에 앞 에픽들이 넘긴 수리를 끝낸다
-- 범위: 한다: 앞 에픽 설계의 미룸 표에서 받는 곳이 E4 인 행 스물둘(R2 열셋 · E1 일곱 · R1 둘) — 원자료 출처 검사 · 사람 줄 판정(물러선 승인 · 다시 묻기) · 관문 읽기와 관문 이름을 한 곳으로 · 걸음 보기 · 결과 파일의 줄 종류 · 검수 결과 파일과 리뷰어 프로필의 과제 파일 모드 · 담당자가 받는 글 · 담당자의 파일 쓰기를 도구로 막을지 · team 넘김 줄과 spec-review 를 team 형식에 맞추기 · 켜기 전에 볼 작은 것들, 규칙 줄을 조건으로 골라 싣기와 묶음 예산 / 안 한다: 새 형식을 기본으로 켜기 · 「로드맵 잡기」 글 · 나누지 않는 일을 리더로 넘기기(E5 — 그 행들 안의 「create 의 기본으로 켜기」 와 「도는 로드맵이 없을 때 단순 작업의 자리」 두 조각도 E5), 담당자를 세션으로 띄우기 · 위아래 소통(E1), 옛 형식 로드맵을 새 형식으로 옮기기(R5)
+- 범위: 한다: 앞 에픽 설계의 미룸 표에서 받는 곳이 E4 인 행 스물둘(R2 열셋 · E1 일곱 · R1 둘) — 원자료 출처 검사 · 사람 줄 판정(물러선 승인 · 다시 묻기) · 관문 읽기와 관문 이름을 한 곳으로 · 걸음 보기 · 결과 파일의 줄 종류 · 검수 결과 파일과 리뷰어 프로필의 과제 파일 모드 · 담당자가 받는 글 · 담당자의 파일 쓰기를 도구로 막을지 · team 넘김 줄과 spec-review 를 team 형식에 맞추기 · 켜기 전에 볼 작은 것들 / 안 한다: 규칙 줄을 조건으로 골라 싣기와 묶음 예산(켜는 조건이 차지 않았다 — 설계 §5) · 새 형식을 기본으로 켜기 · 「로드맵 잡기」 글 · 나누지 않는 일을 리더로 넘기기(E5 — 그 행들 안의 「create 의 기본으로 켜기」 와 「도는 로드맵이 없을 때 단순 작업의 자리」 두 조각도 E5), 담당자를 세션으로 띄우기 · 위아래 소통(E1), 옛 형식 로드맵을 새 형식으로 옮기기(R5)
 - 의존: E1
-- 브랜치: feature/team-layout-repairs
+- 브랜치: feature/team-layout-repairs, feature/human-line-sessions, feature/result-and-walk-repairs, feature/team-layout-wording
 - 묶음: E4.md
-- 경로 예약: plugins/spec-distill/references/team-files.md, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/scripts/walk_table.py, plugins/spec-distill/scripts/human_lines.py, plugins/spec-distill/scripts/team_rules.py, plugins/spec-distill/scripts/team_check.py, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_write.py, plugins/spec-distill/scripts/team_files.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/session_record.py, plugins/spec-distill/scripts/branch_tip.py, plugins/spec-distill/scripts/team_status.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/spec_review_bundle.py, plugins/spec-distill/references/docreview-profiles/design-doc.md, plugins/spec-distill/templates/team/, plugins/spec-distill/references/conductor-dispatch.md
+- 경로 예약: plugins/spec-distill/references/team-files.md, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/scripts/walk_table.py, plugins/spec-distill/scripts/human_lines.py, plugins/spec-distill/scripts/team_rules.py, plugins/spec-distill/scripts/team_check.py, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_write.py, plugins/spec-distill/scripts/team_files.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/session_record.py, plugins/spec-distill/scripts/branch_tip.py, plugins/spec-distill/scripts/team_status.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/spec_review_bundle.py, plugins/spec-distill/references/docreview-profiles/design-doc.md, plugins/spec-distill/templates/team/, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/scripts/roadmap_status.py, plugins/spec-distill/scripts/roadmap_model.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/scripts/merge_check.py, plugins/spec-distill/README.md, plugins/spec-distill/references/conducting-team.md, plugins/spec-distill/references/conducting-step-5.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/agents/relay-checker.md, docs/superpowers/roadmaps/worker/, docs/superpowers/specs/2026-11-18-conductor-walk-gates-design.md
 - 크기: 큼
-- 병렬: E2 · E3 와 병렬 가능
-- 순서 이유: 수리가 머지된 뒤에 새 형식을 켠다 — 지휘 절차서에 닿는 행은 E2 가 그 문서를 걸음별 지시서로 가른 뒤에 고친다
+- 병렬: E3 와 병렬 가능
+- 순서 이유: 수리가 머지된 뒤에 새 형식을 켠다 — 계획 넷 모두 E2 계획 1 이 머지된 뒤에 시작한다(지휘 지시서와 E2 가 예약한 스크립트에 닿는다)
 - 근거: 사용자 말 2026-11-25 「켜기전에 고치자」 · 「가」
 
 ### E5 — 새 형식 켜기와 받는 길
@@ -237,6 +237,11 @@ test_failure_pattern: "^FAILED (.+)$"
 - 원문:
   - 「켜기전에 고치자」
   - 「가」
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-27 · E4 설계 승인 — 계획 넷의 브랜치를 올리고 설계가 고치는 파일로 경로 예약을 넓히며 범위 글과 병렬 줄을 설계에 맞춘다
+- 바뀜: 바뀐 에픽 E4 「이대로 다시 나눈다 (권장)」
+- 원문:
   - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
