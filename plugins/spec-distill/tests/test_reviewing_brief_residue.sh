@@ -15,7 +15,7 @@
 #   P  문서별 자리가 실행으로 갈리는가 · S 문서를 모르는 라운드가 다른 문서의 산출물을 건드리지 않는가
 # 이 자리에만 있는 것:
 #   · 게이트 입력이 하나 더 있다(번들) — 번들 부재도 codex 를 건너뛰는 skip 경로다(A·E 번들 부재).
-#   · R 러너 인자 넷의 실측 — 넷 다 비지 않고, 둘째가 payload 가 아니라 번들인가.
+#   · R 러너 인자 넷 — 넷 다 비지 않고, 둘째가 payload 가 아니라 번들인가.
 #   · P×자리 — 같은 세션에서 design doc 자리(`spec-review`)와 brief 자리가 다른 자리를 받는가.
 #   · S×자리 — payload 를 모르는 brief 쪽 fence 가 design doc 자리와 brief 자리의 어느 것도 건드리지 않는가.
 #   · B 번들 조립이 실패한 라운드가 직전 번들을 남기지 않는가, 그 뒤 fence 가 codex 를 건너뛰는가.
@@ -80,7 +80,7 @@ cut_block_with() {   # cut_block_with <SKILL> <절 헤딩 정규식> <줄 정규
 FENCE="$SCRATCH/fence.sh";  cut_fence "$SKILL" > "$FENCE"
 INPUT="$SCRATCH/input.sh";  cut_block "$SKILL" '^## 입력$' > "$INPUT"
 BUNDLE_BLK="$SCRATCH/bundle.sh"; cut_block "$SKILL" '^## 번들' > "$BUNDLE_BLK"
-# spec-review 의 `## 입력` 절에는 후보 펜스(spec-distill 3.0.0)가 먼저 온다 — 첫 블록이 아니라 `STATE_DIR=` 대입을
+# spec-review 의 `## 입력` 절에는 후보 펜스가 먼저 온다 — 첫 블록이 아니라 `STATE_DIR=` 대입을
 # 담은 블록을 고른다. 없으면 아래 추출 검사가 RED 다.
 S_INPUT="$SCRATCH/spec-input.sh"; cut_block_with "$SPEC_SKILL" '^## 입력$' '^STATE_DIR=' > "$S_INPUT"
 S_FENCE="$SCRATCH/spec-fence.sh"; cut_fence "$SPEC_SKILL" > "$S_FENCE"
