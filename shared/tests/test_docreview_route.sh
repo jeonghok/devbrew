@@ -15,6 +15,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 . "$HERE/fixtures/docreview/cases.sh"
+r1_templates_on
 case_T01_prepare_anonymizes
 case_T02_same_as_max
 case_same_as_survivor_inherits_empty_fields
