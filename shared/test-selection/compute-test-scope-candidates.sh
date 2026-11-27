@@ -91,13 +91,17 @@ changed_tests=$(printf '%s\n' "$changed" | grep -E "$TESTRE" || true)
 
 # 지원 파일 — 경로에 tests · test 폴더가 있고 이름이 테스트 꼴이 아닌 바뀐 파일. 그 파일이 든 폴더부터 가장 가까운
 # tests · test 폴더까지(둘 다 포함) 길 위 폴더들에 바로 든 테스트 꼴 파일을 더한다 — 하위 폴더로 내려가지 않는다.
+# 길 위 폴더 가운데 경로 성분(레포 루트부터 그 폴더까지)에 spike · fixtures 와 같은 것이 있는 폴더는 넓히지 않는다
+# (tools/suite/run-all.sh 의 */spike/* · */fixtures/* 제외와 같은 규칙 — 성분 전체가 맞을 때만).
 # 맡는 러너가 있는지는 배정(run-test-selection.sh assign)이 가른다.
 IS_TEST_AWK='function is_test(b) { return b ~ /^test_/ || b ~ /_test\.[A-Za-z0-9]+$/ || b ~ /\.(test|spec)\.[A-Za-z0-9]+$/ }'
 support_dirs=$(printf '%s\n' "$changed" | awk "$IS_TEST_AWK"'
   { n = split($0, p, "/"); if (n < 2 || is_test(p[n])) next
     k = 0; for (i = n - 1; i >= 1; i--) if (p[i] == "tests" || p[i] == "test") { k = i; break }
     if (!k) next
-    for (j = n - 1; j >= k; j--) { d = p[1]; for (i = 2; i <= j; i++) d = d "/" p[i]; print d } }' | sort -u)
+    m = n; for (i = 1; i < n; i++) if (p[i] == "spike" || p[i] == "fixtures") { m = i; break }
+    for (j = n - 1; j >= k; j--) { if (j >= m) continue
+      d = p[1]; for (i = 2; i <= j; i++) d = d "/" p[i]; print d } }' | sort -u)
 expanded=""
 if [ -n "$support_dirs" ]; then
   expanded=$(printf '%s\n' "$universe" | awk "$IS_TEST_AWK"'

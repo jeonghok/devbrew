@@ -327,7 +327,8 @@ class Contract(DiffBase):
         self.assertNotIn("silent-drop", self.field(p.stdout, "degrade_causes"))
         self.assertEqual(self.field(p.stdout, "adapters"), "[shell]")
         self.assertEqual(self.field(p.stdout, "support"), '["tests/data.tsv", "tests/fixtures/x.tsv"]')
-        self.assertEqual(self.field(p.stdout, "support_tests"), "2")
+        # tests/fixtures/ 는 경로 성분에 fixtures 가 들어 세지 않는다 — tests/a.sh 하나다.
+        self.assertEqual(self.field(p.stdout, "support_tests"), "1")
         self.assertIn("counts: {still_green: 3,", p.stdout)
         self.assertNotIn('unit: "tests/data.tsv"', p.stdout)
         self.assertIn("verdict: clean", self.verdict(p.stdout))
@@ -337,6 +338,33 @@ class Contract(DiffBase):
         write_assign(self.memo, [("lib/test", "go", "package"), ("lib/test/data.txt", "support", "file"),
                                  ("lib", "go", "package")], adapters="go")
         rows = [("lib/test", "pass", "0", "per-unit"), ("lib", "pass", "0", "per-unit")]
+        write_rows(self.memo / "baseline-go.tsv", "go", self.repo.B, rows)
+        write_rows(self.memo / "head-go-i1.tsv", "go", self.repo.H, rows)
+        p = self.run_diff()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.field(p.stdout, "support_tests"), "1")
+
+    def test_support_tests_skips_spike_fixtures_folders(self):
+        # 길 위 폴더 가운데 경로 성분에 spike · fixtures 가 든 폴더의 러너 파일은 세지 않는다(run-all.sh 의 제외와 같은
+        # 규칙). 성분 전체가 맞을 때만 뺀다 — tests/spikes/ 는 센다. 패키지 unit 도 같다.
+        units = ["tests/a.sh", "tests/spike/test_sp.sh", "tests/spikes/test_s.sh"]
+        write_assign(self.memo, [("tests/a.sh", "shell", "file"), ("tests/spike/test_sp.sh", "shell", "file"),
+                                 ("tests/spike/prompt.md", "support", "file"),
+                                 ("tests/spike/fixtures/sample.json", "support", "file"),
+                                 ("tests/spikes/test_s.sh", "shell", "file"),
+                                 ("tests/spikes/notes.md", "support", "file")])
+        rows = [(u, "pass", "0", "per-unit") for u in units]
+        write_rows(self.memo / "baseline-shell.tsv", "shell", self.repo.B, rows)
+        write_rows(self.memo / "head-shell-i1.tsv", "shell", self.repo.H, rows)
+        p = self.run_diff()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.field(p.stdout, "support_tests"), "2")
+
+    def test_support_tests_skips_fixtures_package_units(self):
+        write_assign(self.memo, [("lib/test/fixtures", "go", "package"),
+                                 ("lib/test/fixtures/data.txt", "support", "file"),
+                                 ("lib/test", "go", "package")], adapters="go")
+        rows = [("lib/test/fixtures", "pass", "0", "per-unit"), ("lib/test", "pass", "0", "per-unit")]
         write_rows(self.memo / "baseline-go.tsv", "go", self.repo.B, rows)
         write_rows(self.memo / "head-go-i1.tsv", "go", self.repo.H, rows)
         p = self.run_diff()

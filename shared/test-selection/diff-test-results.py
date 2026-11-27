@@ -157,13 +157,15 @@ def granularity_of(runner: str) -> str:
 
 def support_tests_of(assign: list[tuple[str, str, str]], support: list[str]) -> int:
     """지원 파일 때문에 더한 테스트 수 — 지원 파일마다 그 파일이 든 폴더부터 가장 가까운 tests · test 폴더까지의
-    길 위 폴더에 바로 든, 러너가 맡은 행의 수(겹치면 한 번). 배정(run-test-selection.sh assign)과 같은 도출이다."""
+    길 위 폴더에 바로 든, 러너가 맡은 행의 수(겹치면 한 번). 배정(run-test-selection.sh assign)과 같은 도출이다.
+    길 위 폴더 가운데 경로 성분에 spike · fixtures 가 든 폴더는 넓히지 않는다(성분 전체가 맞을 때만)."""
     dirs: set[str] = set()
     for path in support:
         parts = path.split("/")[:-1]
         nearest = max((i for i, p in enumerate(parts) if p in ("tests", "test")), default=None)
+        cut = min((i for i, p in enumerate(parts) if p in ("spike", "fixtures")), default=len(parts))
         if nearest is not None:
-            dirs.update("/".join(parts[:j + 1]) for j in range(nearest, len(parts)))
+            dirs.update("/".join(parts[:j + 1]) for j in range(nearest, min(len(parts), cut)))
     # 패키지 입도의 unit 은 폴더 이름 자체다 — 그 폴더가 길 위 폴더면 센다. 파일 입도는 파일이 든 폴더로 잰다.
     return len({u for u, r, g in assign if r not in NOT_RUNNERS
                 and (u in dirs if g == "package" else ("/" in u and u.rsplit("/", 1)[0] in dirs))})

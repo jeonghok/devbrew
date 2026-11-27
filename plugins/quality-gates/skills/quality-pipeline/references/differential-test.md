@@ -176,7 +176,7 @@ printf '%s\n' <고른 파일들> | "$QG/scripts/run-test-selection.sh" assign "<
 `<unit>\t<runner|unclaimed|support>\t<granularity>` 이고 마지막 줄은 `#qg-assign` 꼬리다. `unclaimed` 는 어느 러너 어댑터
 9종도 못 돌리는 후보다 — 판정에서 silent-drop 이 된다(R16). `support` 는 지원 파일이다 — 테스트 폴더(`tests/` · `test/`) 아래
 이름이 테스트 꼴이 아닌 파일(데이터 · 문서 · 도우미)로, 그 파일이 든 폴더부터 가장 가까운 테스트 폴더까지의 길 위 폴더에 러너가
-맡은 테스트가 같은 배정에 있다. 후보의 바닥이 그 길 위 폴더들의 테스트를 이미 더했다. 지원 파일 자신은 러너가 아니라 돌리지 않고,
+맡은 테스트가 같은 배정에 있다(경로 성분에 `spike` · `fixtures` 가 든 길 위 폴더는 넓히지도 보지도 않는다 — 스위트 러너의 제외와 같다). 후보의 바닥이 그 길 위 폴더들의 테스트를 이미 더했다. 지원 파일 자신은 러너가 아니라 돌리지 않고,
 unit 전체와 silent-drop 에서 빠진다. 그 폴더들에 맡은 테스트가 없으면 `unclaimed` 다.
 
 계획을 한 줄로 알린다. 분모는 `--total` 의 출력이다(토픽 · 범위 스코프면 `--total --tree <tree>` — 범위면 `--total --tree <end>`):
@@ -323,7 +323,7 @@ python3 "$QG/scripts/verdict.py" --emit-args --reason error-axis
 판정 줄의 「차등 새 실패」 칸은 차등 결과 줄의 `--new-failures` 값이다 — D5 펜스의 `verdict.py --emit-args` 가
 그 사본의 `new_failures:` 에서 낸다. `result.md` 의 `## 차등 테스트` 에는 그 사본을 그대로 붙이고, D2 에서
 커버리지로 세지 않은 테스트 목록(`$RD/differential-not-counted.md`)을 덧붙인다. 그 사본의 `support:` 는 바뀐 지원 파일의
-경로, `support_tests:` 는 그 때문에 더한 테스트 수(지원 파일의 길 위 폴더에 바로 든, 러너가 맡은 unit 수)다 — 사본을 붙이면
+경로, `support_tests:` 는 그 때문에 더한 테스트 수(지원 파일의 길 위 폴더 — `spike` · `fixtures` 성분 폴더 제외 — 에 바로 든, 러너가 맡은 unit 수)다 — 사본을 붙이면
 함께 실린다. 양측 빨강을 공시하는
 `resolution_disclosure:` 줄이 있으면 판정 줄 옆에도 그대로 보인다(R10). bulk 러너가 양측 red 면 이 문장을 그대로 쓴다:
 

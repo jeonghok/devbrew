@@ -13,7 +13,7 @@ qg 차등 테스트가 쓰는 스크립트 넷의 정본이다. 플러그인은 
 ## 지원 파일(`support`)
 
 - 지원 파일은 경로에 `tests` · `test` 폴더가 있고 이름이 테스트 꼴이 아닌 파일이다. 테스트 꼴 이름은 마지막 성분이 `test_` 로 시작하거나 `_test.<확장자>` · `.test.<확장자>` · `.spec.<확장자>` 로 끝나는 것이다.
-- 길 위 폴더는 그 파일이 든 폴더부터 가장 가까운 `tests` · `test` 폴더까지다(둘 다 포함). 하위 폴더로는 내려가지 않는다.
+- 길 위 폴더는 그 파일이 든 폴더부터 가장 가까운 `tests` · `test` 폴더까지다(둘 다 포함). 하위 폴더로는 내려가지 않는다. 길 위 폴더 가운데 경로 성분(레포 루트부터 그 폴더까지)에 `spike` · `fixtures` 가 든 폴더는 넓히지 않는다 — `tools/suite/run-all.sh` 의 `*/spike/*` · `*/fixtures/*` 제외와 같은 규칙이고, 성분 전체가 맞을 때만이다(`spikes/` · `my-fixtures/` 는 넓힌다). 아래 세 파일이 같은 길 위 폴더를 쓴다.
 - `compute-test-scope-candidates.sh` 는 바뀐 지원 파일마다 길 위 폴더에 바로 든 테스트 꼴 파일을 후보에 더한다.
 - `run-test-selection.sh assign` 은 흡수 러너(cargo · make · npm-script)가 없을 때 맡지 않은 지원 파일을 가른다. 같은 입력에서 러너가 맡은 파일(패키지로 접기 전 경로)이 길 위 폴더에 바로 있으면 `support`, 없으면 `unclaimed` 다. 흡수 러너가 있으면 지금처럼 `BULK` 가 흡수한다.
 - `diff-test-results.py` 는 `support` 행을 unit 전체 · `unclaimed` · `silent-drop` 에서 빼고 `support: [...]` · `support_tests: <n>` 을 낸다. `support_tests` 는 길 위 폴더에 바로 든, 러너가 맡은 행의 수다(겹치면 한 번).

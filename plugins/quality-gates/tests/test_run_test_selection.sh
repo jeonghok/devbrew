@@ -299,6 +299,25 @@ case_unclaimed_when_folder_has_no_claimed_test() {
   assert_eq "$(arow tests/data.tsv)" "unclaimed	file" "unclaimed_when_folder_has_no_claimed_test: 폴더의 테스트(tests/a.sh)가 같은 입력에 없으면 → unclaimed"
   rmrepo
 }
+# 길 위 폴더 가운데 경로 성분에 spike · fixtures 가 든 폴더는 보지 않는다(tools/suite/run-all.sh 의 제외와 같은 규칙).
+# 성분 전체가 맞을 때만 뺀다 — spikes/ 는 그대로 본다.
+case_support_skips_spike_fixtures_folders() {
+  mkrepo; shtest tests/spike/test_sp.sh 0; shtest tests/fixtures/test_f.sh 0; shtest tests/spikes/test_s.sh 0
+  printf 'x\n' > "$REPO/main/tests/spike/spike_prompt.md"; printf 'x\n' > "$REPO/main/tests/fixtures/x.tsv"
+  printf 'x\n' > "$REPO/main/tests/spikes/notes.md"
+  shtest tests/a.sh 0
+  mktree || { rmrepo; return; }
+  assign tests/spike/spike_prompt.md tests/spike/test_sp.sh tests/fixtures/x.tsv tests/fixtures/test_f.sh \
+    tests/spikes/notes.md tests/spikes/test_s.sh
+  assert_eq "$(arow tests/spike/spike_prompt.md)" "unclaimed	file" "support_skips_spike_fixtures_folders: 맡은 테스트가 tests/spike/ 에만 있으면 → unclaimed"
+  assert_eq "$(arow tests/fixtures/x.tsv)" "unclaimed	file" "support_skips_spike_fixtures_folders: 맡은 테스트가 tests/fixtures/ 에만 있으면 → unclaimed"
+  assert_eq "$(arow tests/spikes/notes.md)" "support	file" "support_skips_spike_fixtures_folders: 성분 이름 일부(tests/spikes/)는 그대로 본다 → support"
+  assert_eq "$(arow tests/spike/test_sp.sh)" "shell	file" "support_skips_spike_fixtures_folders: 양성 대조 — spike 폴더의 테스트 자신은 지금처럼 맡는다"
+  assign tests/spike/spike_prompt.md tests/fixtures/x.tsv tests/a.sh
+  assert_eq "$(arow tests/spike/spike_prompt.md)" "support	file" "support_skips_spike_fixtures_folders: tests/ 에 바로 맡은 테스트가 있으면 → support"
+  assert_eq "$(arow tests/fixtures/x.tsv)" "support	file" "support_skips_spike_fixtures_folders: fixtures 도 tests/ 에 바로 맡은 테스트가 있으면 → support"
+  rmrepo
+}
 case_test_named_unclaimed_stays() {
   mkrepo; shtest plugins/x/tests/test_ok.sh 0
   printf '#!/bin/bash\n' > "$REPO/main/plugins/x/tests/test_y.sh"
@@ -596,7 +615,7 @@ for c in case_R17_assign_writes_trailer case_R17_failed_assign_leaves_no_file \
          case_R20_run_rechecks_scope case_unrun_and_pending case_truncated_rows_file_is_refused \
          case_rows_count_mismatch_is_refused case_trailer_values_are_validated \
          case_support_row_when_folder_claimed case_unclaimed_when_folder_has_no_claimed_test \
-         case_test_named_unclaimed_stays case_helper_reached_only_by_folder case_bulk_absorber_unchanged \
+         case_support_skips_spike_fixtures_folders case_test_named_unclaimed_stays case_helper_reached_only_by_folder case_bulk_absorber_unchanged \
          case_scope_empty_unchanged \
          case_claims_indirect_testcase case_refuses_plain_test_class case_refuses_object_parent_nontest_name \
          case_refuses_mixin_with_test_method case_refuses_unimportable case_module_level_def_test_refused \

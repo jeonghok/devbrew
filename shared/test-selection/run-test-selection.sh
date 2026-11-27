@@ -377,7 +377,8 @@ adapter_usable() {
 
 # 지원 파일(§5) — 맡지 않은 파일 가운데 이름이 테스트 꼴이 아니고 경로에 tests · test 폴더가 있는 것. 그 파일이 든
 # 폴더부터 가장 가까운 tests · test 폴더까지(둘 다 포함)의 길 위 폴더에 러너가 맡은 파일(패키지로 접기 전 경로)이 바로
-# 들어 있으면 support, 없으면 unclaimed 다. 이름이 테스트 꼴인 파일은 unclaimed 그대로다.
+# 들어 있으면 support, 없으면 unclaimed 다. 길 위 폴더 가운데 경로 성분에 spike · fixtures 가 든 폴더는 보지 않는다
+# (compute-test-scope-candidates.sh 가 넓히지 않는 폴더와 같다). 이름이 테스트 꼴인 파일은 unclaimed 그대로다.
 # 테스트 꼴 이름: 마지막 성분이 `test_` 로 시작하거나 `_test.<확장자>` · `.test.<확장자>` · `.spec.<확장자>` 로 끝난다.
 # 입력: IN_F · IN_R · n_in(맡는 판정이 끝난 값). 출력: SPLIT — 맡지 않은(IN_R 이 빈) 입력마다 차례로 support|unclaimed.
 support_split() {
@@ -401,7 +402,9 @@ support_split() {
     { n = split($0, p, "/"); cls = "unclaimed"
       if (n >= 2 && !is_test(p[n])) {
         k = 0; for (i = n - 1; i >= 1; i--) if (p[i] == "tests" || p[i] == "test") { k = i; break }
+        m = n; for (i = 1; i < n; i++) if (p[i] == "spike" || p[i] == "fixtures") { m = i; break }
         for (j = n - 1; k && j >= k; j--) {
+          if (j >= m) continue
           d = p[1]; for (i = 2; i <= j; i++) d = d "/" p[i]
           if (d in have) { cls = "support"; break }
         }
