@@ -11,7 +11,7 @@ T="$(mktemp -d)" || exit 1
 trap 'chmod -R u+rwX "$T" 2>/dev/null; rm -rf "$T"' EXIT
 . "$ROOT/plugins/spec-distill/tests/fixtures/team_repo.sh"
 
-team_repo && claim && ok "팀 레포와 지휘 표지" || { no "준비 실패 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+repo_copy "$T" team && claim && ok "팀 레포와 지휘 표지" || { no "준비 실패 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 E1="$TM/jobs/E1"
 E2="$TM/jobs/E2"
 intent_tail() { tail -n 1 "$W/$E1/INTENT.md"; }
@@ -353,7 +353,7 @@ assert_eq "$(led ask-head --human "spec 승인" --roadmap "$RM" --job E1)" "0" "
 
 # h1–h3 — 계획 번호 없는 사람 줄은 머지되지 않은 브랜치 끝 모두에서 판정한다(K12 · AC23 미룸). 14b 의 답이 새지 않게 새 레포에서
 T0="$T"
-new_repo "$T0/h" && ok "h: 새 팀 레포를 세웠다" || { no "h: 새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; use_repo "$T0"; finish; exit 1; }
+repo_copy "$T0/h" new && ok "h: 새 팀 레포를 세웠다" || { no "h: 새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; use_repo "$T0"; finish; exit 1; }
 hdesign() { put "$E1/design.md" "$(printf '# 설계\n\n## Goals\n\n%s\n\n## 미룸\n\n- %s\n' "$1" "$2")"; }
 stale_why() { sed -n '/^낡음 — - spec 승인/{n;p;}' "$T/led.txt"; }
 g checkout -q -b feature/tm-e1 main
@@ -375,7 +375,7 @@ assert_eq "$(led human-check --roadmap "$RM" --job E1)" "0" "K12: 둘째 브랜�
 use_repo "$T0"
 
 # d1 · d2 — 새 레포에서(14b 의 「수정 필요」 답이 이 레포의 E1 머리에 닿지 않게). 지역 날짜 · 갈라진 형제 브랜치(K9 · K12 미룸)
-new_repo "$T0/d" && ok "d: 새 팀 레포를 세웠다" || { no "d: 새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; use_repo "$T0"; finish; exit 1; }
+repo_copy "$T0/d" new && ok "d: 새 팀 레포를 세웠다" || { no "d: 새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; use_repo "$T0"; finish; exit 1; }
 g checkout -q -b feature/tm-e1 main
 put "$E1/design.md" "$(printf '# 설계\n\n본문 하나\n\n## 지휘 기록\n')" && g commit -qm "E1 설계" && push_br feature/tm-e1
 DH="E1 @$(short "$(g rev-parse HEAD)")"
