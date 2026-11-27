@@ -305,14 +305,19 @@ case_support_skips_spike_fixtures_folders() {
   mkrepo; shtest tests/spike/test_sp.sh 0; shtest tests/fixtures/test_f.sh 0; shtest tests/spikes/test_s.sh 0
   printf 'x\n' > "$REPO/main/tests/spike/spike_prompt.md"; printf 'x\n' > "$REPO/main/tests/fixtures/x.tsv"
   printf 'x\n' > "$REPO/main/tests/spikes/notes.md"
+  shtest tests/fixtures/e2e-app/base/tests/test_store.sh 0
+  printf 'x\n' > "$REPO/main/tests/fixtures/e2e-app/base/tests/store.json"
   shtest tests/a.sh 0
   mktree || { rmrepo; return; }
   assign tests/spike/spike_prompt.md tests/spike/test_sp.sh tests/fixtures/x.tsv tests/fixtures/test_f.sh \
-    tests/spikes/notes.md tests/spikes/test_s.sh
+    tests/spikes/notes.md tests/spikes/test_s.sh \
+    tests/fixtures/e2e-app/base/tests/store.json tests/fixtures/e2e-app/base/tests/test_store.sh
   assert_eq "$(arow tests/spike/spike_prompt.md)" "unclaimed	file" "support_skips_spike_fixtures_folders: 맡은 테스트가 tests/spike/ 에만 있으면 → unclaimed"
   assert_eq "$(arow tests/fixtures/x.tsv)" "unclaimed	file" "support_skips_spike_fixtures_folders: 맡은 테스트가 tests/fixtures/ 에만 있으면 → unclaimed"
   assert_eq "$(arow tests/spikes/notes.md)" "support	file" "support_skips_spike_fixtures_folders: 성분 이름 일부(tests/spikes/)는 그대로 본다 → support"
   assert_eq "$(arow tests/spike/test_sp.sh)" "shell	file" "support_skips_spike_fixtures_folders: 양성 대조 — spike 폴더의 테스트 자신은 지금처럼 맡는다"
+  assert_eq "$(arow tests/fixtures/e2e-app/base/tests/store.json)" "unclaimed	file" "support_skips_spike_fixtures_folders: 가장 가까운 테스트 폴더 위쪽에 fixtures 가 들면(fixture 앱) → unclaimed"
+  assert_eq "$(arow tests/fixtures/e2e-app/base/tests/test_store.sh)" "shell	file" "support_skips_spike_fixtures_folders: 양성 대조 — fixture 앱의 테스트 자신은 지금처럼 맡는다"
   assign tests/spike/spike_prompt.md tests/fixtures/x.tsv tests/a.sh
   assert_eq "$(arow tests/spike/spike_prompt.md)" "support	file" "support_skips_spike_fixtures_folders: tests/ 에 바로 맡은 테스트가 있으면 → support"
   assert_eq "$(arow tests/fixtures/x.tsv)" "support	file" "support_skips_spike_fixtures_folders: fixtures 도 tests/ 에 바로 맡은 테스트가 있으면 → support"

@@ -346,13 +346,17 @@ class Contract(DiffBase):
 
     def test_support_tests_skips_spike_fixtures_folders(self):
         # 길 위 폴더 가운데 경로 성분에 spike · fixtures 가 든 폴더의 러너 파일은 세지 않는다(run-all.sh 의 제외와 같은
-        # 규칙). 성분 전체가 맞을 때만 뺀다 — tests/spikes/ 는 센다. 패키지 unit 도 같다.
-        units = ["tests/a.sh", "tests/spike/test_sp.sh", "tests/spikes/test_s.sh"]
+        # 규칙). 성분 전체가 맞을 때만 뺀다 — tests/spikes/ 는 센다. 패키지 unit 도 같다. 가장 가까운 테스트 폴더
+        # 위쪽에 fixtures 가 든 fixture 앱(tests/fixtures/e2e-app/base/tests/)도 세지 않는다.
+        units = ["tests/a.sh", "tests/spike/test_sp.sh", "tests/spikes/test_s.sh",
+                 "tests/fixtures/e2e-app/base/tests/test_store.sh"]
         write_assign(self.memo, [("tests/a.sh", "shell", "file"), ("tests/spike/test_sp.sh", "shell", "file"),
                                  ("tests/spike/prompt.md", "support", "file"),
                                  ("tests/spike/fixtures/sample.json", "support", "file"),
                                  ("tests/spikes/test_s.sh", "shell", "file"),
-                                 ("tests/spikes/notes.md", "support", "file")])
+                                 ("tests/spikes/notes.md", "support", "file"),
+                                 ("tests/fixtures/e2e-app/base/tests/test_store.sh", "shell", "file"),
+                                 ("tests/fixtures/e2e-app/base/tests/store.json", "support", "file")])
         rows = [(u, "pass", "0", "per-unit") for u in units]
         write_rows(self.memo / "baseline-shell.tsv", "shell", self.repo.B, rows)
         write_rows(self.memo / "head-shell-i1.tsv", "shell", self.repo.H, rows)
