@@ -72,6 +72,9 @@ RB=plugins/spec-distill/skills/reviewing-brief/SKILL.md
 has "$FIN" '고칠 자리는 그 framing 기록 파일(이 걸음의 `raw-source: FOUND <경로>`)의 그 줄이다' "나갈 길: 구조 멈춤이 고칠 자리를 댄다"
 has "$FIN" '`${CLAUDE_PLUGIN_ROOT}/templates/interview-seed-audit-template.md` 의 제목 순서와 꼴대로 고친 뒤 이 걸음부터 다시 돈다' "나갈 길: 고친 뒤 다시 도는 자리"
 has "$FIN" '빈 앵커 줄로 나아가지 않는다' "나갈 길(양의 짝): 판결 줄 없는 멈춤 불릿이 그대로 있다"
+# 멈춤 불릿은 두 꼴(종료 코드 2 만 · 예외로 죽은 실행까지)에 공통인 앞 글자와 끝 글자로 찾는다.
+STOP_HEAD='   - 판결 줄 없이 '
+STOP_TAIL='빈 앵커 줄로 나아가지 않는다.'
 last_bullet() {   # last_bullet <finishing.md> → locate 펜스 뒤 판결 갈래 목록의 마지막 불릿 줄(펜스가 「아래 마지막 갈래」 로 가리키는 줄)
   python3 - "$1" <<'PY'
 import sys
@@ -82,6 +85,8 @@ if start is None:
 fence = [n for n in range(start, len(lines)) if lines[n].strip().startswith("```")][:2]
 bullets = []
 for ln in lines[fence[1] + 1:] if len(fence) == 2 else []:
+    if not ln.strip():
+        continue   # 빈 줄은 목록을 끊지 않는다 — 빈 줄 뒤의 같은 들여쓰기 불릿도 갈래다
     if ln.startswith("     "):
         continue   # 하위 불릿은 갈래가 아니다 — 같은 들여쓰기 갈래만 센다
     if not ln.startswith("   - "):
@@ -90,43 +95,58 @@ for ln in lines[fence[1] + 1:] if len(fence) == 2 else []:
 print(bullets[-1] if bullets else "")
 PY
 }
-STOP_BULLET='   - 판결 줄 없이 `[raw_source] …` 줄로 끝나면(종료 코드 2)'
-case "$(last_bullet "$ROOT/$FIN")" in
-  "$STOP_BULLET"*) ok "나갈 길: 판결 갈래 목록의 마지막 불릿이 멈춤 불릿이다(종료 2 펜스의 「아래 마지막 갈래」)" ;;
-  *) no "나갈 길: 판결 갈래 목록의 마지막 불릿이 멈춤 불릿이 아니다 — «$(last_bullet "$ROOT/$FIN")»" ;;
-esac
-LB_TMP="$(mktemp)"; [ -n "$LB_TMP" ] || { no "mktemp 실패"; finish; exit 1; }
-python3 - "$ROOT/$FIN" "$LB_TMP" "$STOP_BULLET" <<'PY'
+is_stop() {   # is_stop <줄> → 멈춤 불릿이면 rc 0
+  case "$1" in "$STOP_HEAD"*"$STOP_TAIL") return 0 ;; *) return 1 ;; esac
+}
+lb="$(last_bullet "$ROOT/$FIN")"
+if is_stop "$lb"; then ok "나갈 길: 판결 갈래 목록의 마지막 불릿이 멈춤 불릿이다(종료 2 펜스의 「아래 마지막 갈래」)"
+else no "나갈 길: 판결 갈래 목록의 마지막 불릿이 멈춤 불릿이 아니다 — «${lb}»"; fi
+# mutate_fin <변이 이름> <사본> — 멈춤 불릿 · 하위 불릿 자리를 바꾼 사본을 만든다(변이 자리를 못 찾으면 rc 1)
+mutate_fin() {
+  python3 - "$ROOT/$FIN" "$2" "$1" "$STOP_HEAD" "$STOP_TAIL" <<'PY'
 import sys
-src, dst, stop = sys.argv[1:4]
-out = []
-for ln in open(src, encoding="utf-8").read().split("\n"):
-    out.append(ln)
-    if ln.startswith(stop):
-        out.append("   - 덧붙인 불릿")
-open(dst, "w", encoding="utf-8").write("\n".join(out))
+src, dst, kind, head, tail = sys.argv[1:6]
+lines = open(src, encoding="utf-8").read().split("\n")
+idx = [n for n, ln in enumerate(lines) if ln.startswith(head) and ln.rstrip().endswith(tail)]
+if len(idx) != 1:
+    sys.exit(1)
+i = idx[0]
+if kind == "after-stop":          # 멈춤 불릿 바로 뒤에 같은 들여쓰기 불릿
+    lines.insert(i + 1, "   - 덧붙인 불릿")
+elif kind == "after-sub-blank":   # 하위 불릿 뒤 빈 줄 하나 두고 같은 들여쓰기 불릿
+    lines[i + 2:i + 2] = ["", "   - 덧붙인 불릿"]
+elif kind == "drop-stop":         # 멈춤 불릿 지우기
+    del lines[i]
+elif kind == "sub-flat":          # 하위 불릿을 같은 들여쓰기로 되돌리기
+    lines[i + 1] = lines[i + 1].replace("     - ", "   - ", 1)
+open(dst, "w", encoding="utf-8").write("\n".join(lines))
 PY
-assert_eq "$(last_bullet "$LB_TMP")" "   - 덧붙인 불릿" "나갈 길(양성 대조): 멈춤 불릿 뒤에 불릿을 더하면 그 불릿이 마지막으로 잡힌다"
-rm -f "$LB_TMP"
+}
 w9_under_stop() {   # w9_under_stop <finishing.md> → 멈춤 불릿 바로 다음 줄이 한 칸 더 들여쓴 구조 사유 불릿이면 yes
-  python3 - "$1" "$STOP_BULLET" <<'PY'
+  python3 - "$1" "$STOP_HEAD" "$STOP_TAIL" <<'PY'
 import sys
 lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
-idx = [n for n, ln in enumerate(lines) if ln.startswith(sys.argv[2])]
+idx = [n for n, ln in enumerate(lines) if ln.startswith(sys.argv[2]) and ln.rstrip().endswith(sys.argv[3])]
 nxt = lines[idx[0] + 1] if len(idx) == 1 and idx[0] + 1 < len(lines) else ""
 print("yes" if nxt.startswith("     - 그 `[raw_source]` 줄이 framing 기록의 절 구조 사유") else "no")
 PY
 }
 assert_eq "$(w9_under_stop "$ROOT/$FIN")" "yes" "나갈 길: 구조 사유 불릿이 멈춤 불릿 바로 아래 하위 불릿이다"
-W9_TMP="$(mktemp)"; [ -n "$W9_TMP" ] || { no "mktemp 실패"; finish; exit 1; }
-python3 - "$ROOT/$FIN" "$W9_TMP" <<'PY'
-import sys
-src, dst = sys.argv[1:3]
-s = open(src, encoding="utf-8").read()
-open(dst, "w", encoding="utf-8").write(s.replace("\n     - 그 `[raw_source]` 줄이 framing", "\n   - 그 `[raw_source]` 줄이 framing", 1))
-PY
-assert_eq "$(w9_under_stop "$W9_TMP")" "no" "나갈 길(양성 대조): 구조 사유 불릿을 같은 들여쓰기로 되돌리면 하위 불릿 단언이 실패한다"
-rm -f "$W9_TMP"
+FM_TMP="$(mktemp)"; [ -n "$FM_TMP" ] || { no "mktemp 실패"; finish; exit 1; }
+for kind in after-stop after-sub-blank; do
+  if mutate_fin "$kind" "$FM_TMP"; then
+    assert_eq "$(last_bullet "$FM_TMP")" "   - 덧붙인 불릿" "나갈 길(양성 대조 ${kind}): 멈춤 불릿 뒤에 같은 들여쓰기 불릿을 더하면 그 불릿이 마지막으로 잡힌다"
+  else no "나갈 길(양성 대조 ${kind}): 변이 자리(멈춤 불릿 하나)를 찾지 못했다"; fi
+done
+if mutate_fin drop-stop "$FM_TMP"; then
+  lb2="$(last_bullet "$FM_TMP")"
+  if is_stop "$lb2"; then no "나갈 길(양성 대조 drop-stop): 멈춤 불릿을 지웠는데 마지막 불릿이 여전히 멈춤 불릿으로 잡힌다"
+  else ok "나갈 길(양성 대조 drop-stop): 멈춤 불릿을 지우면 마지막 불릿 단언이 실패한다"; fi
+else no "나갈 길(양성 대조 drop-stop): 변이 자리를 찾지 못했다"; fi
+if mutate_fin sub-flat "$FM_TMP"; then
+  assert_eq "$(w9_under_stop "$FM_TMP")" "no" "나갈 길(양성 대조 sub-flat): 구조 사유 불릿을 같은 들여쓰기로 되돌리면 하위 불릿 단언이 실패한다"
+else no "나갈 길(양성 대조 sub-flat): 변이 자리를 찾지 못했다"; fi
+rm -f "$FM_TMP"
 has "$BB" 'framing 기록의 절 구조가 어긋남' "종료 2 목록: 번들 머리말이 절 구조 사유를 댄다"
 has "$RB" 'framing 기록의 절 구조가 어긋남' "종료 2 목록: 결과물 리뷰 skill 의 괄호가 절 구조 사유를 댄다"
 has "$RB" '상태 파일을 읽지 못함 · 원자료를 찾았는데 `--raw-audit` 없음 · `--raw-audit` 가 이 컨텍스트 쌓기' "종료 2 목록: 괄호가 「원자료를 찾았는데 --raw-audit 없음」 을 번들 머리말과 같은 차례로 댄다"

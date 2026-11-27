@@ -608,23 +608,39 @@ def check_counts(brief: str, audit: str, table_text: str) -> dict:
 
 
 def cmd_check(a) -> int:
-    """파일을 쓰지 않는다 — brief 위험 줄 번호와(`--plan-table` 이 있으면) 표의 번호 셈만 줄로 낸다."""
+    """파일을 쓰지 않는다 — brief 위험 줄 번호와(`--plan-table` 이 있으면) 표의 번호 셈만 줄로 낸다.
+    결과물 · audit · 상태 파일 쪽 결함(못 읽음 · 번호를 셀 수 없음)은 표를 고쳐도 낫지 않으므로 첫 줄
+    `brief-risk: FAIL 못 읽었다: <사유>` 로 내고, `roadmap-table: UNKNOWN` 은 표 자체의 결함에만 남긴다."""
     try:
         brief, audit = read(a.brief), read(a.audit)
     except Refused as exc:
         print("brief-risk: FAIL %s" % exc)
         return 1
-    ok = True
-    try:
-        brief_risk_numbers(brief_section(brief, "5"))
-        print("brief-risk: OK")
-    except FormatError as exc:
-        ok = False
-        print("brief-risk: FAIL %s" % exc)
+    table_text, unreadable = None, None
     if a.plan_table:
         try:
-            counts = check_counts(brief, audit, read(a.plan_table))
-        except (Refused, R.TableError, FormatError) as exc:
+            table_text = read(a.plan_table)
+        except Refused as exc:   # 글자가 이미 「못 읽었다: <경로> (…)」 다
+            unreadable = str(exc)
+    try:
+        brief_risk_numbers(brief_section(brief, "5"))
+    except FormatError as exc:
+        print("brief-risk: FAIL %s" % exc)
+        return 1
+    if table_text is not None:
+        try:
+            brief_universe(brief, audit)
+        except FormatError as exc:
+            unreadable = "못 읽었다: %s" % exc
+    if unreadable:
+        print("brief-risk: FAIL %s" % unreadable)
+        return 1
+    print("brief-risk: OK")
+    ok = True
+    if table_text is not None:
+        try:
+            counts = check_counts(brief, audit, table_text)
+        except R.TableError as exc:
             ok = False
             print("roadmap-table: UNKNOWN %s" % exc)
         else:

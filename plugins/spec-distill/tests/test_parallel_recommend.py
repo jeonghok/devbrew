@@ -157,10 +157,10 @@ class RoadmapRepo(unittest.TestCase):
         self.git(self.w, "push", "-u", "origin", "trunk")
         self.git(self.w, "remote", "set-head", "origin", "--auto")
 
-    def start_design(self, epic, extra="", base="origin/HEAD"):
+    def start_design(self, epic, extra="", base="origin/HEAD", specs="plan/specs/"):
         path = os.path.join(self.tmp, epic)
         self.git(self.w, "worktree", "add", path, "-b", "work/" + epic.lower(), base)
-        self.write(path, "plan/specs/%s-design.md" % epic,
+        self.write(path, "%s%s-design.md" % (specs, epic),
                    "---\nsource_interview: plan/rm/%s.md\nroadmap: plan/rm/roadmap.md\n---\n\n# %s 설계\n\n"
                    "## Goals\n\n- %s 목표\n\n## 결정 기록\n%s\n" % (epic, epic, epic, extra))
         self.git(path, "add", "-A")
@@ -513,6 +513,28 @@ class IntentsPack(RoadmapRepo):
         self.start_design("E2", extra=E2_TABLE)
         self.merge("E2")
         self.start_design("E1", extra=E1_TABLE)
+        self.assertEqual(self.stage("E2"), "머지됨")
+        text, _o = self.intents()
+        self.assertNotIn("### E2", text)
+        self.assertEqual(text.splitlines()[1], NONE_LINE)
+
+    def test_merged_before_design_is_excluded_under_non_ascii_specs_dir(self):
+        # 설계문서 폴더에 영어가 아닌 글자 · 빈칸이 있어도(git 의 core.quotePath 를 켠 레포) 이 에픽 설계 전에 끝난
+        # 바탕은 뺀다 — git 이 낸 경로 글자가 따옴표 · 8진 이스케이프로 감싸이면 설계문서를 못 찾아 「확인하지 못함」 으로 실린다.
+        specs = "plan/설계 문서/"
+        rm = Path(self.w, "plan", "rm", "roadmap.md")
+        rm.write_text(rm.read_text(encoding="utf-8").replace("specs_dir: plan/specs/", "specs_dir: " + specs), encoding="utf-8")
+        self.git(self.w, "config", "core.quotePath", "true")
+        self.git(self.w, "commit", "-qam", "설계문서 폴더")
+        self.git(self.w, "push", "origin", "trunk")
+        self.start_design("E2", extra=E2_TABLE, specs=specs)
+        self.merge("E2")
+        self.start_design("E1", extra=E1_TABLE, specs=specs)
+        # 브랜치를 지워 끝으로는 재지 못하게 한다 — 설계문서를 처음 더한 커밋(git 이 낸 경로 글자)으로만 잰다
+        self.git(self.w, "worktree", "remove", "--force", os.path.join(self.tmp, "E2"))
+        self.git(self.w, "push", "origin", "--delete", "work/e2")
+        self.git(self.w, "branch", "-D", "work/e2")
+        self.git(self.w, "remote", "set-url", "origin", "https://github.com/o/r.git")
         self.assertEqual(self.stage("E2"), "머지됨")
         text, _o = self.intents()
         self.assertNotIn("### E2", text)

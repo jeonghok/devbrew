@@ -224,7 +224,25 @@ assert_eq "$RC" "0" "옛 키만 있으면 그 폴더의 새 꼴 이름도 받는
 run "$OK" check-path intent_dir notes/iv/x-interview.md
 assert_eq "$RC" "0" "옛 키만 있으면 그 폴더의 옛 꼴 이름도 받는다"
 run "$OK" get interview_dir
-assert_eq "$RC" "2" "get 은 옛 키 인자를 받지 않는다"
+assert_eq "$RC:$OUT" "0:notes/iv/" "get 의 옛 키 인자는 한 판 동안 옛 의도 폴더를 낸다(옛 키만 있으면 그 값)"
+assert_contains "$ERR" "인자 interview_dir 는 옛 이름이다 — 새 이름은 intent_dir 다" "get 의 옛 키 인자는 이름이 바뀌었다고 알린다"
+assert_contains "$ERR" "다음 minor 판에서 지운다" "알림이 언제 지우는지 말한다"
+run "$OK" check-path interview_dir notes/iv/x-context.md
+assert_eq "$RC" "0" "check-path 의 옛 키 인자도 한 판 동안 받는다(새 키 인자와 같은 rc 0)"
+assert_contains "$ERR" "인자 interview_dir 는 옛 이름이다 — 새 이름은 intent_dir 다" "check-path 의 옛 키 인자도 알린다"
+run "$OK" check-path intent_dir elsewhere/x-context.md; NRC="$RC"
+run "$OK" check-path interview_dir elsewhere/x-context.md
+assert_eq "$RC" "$NRC" "옛 키 인자의 거절도 새 키 인자와 같은 rc 다"
+run "$OK" get intent_dir
+assert_not_contains "$ERR" "인자 interview_dir" "새 키 인자 호출에는 그 알림이 없다"
+# 옛 키가 없으면 옛 키 인자는 옛 기본 폴더다(PR #332 앞의 기본값)
+run "$A" get interview_dir
+assert_eq "$RC:$OUT" "0:docs/superpowers/interview/" "옛 키가 없으면 get 의 옛 키 인자는 옛 기본 폴더를 낸다"
+mkdir -p "$T/nogit-alias"
+run "$T/nogit-alias" get interview_dir
+assert_eq "$RC:$OUT" "0:docs/superpowers/interview/" "git 레포 밖에서도 get 의 옛 키 인자는 옛 기본 폴더를 낸다"
+run "$T/nogit-alias" get intent_dir
+assert_eq "$RC:$OUT" "0:docs/superpowers/intent/" "양의 짝: git 레포 밖의 새 키 인자는 새 기본 폴더다"
 mkrepo ob || { no "픽스처 ob"; finish; exit 1; }
 OB="$T/ob/work"
 on_trunk "$OB" .devbrew.md $'---\nintent_dir: new/\ninterview_dir: old/\n---\n'
@@ -237,6 +255,15 @@ assert_not_contains "$ERR" "옛 꼴 이름" "받을 때는 거절 사유 줄이 
 run "$OB" check-path intent_dir old/x-context.md
 assert_eq "$RC" "3" "옛 폴더의 새 꼴 이름은 거절한다"
 assert_contains "$ERR" "옛 의도 폴더(old/)" "거절 사유가 옛 폴더를 댄다"
+# 두 키가 다르면 옛 키 인자는 옛 키의 폴더로 돈다 — PR #332 앞의 뜻(그 폴더 바로 아래면 이름 꼴과 무관하게 받는다)
+run "$OB" get interview_dir
+assert_eq "$RC:$OUT" "0:old/" "두 키가 있으면 get 의 옛 키 인자는 옛 키의 폴더를 낸다"
+run "$OB" check-path interview_dir old/x-context.md
+assert_eq "$RC" "0" "두 키가 있으면 check-path 의 옛 키 인자는 옛 키의 폴더로 잰다(그 폴더 바로 아래 받음)"
+run "$OB" check-path interview_dir new/x-context.md
+assert_eq "$RC" "3" "두 키가 있으면 check-path 의 옛 키 인자는 새 폴더를 받지 않는다"
+assert_contains "$ERR" "정해진 폴더는 old/" "거절 사유가 옛 키의 폴더를 댄다"
+assert_not_contains "$ERR" "옛 꼴 이름" "옛 키 인자의 거절에는 새 키의 옛 폴더 규칙(옛 꼴 이름만) 사유가 붙지 않는다 — PR #332 앞에는 없던 규칙이다"
 
 # ── test_roadmap_check (AC6) ─────────────────────────────────────────────────
 mkrepo rb || { no "픽스처 rb"; finish; exit 1; }
