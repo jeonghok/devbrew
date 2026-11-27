@@ -608,6 +608,19 @@ case_probe_refuses_forged_line() {
   assert_eq "$(arow tests/test_ok.py)" "unittest	file" "probe_refuses_forged_line: 양성 대조 — 같은 폴더의 진짜 테스트는 맡는다"
   rmrepo
 }
+# 배정 파일을 상대 경로로 넘기고 트리 밖에서 불러도 불러 보기 결과 파일은 같은 파일이다 — 맡는 테스트가 맡겨진다.
+case_probe_relative_assign_path() {
+  mkrepo
+  printf 'import unittest\nclass TestOk(unittest.TestCase):\n    def test_x(self):\n        pass\n' > "$REPO/main/tests/test_ok.py"
+  mktree || { rmrepo; return; }
+  mkdir -p "$REPO/out"
+  ( cd "$REPO/out" && printf 'tests/test_ok.py\n' | bash "$RTS" assign "$TREE" assign.tsv 2>/dev/null )
+  assert_eq "$(awk -F'\t' '$1 == "tests/test_ok.py" { print $2 "\t" $3 }' "$REPO/out/assign.tsv")" "unittest	file" \
+    "probe_relative_assign_path: 상대 경로 배정 파일에서도 unittest 가 맡는다"
+  assert_eq "$(ls -A "$TREE" | grep -c '^\.qg-probe\.')" "0" "probe_relative_assign_path: 트리 안에 불러 보기 결과 파일이 남지 않는다"
+  assert_eq "$(ls -A "$REPO/out" | grep -c '^\.qg-probe\.')" "0" "probe_relative_assign_path: 배정 폴더에도 남지 않는다"
+  rmrepo
+}
 
 for c in case_R17_assign_writes_trailer case_R17_failed_assign_leaves_no_file \
          case_R17_failed_assign_removes_stale_file case_R17_output_path_is_directory_fails \
@@ -627,7 +640,7 @@ for c in case_R17_assign_writes_trailer case_R17_failed_assign_leaves_no_file \
          case_imported_testclient_ignored case_probe_ignores_module_stdout_and_exit case_kill_switch_no_probe \
          case_setup_failure_no_probe case_env_dir_not_ignored_no_probe case_attached_tree_no_probe \
          case_zero_tests_is_error_both_axes case_zero_tests_low_python case_support_after_probe \
-         case_six_repo_files_claimed case_run_chdir_lazy_import case_probe_refuses_forged_line; do
+         case_six_repo_files_claimed case_run_chdir_lazy_import case_probe_refuses_forged_line case_probe_relative_assign_path; do
   echo "== $c"; $c
 done
 finish

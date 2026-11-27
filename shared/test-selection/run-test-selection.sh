@@ -445,7 +445,8 @@ unittest_probe() {
       d=$(dirname -- "${IN_F[i]}")
       printf '%s\n' "$dirs" | grep -qxF -- "$d" || dirs="$dirs$d"$'\n'
     done
-    res=$(mktemp "$(dirname -- "$out")/.qg-probe.XXXXXX") || { rm -f "$tmp"; die "임시 파일을 만들 수 없다: $out"; }
+    # 불러 보기는 트리로 cd 한 뒤 결과 파일을 쓴다 — 배정 파일이 상대 경로여도 결과 파일은 절대 경로로 둔다.
+    res=$(CDPATH= cd -- "$(dirname -- "$out")" && mktemp "$PWD/.qg-probe.XXXXXX") || { rm -f "$tmp"; die "임시 파일을 만들 수 없다: $out"; }
     while IFS= read -r d; do
       [[ -z "$d" ]] && continue
       files=()
