@@ -292,8 +292,9 @@ case_r1_template_isolated() {   # r1 템플릿: 두 번째 r1 은 템플릿을 �
   t="$(mktemp -d -t docreview-r1tpl-XXXXXX)" || { no "r1 템플릿: 폴더를 만들지 못했다"; return; }
   DOCREVIEW_R1_TEMPLATES="$t"
   a="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
-  b="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  b="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" 2>"$t/b.err")"
   assert_eq "$(ls "$t" | grep -c '\.meta$')" "1" "r1 템플릿: 같은 프로필 · 문서의 r1 두 번에 템플릿이 하나다"
+  assert_eq "$(grep -c '^\[cases\.sh\] r1 템플릿' "$t/b.err")" "0" "r1 템플릿: 두 번째 r1 은 알림 없이 템플릿을 복사한다(복사에 실패해 새로 지은 것이 아니다)"
   next_round "$a" "$FX/design-sample.md" >/dev/null
   printf '\nA_ONLY_q4\n' >> "$a/src/design-sample.md"
   assert_eq "$(st_yaml "$a" 'st["round"]') $(st_yaml "$b" 'st["round"]')" "2 1" "r1 템플릿: A 의 라운드를 넘겨도 B 는 1라운드다"
@@ -321,7 +322,8 @@ case_r1_template_round_start_after_call() {   # r1 템플릿: 복사본의 라�
   DOCREVIEW_R1_TEMPLATES="$w/t"; mkdir -p "$w/t"
   a="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; rm -rf "$a"
   : > "$w/before"
-  b="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  b="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" 2>"$w/err")"
+  assert_eq "$(grep -c '^\[cases\.sh\] r1 템플릿' "$w/err")" "0" "r1 템플릿(시작): 두 번째 r1 은 알림 없이 템플릿을 복사한다(표식을 잰 원장은 복사본이다)"
   assert_eq "$(python3 -c 'import os, sys; print(int(sys.argv[1]) > os.stat(sys.argv[2]).st_mtime_ns)' \
       "$(st_yaml "$b" 'st["rounds"]["1"]["started_mtime_ns"]')" "$w/before")" "True" \
     "r1 템플릿(시작): 복사본의 라운드 시작 표식이 r1 을 부르기 전에 쓴 파일보다 뒤다(새로 지은 원장과 같다)"
