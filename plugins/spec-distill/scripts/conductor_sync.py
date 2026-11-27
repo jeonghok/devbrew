@@ -7,7 +7,7 @@
 구간마다 한 줄을 내고, 이상이 있는 구간만 그 원문을 네 칸 들여 낸다. 구간이 멈출 사유를 내면 `멈춤 — <구간>: <사유>` 와
 원문을 내고 그 종료 코드로 끝난다(뒤 구간은 돌지 않는다). 끝 묶음은 규모 줄 · (team 형식이면) 리더 묶음 명령 한 줄 ·
 끝나지 않은 일마다 서 있는 걸음과 지시서 · 머지 뒤 일이 남은 에픽 · 병렬 판단 줄 · 시각 줄이다.
-PR 캐시 구간이 단계 계산이 읽는 칸(상태 · 끝 커밋 · 교차 레포 · 바탕 · 머지 커밋)을 고쳤으면 끝 묶음은 작업 목록을 고친 캐시로 다시 센다(작업 목록 구간 줄은 처음 계산 그대로).
+PR 캐시 구간이 캐시 줄의 칸을 하나라도 고쳤으면(갱신 때마다 바뀌는 확인한 때 · 쓴 세션만 뺀다) 끝 묶음은 작업 목록을 고친 캐시로 다시 센다(작업 목록 구간 줄은 처음 계산 그대로).
 
 기계 상태 · 상태 브랜치는 직접 쓰지 않는다 — 쓰는 일은 부르는 스크립트(원장 · 상태 브랜치 · 현황)가 한다.
 표의 줄을 지우거나 터미널을 닫지 않는다 — 어긋난 줄을 낼 뿐이다.
@@ -241,20 +241,21 @@ def pr_rows(root, roadmap):
     return {(r["브랜치"], r["번호"]): r["상태"] for r in rows if r["번호"] != cs.NO_PR}
 
 
-PR_READ_COLUMNS = ("브랜치", "번호", "상태", "headRefOid", "교차 레포", "baseRefName", "mergeCommit")   # 단계 계산이 읽는 칸 — 확인한 때 · 쓴 세션은 매 실행 바뀌므로 뺀다
+PR_RUN_COLUMNS = ("확인한 때", "쓴 세션")   # 갱신 때마다 바뀌는 칸 — conductor_ledger 의 pr-refresh · pr-record 가 쓴다. 견줄 때 이것만 뺀다
 
 
 def pr_facts(root, roadmap):
-    """단계 계산이 읽는 칸만 뽑은 캐시 줄들(정렬). 읽지 못하면 사유 글."""
+    """캐시 줄들(정렬)에서 갱신 때마다 바뀌는 칸만 뺀 나머지 전부. 칸을 열거하지 않으므로 단계 계산이 읽는 칸이
+    늘어도 따라온다 — 틀려도 「한 번 더 센다」 쪽으로만 틀린다. 읽지 못하면 사유 글."""
     try:
         rows = L.load(root, roadmap)["PR"]
     except Exception as exc:  # noqa: BLE001 — 견주지 못한 것으로 낸다
         return str(exc)
-    return sorted(tuple(r[c] for c in PR_READ_COLUMNS) for r in rows)
+    return sorted(tuple(sorted((k, v) for k, v in r.items() if k not in PR_RUN_COLUMNS)) for r in rows)
 
 
 def seg_pr(root, roadmap, sid):
-    """캐시가 바뀌었는가 — 단계 계산이 읽는 칸(상태 · 끝 커밋 · 교차 레포 · 바탕 · 머지 커밋)이 하나라도 바뀌었으면
+    """캐시가 바뀌었는가 — 갱신 때마다 바뀌는 칸(확인한 때 · 쓴 세션)을 뺀 칸이 하나라도 바뀌었으면
     끝 묶음은 작업 목록을 다시 센다. 보이는 「고쳤다」 목록은 상태가 바뀐 줄만 싣는다."""
     before, facts_before = pr_rows(root, roadmap), pr_facts(root, roadmap)
     rc, out, err = script("conductor_ledger.py", "pr-refresh", "--roadmap", roadmap, "--session", sid)

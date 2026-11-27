@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parent.parent
@@ -421,6 +422,25 @@ class PrCacheFacts(SyncRepo):
         self.assertEqual(rc, 0, out + err)
         self.assertIn("\nPR 캐시 — 달라진 것 없음\n", out)
         self.assertEqual(self.e1_line(out), [], out)   # 끝 묶음은 고친 캐시로 — E1 은 끝났다
+
+
+class PrFactsColumns(unittest.TestCase):
+    """머지 앞 리뷰 고침 3 — 다시 셀지의 견줄 칸은 열거하지 않는다. 캐시 줄의 칸 전부에서 매 실행 바뀌는 칸
+    (확인한 때 · 쓴 세션)만 빼고 견준다 — 단계 계산이 나중에 다른 칸을 읽어도 다시 세기가 새지 않는다."""
+
+    ROW = {"브랜치": "feature/e1", "번호": "#5", "상태": "열림", "확인한 때": "2026-11-27 10:00",
+           "headRefOid": "abc", "교차 레포": "아니오", "baseRefName": "trunk", "mergeCommit": "-", "쓴 세션": "s1"}
+
+    def facts(self, **change):
+        row = dict(self.ROW, **change)
+        with unittest.mock.patch.object(SY.L, "load", return_value={"PR": [row]}):
+            return SY.pr_facts(Path("."), "rm")
+
+    def test_per_run_columns_alone_do_not_recount(self):   # ① 매 실행 바뀌는 칸만 다른 실행
+        self.assertEqual(self.facts(), self.facts(**{"확인한 때": "2026-11-27 11:30", "쓴 세션": "s2"}))
+
+    def test_unlisted_column_change_recounts(self):   # ② 지금 목록에 없는 칸이 하나 더 있고 그 값만 바뀐다
+        self.assertNotEqual(self.facts(새칸="a"), self.facts(새칸="b"))
 
 
 class StatusView(SyncRepo):
