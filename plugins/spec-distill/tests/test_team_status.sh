@@ -8,7 +8,7 @@ T="$(mktemp -d)" || exit 1
 [ -n "$T" ] && [ -d "$T" ] || exit 1
 trap 'rm -rf "$T"' EXIT
 . "$ROOT/plugins/spec-distill/tests/fixtures/team_repo.sh"
-team_repo && ok "팀 레포를 세웠다(${TM})" || { no "팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+repo_copy "$T" team && ok "팀 레포를 세웠다(${TM})" || { no "팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
 
 tipof() {  # tipof <브랜치> — read_tip 의 세 값을 <커밋 8자 또는 None>|<알림 yes/no>|<갈라짐 yes/no> 로 낸다
   python3 - "$S" "$W" "$1" <<'PY'
@@ -69,12 +69,73 @@ assert_eq "$fake" "ffffffffffffffffffffffffffffffffffffffff" "끝: 양성 대조
 # ── 단계 · 받음 — 단계 표(설계 §10)를 걸음마다 근거 하나만 바꿔 잰다 ─────────────
 JRC="$S/job_results.py"
 LAST_RC=""
-blk() { js "$T/s.json" "[b for b in r['blocks'] if b['id']=='$1'][0].get('$2', '칸 없음')"; }   # blk <번호> <칸>
-st() { blk "$1" stage; }
-why() { blk "$1" reason; }
-prog() { blk "$1" progress; }
-notes() { js "$T/s.json" "' | '.join([b for b in r['blocks'] if b['id']=='$1'][0]['notes'])"; }
-jobf() { js "$T/s.json" "[b for b in r['blocks'] if b['id']=='$1'][0]['job']['$2']"; }   # jobf <번호> <job 칸>
+_jg_esc() {  # _jg_esc <글> — 영숫자 밖 바이트를 _<16진 두 자리> 로 바꿔 _JG_E 에 둔다(셸 변수 이름 조각)
+  local LC_ALL=C s="$1" out="" c h i=0
+  case "$s" in *[!A-Za-z0-9]*) ;; *) _JG_E="$s"; return ;; esac
+  while [ "$i" -lt "${#s}" ]; do
+    c="${s:$i:1}"
+    case "$c" in [A-Za-z0-9]) out="${out}${c}" ;; *) printf -v h '%02x' "'$c"; out="${out}_${h: -2}" ;; esac
+    i=$((i+1))
+  done
+  _JG_E="$out"
+}
+# jget <json 파일> <블록 번호> <칸> — js 의 `[b for b in r['blocks'] if b['id']=='<번호>'][0].get('<칸>', '칸 없음')` 과 같은 출력.
+# <칸> 이 notes| 면 notes 를 ' | ' 로 이은 글, job.<k> 면 job 의 <k> 칸(없으면 빈 출력). 블록이 없으면 빈 출력.
+# 보고의 글(cksum)이 같은 동안 python 은 한 번만 돈다 — 블록마다 칸 값을 셸 변수 대입으로 $T/jget/<cksum>.sh 에 적고 부를 때마다 source 한다
+jget() {
+  local sum key f pre eb v
+  [ -r "$1" ] || return 1
+  sum="$(cksum < "$1")" || return 1
+  key="${sum// /_}"; f="$T/jget/${key}.sh"; pre="_jg${key}"
+  if [ ! -s "$f" ]; then
+    mkdir -p "$T/jget" && python3 -I - "$1" "$f" "$pre" <<'PY' || return 1
+import json, os, shlex, sys
+src, out, pre = sys.argv[1:4]
+def esc(s):
+    return "".join(chr(b) if (48 <= b <= 57 or 65 <= b <= 90 or 97 <= b <= 122) else "_%02x" % b for b in s.encode("utf-8"))
+r = json.load(open(src, encoding="utf-8"))
+try:
+    blocks = [(b, b["id"]) for b in r["blocks"]]
+except Exception:
+    blocks = []
+lines, seen = ["%s_ok=1" % pre], set()
+for b, bid in blocks:
+    if not isinstance(bid, str) or bid in seen:
+        continue
+    seen.add(bid)
+    e = esc(bid)
+    lines.append("%s_b_%s=1" % (pre, e))
+    for k, v in b.items():
+        lines.append("%s_v_%s_K_%s=%s" % (pre, e, esc(k), shlex.quote(str(v))))
+    try:
+        lines.append("%s_n_%s=%s" % (pre, e, shlex.quote(" | ".join(b["notes"]))))
+    except Exception:
+        pass
+    if isinstance(b.get("job"), dict):
+        for k, v in b["job"].items():
+            lines.append("%s_j_%s_K_%s=%s" % (pre, e, esc(k), shlex.quote(str(v))))
+with open(out + ".tmp", "w", encoding="utf-8", newline="\n") as fh:
+    fh.write("\n".join(lines) + "\n")
+os.replace(out + ".tmp", out)
+PY
+  fi
+  . "$f"
+  _jg_esc "$2"; eb="$_JG_E"
+  eval "[ -n \"\${${pre}_b_${eb}+x}\" ]" || return 0
+  case "$3" in
+    "notes|") v="${pre}_n_${eb}" ;;
+    job.*) _jg_esc "${3#job.}"; v="${pre}_j_${eb}_K_${_JG_E}" ;;
+    *) _jg_esc "$3"; v="${pre}_v_${eb}_K_${_JG_E}" ;;
+  esac
+  if eval "[ -n \"\${${v}+x}\" ]"; then eval "printf '%s\n' \"\$${v}\""
+  else case "$3" in "notes|"|job.*) ;; *) printf '%s\n' '칸 없음' ;; esac; fi
+}
+blk() { jget "$T/s.json" "$1" "$2"; }   # blk <번호> <칸>
+st() { jget "$T/s.json" "$1" stage; }
+why() { jget "$T/s.json" "$1" reason; }
+prog() { jget "$T/s.json" "$1" progress; }
+notes() { jget "$T/s.json" "$1" "notes|"; }
+jobf() { jget "$T/s.json" "$1" "job.$2"; }   # jobf <번호> <job 칸>
 rc() { echo "$LAST_RC"; }
 # 걸음이 실패하면 보고를 지운다 — 앞 걸음의 낡은 보고가 「같은 단계 그대로」 단언을 채우지 못하게(그 단언들은 빨개진다)
 fail_step() { rm -f "$T/s.json"; LAST_RC="걸음 실패"; no "걸음 실패: $1"; }
@@ -92,6 +153,12 @@ open(path, "w", encoding="utf-8", newline="").write(text.replace(old, new))
 PY
 }
 drop() { grep -v -F -- "$2" "$W/$1" > "$T/drop.tmp"; mv "$T/drop.tmp" "$W/$1"; }   # drop <레포 상대 경로> <글 조각> — 그 조각이 든 줄을 지운다
+printf '{"blocks": [{"id": "Z1", "stage": "가"}]}\n' > "$T/fresh.json"
+assert_eq "$(jget "$T/fresh.json" Z1 stage)" "가" "보고 캐시: 처음 읽은 값"
+printf '{"blocks": [{"id": "Z1", "stage": "나"}]}\n' > "$T/fresh.json"
+assert_eq "$(jget "$T/fresh.json" Z1 stage)" "나" "보고 캐시: 같은 경로를 같은 초에 다시 쓰면 새 글을 읽는다"
+assert_eq "$(jget "$T/fresh.json" Z1 reason)" "칸 없음" "보고 캐시: 블록은 있고 칸이 없으면 칸 없음"
+assert_eq "$(jget "$T/fresh.json" Z9 stage)" "" "보고 캐시: 블록이 없으면 빈 출력"
 J1="$TM/jobs/E1"
 R1="$J1/results/implement-plan-1-1.md"
 BLK="$J1/results/BLOCKED.md"
@@ -732,8 +799,8 @@ back "$E2_AT" && restat
 g checkout -q main
 # ── 사람 줄 관문 — 근거 있는 승인 줄만 단계를 넘긴다(AC8 · AC12 · AC20) ──────────────────────────────
 # 새 레포(E3) — 위 레포의 상태와 겹치지 않게 임시 폴더 하나를 더 쓴다
-T0="$T"; T="$T0/gate"; mkdir -p "$T"; W="$T/repo"; export CLAUDE_CONFIG_DIR="$T/claude"
-team_repo && ok "관문 레포를 세웠다(${TM})" || { no "관문 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+T0="$T"
+repo_copy "$T0/gate" team && ok "관문 레포를 세웠다(${TM})" || { no "관문 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
 J3="$TM/jobs/E3"
 g add -A -- "$RD" && g commit -qm "공통 문서" && g push -q origin main
 claim || no "지휘 표지를 쥐지 못했다 — $(cat "$T/led.txt")"
@@ -801,7 +868,7 @@ assert_eq "$(gate_of "$(printf -- '---\nhuman_gate: 끔\nno_such_key: 1\n---')")
 T="$T0"
 
 # ── 받음 줄의 낡음 — 받은 head 와 지금 끝의 글을 견준다(K13 · 새 레포) ─────────────────────────────
-new_repo "$T0/rcpt" && ok "받음 낡음: 팀 레포를 세웠다(${TM})" || { no "받음 낡음: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+repo_copy "$T0/rcpt" new && ok "받음 낡음: 팀 레포를 세웠다(${TM})" || { no "받음 낡음: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 J1="$TM/jobs/E1"
 R1="$J1/results/implement-plan-1-1.md"
 RDESIGN="$(printf -- '---\ntype: design\njob: E1\n---\n\n# 받음 낡음 픽스처 설계\n\n## Goals\n\n- 받은 뒤의 변경을 센다.\n\n## 번호 대조\n\n| 번호 | 처리 | 자리 · 이유 |\n|---|---|---|\n| C1 · S1 | 반영 | §1 |\n\n## Acceptance Criteria\n\n- AC1: 받은 뒤 바뀐 글을 센다\n- AC2: 되돌린 글은 세지 않는다\n\n## 미룸\n\n| 항목 | 이유 | 받는 곳 |\n|---|---|---|')"
