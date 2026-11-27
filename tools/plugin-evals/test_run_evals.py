@@ -1,9 +1,11 @@
-"""run_evals.py 의 명령줄 · 종료 코드 · 요약 줄을 잰다.
+"""run_evals.py 의 명령줄 · 종료 코드 · 요약 줄 · 평가 명령에 넘기는 환경을 잰다.
 
 바깥 경계가 명령줄 · 종료 코드라 케이스마다 스크립트를 띄운다.
+가짜 claude 는 설정을 환경이 아니라 옆의 fake.conf 에서 읽는다 — 스크립트가 넘기는 환경을 재야 해서다.
 """
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -14,6 +16,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(HERE, "run_evals.py")
 
 FAKE_CLAUDE = """#!/bin/sh
+. "$(dirname "$0")/fake.conf"
+env > "$FAKE_ENV"
 : > "$FAKE_ARGS"
 for a in "$@"; do printf '%s\\n' "$a" >> "$FAKE_ARGS"; done
 prev=""
@@ -108,33 +112,38 @@ class RunEvalsTest(unittest.TestCase):
         cls.args_file = os.path.join(cls.root, "args.txt")
         cls.links_file = os.path.join(cls.root, "links.txt")
         cls.linked_file = os.path.join(cls.root, "linked-seen.txt")
+        cls.env_file = os.path.join(cls.root, "env.txt")
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.root, ignore_errors=True)
 
     def setUp(self):
-        for path in (self.args_file, self.links_file, self.linked_file):
+        for path in (self.args_file, self.links_file, self.linked_file,
+                     self.env_file):
             if os.path.exists(path):
                 os.remove(path)
 
     def run_script(self, extra, result=None, rc=0, with_bin=True,
-                   plugin=None, cwd=None, inspect=False):
+                   plugin=None, cwd=None, inspect=False, extra_env=None):
         path = "/usr/bin:/bin"
         if with_bin:
             path = self.bin + ":" + path
-        env = {
-            "PATH": path,
-            "TMPDIR": self.root,
+        conf = {
             "FAKE_ARGS": self.args_file,
+            "FAKE_ENV": self.env_file,
             "FAKE_RC": str(rc),
+            "FAKE_RESULT": self.results[result] if result else "",
+            "FAKE_LINKS": self.links_file if inspect else "",
+            "FAKE_LINKED": self.linked_file if inspect else "",
         }
-        if result:
-            env["FAKE_RESULT"] = self.results[result]
-        if inspect:
-            env["FAKE_LINKS"] = self.links_file
-            env["FAKE_LINKED"] = self.linked_file
-        cmd =[sys.executable, SCRIPT, plugin or self.plugin] + extra
+        with open(os.path.join(self.bin, "fake.conf"), "w",
+                  encoding="utf-8") as f:
+            for key, value in conf.items():
+                f.write("%s=%s\n" % (key, shlex.quote(value)))
+        env = {"PATH": path, "TMPDIR": self.root}
+        env.update(extra_env or {})
+        cmd = [sys.executable, SCRIPT, plugin or self.plugin] + extra
         return subprocess.run(
             cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             universal_newlines=True, cwd=cwd,
@@ -146,6 +155,96 @@ class RunEvalsTest(unittest.TestCase):
 
     def last_line(self, p):
         return p.stdout.rstrip("\n").split("\n")[-1]
+
+    def child_env(self):
+        with open(self.env_file, encoding="utf-8") as f:
+            return dict(line.split("=", 1) for line in f.read().splitlines()
+                        if "=" in line)
+
+    def test_env_drops_unlisted(self):
+        unlisted = {
+            "DEVBREW_FAKE_SECRET": "not-a-real-secret",
+            "GITHUB_TOKEN": "not-a-real-token",
+            "CLAUDE_CODE_MESSAGING_TOKEN": "not-a-real-token",
+            "AWS_SECRET_ACCESS_KEY": "not-a-real-key",
+            "GOOGLE_APPLICATION_CREDENTIALS": "/nowhere/creds.json",
+            "AZURE_CLIENT_SECRET": "not-a-real-secret",
+            "PYTHONPATH": "/nowhere",
+        }
+        p = self.run_script([], result="ok", extra_env=unlisted)
+        self.assertEqual(p.returncode, 0)
+        got = self.child_env()
+        for name in unlisted:
+            with self.subTest(name=name):
+                self.assertNotIn(name, got)
+
+    def test_env_passes_needed(self):
+        needed = {
+            "HOME": os.path.join(self.root, "home"),
+            "USER": "someone",
+            "LOGNAME": "someone",
+            "SHELL": "/bin/zsh",
+            "LANG": "ko_KR.UTF-8",
+            "LC_ALL": "ko_KR.UTF-8",
+            "TERM": "xterm-256color",
+            "CLAUDE_CONFIG_DIR": os.path.join(self.root, "claude-work"),
+            "ANTHROPIC_API_KEY": "<REDACTED>",
+            "ANTHROPIC_BASE_URL": "https://gateway.example.invalid",
+            "CLAUDE_CODE_OAUTH_TOKEN": "<REDACTED>",
+            "HTTPS_PROXY": "http://proxy.example.invalid:3128",
+            "NO_PROXY": "localhost",
+            "NODE_EXTRA_CA_CERTS": "/etc/ssl/corp.pem",
+        }
+        p = self.run_script([], result="ok", extra_env=needed)
+        self.assertEqual(p.returncode, 0)
+        got = self.child_env()
+        for name, value in needed.items():
+            with self.subTest(name=name):
+                self.assertEqual(got.get(name), value)
+        self.assertEqual(got.get("TMPDIR"), self.root)
+
+    def test_env_provider_vars_only_when_selected(self):
+        provider = {
+            "AWS_PROFILE": "some-profile",
+            "GOOGLE_APPLICATION_CREDENTIALS": "/nowhere/creds.json",
+            "CLOUD_ML_REGION": "global",
+            "VERTEX_REGION_CLAUDE_HAIKU_4_5": "us-east5",
+            "AZURE_TENANT_ID": "some-tenant",
+        }
+        selectors = ("CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
+                     "CLAUDE_CODE_USE_FOUNDRY")
+        for chosen in ("1", ""):
+            env = dict(provider)
+            env.update({s: chosen for s in selectors})
+            self.run_script([], result="ok", extra_env=env)
+            got = self.child_env()
+            for name, value in provider.items():
+                with self.subTest(chosen=chosen, name=name):
+                    if chosen:
+                        self.assertEqual(got.get(name), value)
+                    else:
+                        self.assertNotIn(name, got)
+        self.run_script([], result="ok", extra_env={
+            "CLAUDE_CODE_USE_MANTLE": "1", "AWS_REGION": "us-east-1"})
+        self.assertEqual(self.child_env().get("AWS_REGION"), "us-east-1")
+
+    @unittest.skipUnless(sys.platform == "darwin", "개발 도구 폴더는 macOS 만")
+    def test_path_keeps_dev_tool_prefix(self):
+        dev_root = os.path.join(self.root, "dev tools")
+        os.makedirs(os.path.join(dev_root, "usr", "bin"), exist_ok=True)
+        fake_select = os.path.join(self.bin, "xcode-select")
+        with open(fake_select, "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\nprintf '%s\\n' " + shlex.quote(dev_root) + "\n")
+        os.chmod(fake_select, 0o755)
+        try:
+            p = self.run_script([], result="ok")
+        finally:
+            os.remove(fake_select)
+        self.assertEqual(p.returncode, 0)
+        self.assertEqual(
+            self.child_env().get("PATH"),
+            os.path.join(dev_root, "usr", "bin") + ":" + self.bin
+            + ":/usr/bin:/bin")
 
     def test_always_flags_without_cap(self):
         self.run_script([], result="ok", plugin=os.path.basename(self.plugin),

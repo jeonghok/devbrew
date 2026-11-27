@@ -11,6 +11,41 @@ from typing import List, Optional, Tuple
 
 DEFAULT_CAP = "2"
 
+# 평가 명령에 넘기는 환경 — 실행 · 로그인 · 공급자 선택에 쓰는 것만. 나머지는 넘기지 않는다.
+PASS_NAMES = frozenset((
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "LANG", "TERM",
+    "CLAUDE_CONFIG_DIR",
+    "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy",
+    "NO_PROXY", "no_proxy", "NODE_EXTRA_CA_CERTS",
+    "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_USE_MANTLE",
+    "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_CERT_STORE",
+    "CLAUDE_CODE_CLIENT_CERT", "CLAUDE_CODE_CLIENT_KEY",
+    "CLAUDE_CODE_CLIENT_KEY_PASSPHRASE",
+))
+PASS_PREFIXES = ("LC_", "ANTHROPIC_")
+# 클라우드 공급자의 변수는 그 공급자를 고른 때만 넘긴다(선택 변수, 이름들, 접두들).
+PROVIDER_VARS = (
+    (("CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_MANTLE"), (), ("AWS_",)),
+    (("CLAUDE_CODE_USE_VERTEX",),
+     ("GOOGLE_APPLICATION_CREDENTIALS", "CLOUD_ML_REGION"), ("VERTEX_REGION_",)),
+    (("CLAUDE_CODE_USE_FOUNDRY",), (), ("AZURE_",)),
+)
+
+
+def child_env(environ, dev: Optional[str]) -> dict:
+    names = set(PASS_NAMES)
+    prefixes = PASS_PREFIXES
+    for selectors, extra_names, extra_prefixes in PROVIDER_VARS:
+        if any(environ.get(s) for s in selectors):
+            names.update(extra_names)
+            prefixes = prefixes + extra_prefixes
+    env = {k: v for k, v in environ.items()
+           if k in names or k.startswith(prefixes)}
+    if dev:
+        env["PATH"] = dev + os.pathsep + env.get("PATH", "")
+    return env
+
 
 def dev_tool_bin() -> Optional[str]:
     if sys.platform != "darwin" or not shutil.which("xcode-select"):
@@ -186,10 +221,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(not_run("상한(--max-cost-usd)은 0 보다 큰 수여야 한다"))
         return 1
 
-    env = dict(os.environ)
-    dev = dev_tool_bin()
-    if dev:
-        env["PATH"] = dev + os.pathsep + env.get("PATH", "")
+    env = child_env(os.environ, dev_tool_bin())
     claude = shutil.which("claude", path=env.get("PATH"))
     if not claude:
         print(not_run("평가 명령(claude)을 찾지 못했다"))
