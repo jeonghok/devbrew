@@ -48,6 +48,17 @@ SRC="$REPO_ROOT/shared/docreview/scripts"
 export PYTHONDONTWRITEBYTECODE=1
 BASE_MUT="$(mktemp -d -t docreview-mut-XXXXXX)" || exit 1
 trap 'rm -rf "$BASE_MUT"' EXIT
+# 필드 없는 프로필 사본은 여기서 한 번 재고 넘긴다 — run_case 마다 cases.sh 가 다시 재지 않는다.
+# 못 만들면 run_case 가 셀마다 빈 줄을 내던 그 실패를 여기서 한 번에 낸다.
+DOCREVIEW_PROF_SD="$(bash "$HERE/fixtures/docreview/nofield_profiles.sh")"
+if [ -z "$DOCREVIEW_PROF_SD" ] || [ ! -d "$DOCREVIEW_PROF_SD" ]; then
+  no "사본 프로필 디렉토리 없음: '${DOCREVIEW_PROF_SD}' — 변이 행렬을 돌리지 못한다"; exit 1
+fi
+export DOCREVIEW_PROF_SD
+# r1 의 1라운드 원장은 키(엔진 사본 · 프로필 · 문서)마다 한 번 짓고 복사해 쓴다 — cases.sh 의 r1 템플릿 길.
+# 키에 엔진 사본의 경로가 들어 변이 사본은 깨끗한 사본의 템플릿을 받지 않는다. 폴더는 위 trap 이 함께 지운다.
+DOCREVIEW_R1_TEMPLATES="$BASE_MUT/r1-templates"; mkdir -p "$DOCREVIEW_R1_TEMPLATES"
+export DOCREVIEW_R1_TEMPLATES
 
 # 사본 디렉토리를 하나 만든다(형제 adjudication.py 링크 포함).
 mkclone() {   # mkclone <dir>
