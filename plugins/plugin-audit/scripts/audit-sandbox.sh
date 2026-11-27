@@ -46,10 +46,12 @@ resolve_leaf() {   # <path>
 }
 
 # 등록된 worktree 가 브랜치를 쥐고 있나 — porcelain 블록마다 경로를 신원으로 견준다.
-# 그 경로가 등록돼 있고 브랜치를 쥐면 참, 등록이 없거나 detached 면 거짓.
+# 그 경로가 등록돼 있고 브랜치를 쥐면 참, 등록이 없거나 detached 면 거짓. 목록을 읽지 못하면 지우지 않고 멈춘다.
 holds_branch() {   # <abs-path>
-  local want cur="" branch="" line
+  local want cur="" branch="" line list
   want=$(resolve_leaf "$1")
+  list=$(git worktree list --porcelain 2>/dev/null) \
+    || die "등록된 worktree 목록을 읽지 못했다(git worktree list) — 브랜치를 쥐었는지 몰라 지우지 않는다: $1"
   while IFS= read -r line; do
     if [[ -z "$line" ]]; then
       if [[ -n "$cur" ]] && { [[ "$cur" == "$want" ]] || [[ "$cur" -ef "$1" ]]; }; then
@@ -61,7 +63,7 @@ holds_branch() {   # <abs-path>
     elif [[ "$line" == "branch "* ]]; then
       branch="${line#branch }"
     fi
-  done < <(git worktree list --porcelain 2>/dev/null; echo)
+  done < <(printf '%s\n' "$list"; echo)
   return 1
 }
 

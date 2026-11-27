@@ -401,15 +401,23 @@ class CheckPathIntentFolders(unittest.TestCase):
         rc, _ = self.check({}, self.OLD + "x-interview.md", key="roadmaps_dir")
         self.assertEqual(rc, 3)
 
-    def test_check_path_rejects_old_key_argument(self):
-        rc, _ = self.check({}, self.NEW + "x.md", key="interview_dir")
-        self.assertEqual(rc, 2)
+    def test_check_path_old_key_argument_is_taken_for_one_minor(self):
+        # 옛 키 인자는 한 판 동안 PR #332 앞의 뜻으로 돈다 — 옛 의도 폴더(옛 키가 없으면 옛 기본 폴더) 바로 아래를
+        # 받고 새 폴더는 받지 않는다. 알림 한 줄, 새 키 인자에는 알림이 없다.
+        new_rc, new_err = self.check({}, self.NEW + "x.md")
+        rc, err = self.check({}, self.OLD + "x.md", key=legacy_names.OLD_SETTING_KEY)
+        self.assertEqual((new_rc, rc), (0, 0), err)
+        rc_new_folder, _e = self.check({}, self.NEW + "x.md", key=legacy_names.OLD_SETTING_KEY)
+        self.assertEqual(rc_new_folder, 3)
+        self.assertEqual(err.count("옛 이름이다 — 새 이름은 %s 다" % legacy_names.SETTING_KEY), 1, err)
+        self.assertNotIn("옛 이름이다 — 새 이름은 %s 다" % legacy_names.SETTING_KEY, new_err)
 
     def test_get_choices(self):
+        # 모르는 키는 여전히 argparse 오류(rc 2)다 — 옛 키 하나만 한 판 동안 새 키로 받는다.
         import contextlib, io
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as c:
-                rd.main(["get", "interview_dir", "--root", self.tmp])
+                rd.main(["get", "no_such_dir", "--root", self.tmp])
         self.assertEqual(c.exception.code, 2)
 
     def test_old_folder_link_rejected(self):

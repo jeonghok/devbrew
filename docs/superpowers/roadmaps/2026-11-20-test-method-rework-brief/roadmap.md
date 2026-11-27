@@ -47,9 +47,9 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
 - 의도: 새 기준으로 있는 테스트를 가르고 지우거나 합치거나 바꿔 테스트 양과 문구 수정 때의 깨짐, 값에 견줘 비싼 테스트가 쓰는 시간을 줄인다
 - 범위: 한다: 교차 참조까지 본 판정, 묶음(갈래 · 플러그인별) 단위 승인, 지운 것 기록, 네 갈래 밖 테스트를 같은 기준으로, 판정 뒤 이력 주석 덜기, 지우는 테스트를 이름으로 부르는 규칙 문서 고치기, 앞단 에픽과의 앞뒤 정하기, 값 대비 비용과 필요성 판정에 따라 줄이기 · 합치기, 테스트 쪽 구조 고치기(준비 함께 쓰기 · 나누기 · 더 싼 확인으로 내리기), E1 이 넘긴 느린 넷 · python 테스트 묶음 · 문서 리뷰 엔진 케이스를 준비물 단위로 고치기 / 안 한다: 보안 갈래의 글자 확인 지우기, 머지 전 대조의 구조(E1 의 일)
 - 의존: E2, E3
-- 브랜치: feature/test-prune
+- 브랜치: feature/test-prune-team-repo, feature/test-prune-docreview, feature/test-prune-conductor-state, feature/test-prune-spec-distill, feature/test-prune-qg, feature/test-prune-rest
 - 묶음: E4.md
-- 경로 예약: plugins/spec-distill/tests/, plugins/quality-gates/tests/, plugins/plugin-audit/tests/, plugins/project-init/tests/, shared/tests/
+- 경로 예약: plugins/spec-distill/tests/, plugins/quality-gates/tests/, plugins/plugin-audit/tests/, plugins/project-init/tests/, shared/tests/, docs/removed-tests.md, docs/testing.md
 
 ### E5 — 테스트 값 대비 비용 진단
 - 의도: 있는 테스트마다 쓰는 시간과 지키는 것을 나란히 놓아, 값에 견줘 비싼 테스트 · 없어도 되는 테스트 · 구조를 고치면 나아질 테스트를 가려낼 근거를 만든다
@@ -75,6 +75,7 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
 
 - E0 · 결정 · 2026-11-23 · 「E0(규칙 문서를 쥔 두 에픽의 머지 확인): 지휘 로드맵 R2(#305 · #312)와 앞단 로드맵 F5(#323)가 모두 머지됐습니다. E0를 닫고 E2(테스트 기준과 규칙 문서) 설계를 열까요?」 → 「닫는다 (권장)」
   - 확인한 것(2026-11-23 · 기본 브랜치 607ac54e · PR 기록으로 판정): 지휘 로드맵(2026-11-14-conductor-context-economy-brief) R2 의 브랜치 둘이 PR #305(2026-11-20) · #312(2026-11-21)로 머지됐다(`CLAUDE.md` · `docs/superpowers/roadmaps/worker/`). 앞단 로드맵(2026-11-14-framing-interview-constraint-audit-brief) F5 가 PR #323(2026-11-23)으로 머지됐다(`docs/plugin-authoring.md`).
+  - 정정(2026-11-26): #323 은 F5 의 계획 넷 가운데 첫째였다 — F5 가 통째로 머지된 것이 아니다. E0 가 확인하려던 규칙 문서(`docs/plugin-authoring.md`)는 #323 에 들어 있어 E0 를 닫은 판단은 그대로다. F5 의 남은 계획과의 겹침은 알림 글(`test-criteria-notice.md`)의 받는 쪽으로 다뤘다.
   - E2 가 알릴 상대(경로 예약을 다시 셈): 앞단 로드맵 F7 의 둘째 계획(`feature/switch-retirement` — 브랜치 전 · `CLAUDE.md` · `docs/plugin-authoring.md`) · 지휘 로드맵 R5(`feature/conductor-migration` — 브랜치 전 · `CLAUDE.md` · `docs/plugin-authoring.md`). 지휘 로드맵 E1(세션 담당자)은 PR #322 로 머지돼 알릴 상대에서 빠진다.
 
 ## 재분해 이력
@@ -100,6 +101,16 @@ source_brief: docs/superpowers/interview/2026-11-20-test-method-rework-brief-int
   - 「1시간 30분 그대로 (권장)」
   - 「E4에서 준비물 단위로 (권장)」
   - 「테스트 구조 고치기를 E4로 (권장)」
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-26 · E4 의 경로 예약에 E2 가 만든 지운 것 기록(docs/removed-tests.md)과 기준 문서(docs/testing.md)를 더한다 — E4 가 테스트를 지우며 고칠 자리다
+- 바뀜: 바뀐 에픽 E4 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-26 · E4 의 브랜치를 PR 여섯의 브랜치 여섯으로 나눈다 — 설계(docs/superpowers/specs/2026-11-26-test-prune-design.md §1)가 준비물 단위 PR 셋과 플러그인 단위 정리 PR 셋으로 나눴다
+- 바뀜: 바뀐 에픽 E4 「이대로 다시 나눈다 (권장)」
+- 원문:
   - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표

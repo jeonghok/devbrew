@@ -40,23 +40,27 @@ phys_path() {   # <path>
 # 등록 판정의 단일 읽기 — `git worktree list --porcelain` 의 블록에서 같은 worktree 를 찾는다.
 # 글자가 아니라 신원(물리 경로 · 같은 inode)으로 견준다 — 대소문자를 구분하지 않는 파일시스템에서
 # 이름이 대소문자만 다른 사용자 worktree 도 같은 것으로 잡는다.
-# 등록돼 있으면 그 브랜치 이름(브랜치를 쥐지 않았으면 `-`)을 내고 rc 0, 등록돼 있지 않으면 rc 1.
+# 등록돼 있으면 그 브랜치 이름(브랜치를 쥐지 않았으면 `-`)을 내고 rc 0, 등록돼 있지 않으면 rc 1,
+# 목록을 읽지 못했으면 rc 2(등록 여부를 모른다).
 wt_registered_branch() {   # <abs-path>
-  local want line p="" br="-"
+  local want line p="" br="-" list
   want=$(phys_path "$1")
+  list=$(git worktree list --porcelain 2>/dev/null) || return 2
   while IFS= read -r line; do
     case "$line" in
       "worktree "*) p=$(phys_path "${line#worktree }"); br="-" ;;
       "branch "*) br="${line#branch }" ;;
       "") if [[ -n "$p" ]] && { [[ "$p" == "$want" ]] || [[ "$p" -ef "$1" ]]; }; then printf '%s\n' "$br"; return 0; fi; p="" ;;
     esac
-  done < <(git worktree list --porcelain 2>/dev/null; echo)
+  done < <(printf '%s\n' "$list"; echo)
   return 1
 }
 
-holds_branch() {   # <abs-path> — 등록된 worktree 가 브랜치를 쥐고 있으면 참
-  local br
-  br=$(wt_registered_branch "$1") || return 1
+holds_branch() {   # <abs-path> — 등록된 worktree 가 브랜치를 쥐고 있으면 참. 목록을 읽지 못하면 지우지 않고 멈춘다
+  local br rc=0
+  br=$(wt_registered_branch "$1") || rc=$?
+  [[ "$rc" -ne 2 ]] || die "등록된 worktree 목록을 읽지 못했다(git worktree list) — 브랜치를 쥐었는지 몰라 지우지 않는다: $1"
+  [[ "$rc" -eq 0 ]] || return 1
   [[ "$br" != "-" ]]
 }
 

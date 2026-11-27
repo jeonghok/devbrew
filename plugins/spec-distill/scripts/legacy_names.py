@@ -28,6 +28,7 @@ OLD_KIND: dict[str, str] = {
 OLD_HEAD_KEY = "source_interview"
 OLD_SETTING_KEY = "interview_dir"
 OLD_DEFAULT_DIR = "docs/superpowers/interview/"
+OLD_STATE_COMMAND = OLD_KIND[CONTEXT_STATE]   # state_path.py 의 옛 하위 명령 — 한 판 동안 받는다
 OLD_TAIL = "-interview"
 
 _DATE = r"\d{4}-\d{2}-\d{2}"
@@ -85,6 +86,11 @@ def siblings(brief: str) -> tuple[str, str]:
     if not brief.endswith(".md"):
         raise ValueError(f"not a .md path: {brief}")
     return (brief[:-3] + ".audit.md", brief[:-3] + ".state.md")
+
+
+def rename_notice(what: str, old: str, new: str) -> str:
+    """옛 이름으로 불린 하위 명령 · 인자의 알림 한 줄 — 옛 설정 키 알림(`setting_notice`)과 같은 꼴."""
+    return f"{what} {old} 는 옛 이름이다 — 새 이름은 {new} 다. 옛 이름은 다음 minor 판에서 지운다"
 
 
 def setting_notice(old_value: str, new_value: str | None) -> str:

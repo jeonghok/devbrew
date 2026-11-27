@@ -67,7 +67,7 @@ test_failure_pattern: "^FAILED (.+)$"
 - 의존: R2, E1
 - 브랜치: feature/conductor-step-guides, feature/leader-clear-resume, feature/merge-prep-worker, feature/leader-wording
 - 묶음: E2.md
-- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/conductor_ledger.py, docs/superpowers/roadmaps/leader/, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/skills/epic-conductor/references/, plugins/spec-distill/scripts/conductor_status.py, plugins/spec-distill/templates/team/role-leader.md, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/references/proceed-gate.md
+- 경로 예약: plugins/spec-distill/references/conducting.md, plugins/spec-distill/references/conductor-dispatch.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/scripts/conductor_ledger.py, docs/superpowers/roadmaps/leader/, plugins/spec-distill/scripts/control_plane.py, plugins/spec-distill/skills/epic-conductor/references/, plugins/spec-distill/scripts/conductor_status.py, plugins/spec-distill/templates/team/role-leader.md, plugins/spec-distill/references/redecompose.md, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/references/proceed-gate.md, plugins/spec-distill/references/conducting-step-1.md, plugins/spec-distill/references/conducting-step-2.md, plugins/spec-distill/references/conducting-step-3.md, plugins/spec-distill/references/conducting-step-4.md, plugins/spec-distill/references/conducting-step-5.md, plugins/spec-distill/references/conducting-step-6.md, plugins/spec-distill/references/conducting-step-7.md, plugins/spec-distill/references/conducting-resume.md, plugins/spec-distill/references/conducting-team.md, plugins/spec-distill/references/conducting-manual.md, plugins/spec-distill/scripts/conductor_toc.py, plugins/spec-distill/scripts/conductor_sync.py, plugins/spec-distill/scripts/conductor_state.py
 - 크기: 중간
 - 병렬: R3 와 병렬 가능
 - 순서 이유: 걸음과 세션 담당자가 선 뒤에 리더의 일을 덜 수 있다
@@ -85,17 +85,29 @@ test_failure_pattern: "^FAILED (.+)$"
 - 순서 이유: 이 기계에서 세션 담당자가 돈 뒤에 다른 서버로 넓힌다
 - 근거: 사용자 말 2026-11-17
 
-### E4 — 새 형식 켜기와 앞단 넘김
-- 의도: 새 형식을 로드맵 만들기의 기본으로 켜고 앞단 로드맵이 넘긴 일을 받는다
-- 범위: 한다: 새 형식을 기본으로 켜기(생성기 기본값 · 「로드맵 잡기」 글이 새 형식 표를 내게 · 옛 형식으로 만들 길), 앞단 로드맵(framing-interview-constraint-audit)이 넘긴 셋 — 나누지 않는 일을 리더로 넘기기(리더가 일을 받는 길과 보내는 쪽의 끝) · 「로드맵 잡기」 글에서 새 형식을 켜기와 켰을 때의 일 셋(나누기 전에 원자료 파일 만들기 · 승인 화면에 지시 원문 범위 보이기 · 커밋 범위와 PR 파일 세기에 역할 문서 넷과 HANDBOOK.md 넣기 — 켤 자리 넷) · 넘김 지시 파일을 읽으라는 문장 대신 첨부로 넘길지, 새 형식을 켜기 전에 볼 수리(R2 · R3 이 넘긴 것 가운데 세션 담당자와 따로 갈 수 있는 것), 규칙 줄을 조건으로 골라 싣기와 묶음 예산 / 안 한다: 담당자를 세션으로 띄우기 · 위아래 소통(E1), 옛 형식 로드맵을 새 형식으로 옮기기(R5)
+### E4 — 새 형식 켜기 전 수리
+- 의도: 새 형식을 켜기 전에 앞 에픽들이 넘긴 수리를 끝낸다
+- 범위: 한다: 앞 에픽 설계의 미룸 표에서 받는 곳이 E4 인 행 스물둘(R2 열셋 · E1 일곱 · R1 둘) — 원자료 출처 검사 · 사람 줄 판정(물러선 승인 · 다시 묻기) · 관문 읽기와 관문 이름을 한 곳으로 · 걸음 보기 · 결과 파일의 줄 종류 · 검수 결과 파일과 리뷰어 프로필의 과제 파일 모드 · 담당자가 받는 글 · 담당자의 파일 쓰기를 도구로 막을지 · team 넘김 줄과 spec-review 를 team 형식에 맞추기 · 켜기 전에 볼 작은 것들, 규칙 줄을 조건으로 골라 싣기와 묶음 예산 / 안 한다: 새 형식을 기본으로 켜기 · 「로드맵 잡기」 글 · 나누지 않는 일을 리더로 넘기기(E5 — 그 행들 안의 「create 의 기본으로 켜기」 와 「도는 로드맵이 없을 때 단순 작업의 자리」 두 조각도 E5), 담당자를 세션으로 띄우기 · 위아래 소통(E1), 옛 형식 로드맵을 새 형식으로 옮기기(R5)
 - 의존: E1
-- 브랜치: feature/team-layout-default
+- 브랜치: feature/team-layout-repairs
 - 묶음: E4.md
-- 경로 예약: plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/skills/roadmap-draft/, plugins/spec-distill/references/team-files.md, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/scripts/walk_table.py, plugins/spec-distill/scripts/human_lines.py, plugins/spec-distill/scripts/team_rules.py, plugins/spec-distill/scripts/team_check.py, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/skills/spec-review/SKILL.md
-- 크기: 중간
+- 경로 예약: plugins/spec-distill/references/team-files.md, plugins/spec-distill/references/epic-handoff.md, plugins/spec-distill/scripts/walk_table.py, plugins/spec-distill/scripts/human_lines.py, plugins/spec-distill/scripts/team_rules.py, plugins/spec-distill/scripts/team_check.py, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/skills/spec-review/SKILL.md, plugins/spec-distill/scripts/start_bundle.py, plugins/spec-distill/scripts/team_write.py, plugins/spec-distill/scripts/team_files.py, plugins/spec-distill/scripts/job_results.py, plugins/spec-distill/scripts/session_record.py, plugins/spec-distill/scripts/branch_tip.py, plugins/spec-distill/scripts/team_status.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/repo_defaults.py, plugins/spec-distill/scripts/spec_review_bundle.py, plugins/spec-distill/references/docreview-profiles/design-doc.md, plugins/spec-distill/templates/team/, plugins/spec-distill/references/conductor-dispatch.md
+- 크기: 큼
 - 병렬: E2 · E3 와 병렬 가능
-- 순서 이유: 앞단 로드맵의 「앞단 다시 짜기」 가 「로드맵 잡기」 글을 지어 머지한 뒤에야 켤 자리가 생긴다
-- 근거: 사용자 말 2026-11-21 「싣자」 · 2026-11-22 「좋아 나누자」
+- 순서 이유: 수리가 머지된 뒤에 새 형식을 켠다 — 지휘 절차서에 닿는 행은 E2 가 그 문서를 걸음별 지시서로 가른 뒤에 고친다
+- 근거: 사용자 말 2026-11-25 「켜기전에 고치자」 · 「가」
+
+### E5 — 새 형식 켜기와 받는 길
+- 의도: 새 형식을 로드맵 만들기의 기본으로 켜고 나누지 않는 작은 일을 리더가 받는 길을 낸다
+- 범위: 한다: 새 형식을 기본으로 켜기(생성기 기본값 · 표 검사가 새 표를 읽기 · 옛 형식으로 만들 길), 「로드맵 잡기」 글의 켤 자리 넷(나누기 전에 원자료 파일 만들기 · 승인 화면에 지시 원문 범위 보이기 · 생성 호출의 형식 값 · 커밋 범위와 PR 파일 세기에 역할 문서 넷과 HANDBOOK.md 넣기), 나누지 않는 일을 리더로 넘기기(로드맵 없이 과제 폴더 하나로 받는 길과 보내는 쪽의 끝), 넘김 지시 파일을 읽으라는 문장 대신 첨부로 넘길지, 임시 레포에서 새 형식 로드맵 하나를 끝까지 걸어 보기 / 안 한다: 켜기 전 수리(E4), 옛 형식 로드맵을 새 형식으로 옮기기(R5)
+- 의존: E1, E4
+- 브랜치: feature/team-layout-default
+- 묶음: E5.md
+- 경로 예약: plugins/spec-distill/scripts/roadmap_write.py, plugins/spec-distill/skills/roadmap-draft/, plugins/spec-distill/scripts/roadmap_render.py, plugins/spec-distill/scripts/team_write.py, plugins/spec-distill/scripts/team_layout.py, plugins/spec-distill/references/team-files.md, plugins/spec-distill/references/brief-handoff.md, plugins/spec-distill/skills/context-build/references/finishing.md, plugins/spec-distill/skills/epic-conductor/SKILL.md, plugins/spec-distill/README.md
+- 크기: 중간
+- 병렬: E3 와 병렬 가능
+- 순서 이유: 수리(E4)가 머지된 뒤에 켠다 — 앞단 로드맵의 남은 계획이 「로드맵 잡기」 글을 고친 뒤에 켤 자리가 굳는다
+- 근거: 사용자 말 2026-11-21 「싣자」 · 2026-11-22 「좋아 나누자」 · 2026-11-25 「가」
 
 ### R3 — 지휘자 상태 브랜치 · 편지함
 - 의도: 기계를 넘는 지휘자 소통 자리를 세운다
@@ -112,7 +124,7 @@ test_failure_pattern: "^FAILED (.+)$"
 ### R5 — 이전 · 재측정
 - 의도: 기존 기록 · 도는 로드맵을 새 구조로 옮기고 옛 장치를 걷어낸 뒤 기준선과 다시 잰다
 - 범위: 한다: 설계문서 지휘 기록 · 에픽 묶음 이전, 도는 로드맵 이전, 옛 장치 정리, 재측정 비교, 앞단 로드맵이 넘긴 저술 가이드(docs/plugin-authoring.md)를 팀 구조에 맞추기 / 안 한다: 새 기능 · 현황 · 감시 mod(만들지 않는다 — 사용자 2026-11-20 「R4는 일단 빼자」. 그 에픽의 번호는 이 에픽이 「하지 않기로 한 것」 으로 적는다)
-- 의존: R1, R2, R3, E1, E2, E3, E4
+- 의존: R1, R2, R3, E1, E2, E3, E4, E5
 - 브랜치: feature/conductor-migration
 - 묶음: R5.md
 - 경로 예약: docs/superpowers/specs/, docs/superpowers/roadmaps/, plugins/spec-distill/CHANGELOG.md, docs/plugin-authoring.md, plugins/spec-distill/scripts/conductor_branch.py, plugins/spec-distill/scripts/conductor_status.py, plugins/spec-distill/scripts/conductor_mail.py, plugins/spec-distill/scripts/conductor_ledger.py, plugins/spec-distill/scripts/conductor_state.py, plugins/spec-distill/references/conductor-state-branch.md, CLAUDE.md, plugins/spec-distill/dependencies.md, shared/deps/check_deps.py
@@ -218,6 +230,13 @@ test_failure_pattern: "^FAILED (.+)$"
 ### 2026-11-25 · E2 설계 승인 뒤 브랜치와 경로 예약을 맞춘다 — 계획 2 · 3 · 4 의 브랜치를 더하고 승인된 설계가 고치는 파일 여섯을 경로 예약에 더한다. 범위 · 의존 · 묶음은 그대로
 - 바뀜: 바뀐 에픽 E2 「이대로 다시 나눈다 (권장)」
 - 원문:
+  - 「이대로 다시 나눈다 (권장)」
+
+### 2026-11-25 · E4 를 「새 형식 켜기 전 수리」 로 좁히고 켜기와 받는 길을 새 에픽 E5 로 가른다 — 넘어온 스물두 행을 미루지 않고 켜기 전에 고치기로 해 한 설계문서로는 리뷰할 수 없는 크기가 됐다. 함께 R5 의존에 E5 를 더하고 E2 경로 예약에 계획 1 의 새 파일 열셋을 더한다
+- 바뀜: 바뀐 에픽 E2 · E4 · R5 · 새 에픽 E5 「켜기전에 고치자」 · 「가」 · 「이대로 다시 나눈다 (권장)」
+- 원문:
+  - 「켜기전에 고치자」
+  - 「가」
   - 「이대로 다시 나눈다 (권장)」
 
 ## 위험 번호표
