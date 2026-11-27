@@ -2,6 +2,7 @@
 
 바깥 경계가 명령줄 · 종료 코드라 케이스마다 스크립트를 띄운다.
 가짜 claude 는 설정을 환경이 아니라 옆의 fake.conf 에서 읽는다 — 스크립트가 넘기는 환경을 재야 해서다.
+POSIX(macOS · Linux) 전용이다 — 가짜 claude 가 /bin/sh 스크립트다.
 """
 import json
 import os
@@ -35,6 +36,10 @@ exit "${FAKE_RC:-0}"
 """
 
 OUTSIDE_TEXT = "outside the plugin\n"
+
+# 가짜 claude(sh) 와 OS 가 스스로 두는 이름 — 스크립트가 넘긴 것이 아니다.
+SHELL_SET = frozenset(("PWD", "OLDPWD", "SHLVL", "_", "__CF_USER_TEXT_ENCODING",
+                       "LC_CTYPE"))
 
 
 def _case(n_runs):
@@ -126,6 +131,8 @@ class RunEvalsTest(unittest.TestCase):
 
     def run_script(self, extra, result=None, rc=0, with_bin=True,
                    plugin=None, cwd=None, inspect=False, extra_env=None):
+        if os.path.exists(self.env_file):
+            os.remove(self.env_file)
         path = "/usr/bin:/bin"
         if with_bin:
             path = self.bin + ":" + path
@@ -161,22 +168,35 @@ class RunEvalsTest(unittest.TestCase):
             return dict(line.split("=", 1) for line in f.read().splitlines()
                         if "=" in line)
 
+    def env_run(self, extra_env):
+        """평가 명령이 받은 환경. 실행이 통과로 끝났는지도 본다."""
+        p = self.run_script([], result="ok", extra_env=extra_env)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        return self.child_env()
+
+    def assert_names_within(self, got, allowed):
+        """받은 이름 전체가 기대 집합 안에 든다 — 셸과 OS 가 스스로 두는 이름은 뺀다."""
+        extra = set(got) - set(allowed) - {"PATH", "TMPDIR"} - SHELL_SET
+        self.assertEqual(extra, set())
+
     def test_env_drops_unlisted(self):
         unlisted = {
-            "DEVBREW_FAKE_SECRET": "not-a-real-secret",
-            "GITHUB_TOKEN": "not-a-real-token",
-            "CLAUDE_CODE_MESSAGING_TOKEN": "not-a-real-token",
-            "AWS_SECRET_ACCESS_KEY": "not-a-real-key",
+            "DEVBREW_FAKE_SECRET": "<REDACTED>",
+            "GITHUB_TOKEN": "<REDACTED>",
+            "CLAUDE_CODE_MESSAGING_TOKEN": "<REDACTED>",
+            "CLAUDE_CODE_SESSION_ID": "some-session",
+            "AWS_SECRET_ACCESS_KEY": "<REDACTED>",
             "GOOGLE_APPLICATION_CREDENTIALS": "/nowhere/creds.json",
-            "AZURE_CLIENT_SECRET": "not-a-real-secret",
+            "AZURE_CLIENT_SECRET": "<REDACTED>",
             "PYTHONPATH": "/nowhere",
+            "DEVBREW_PYTHON": "/nowhere/python3",
+            "DEVBREW_SPEC_DISTILL_SKIP_VC_ONCE": "1",
         }
-        p = self.run_script([], result="ok", extra_env=unlisted)
-        self.assertEqual(p.returncode, 0)
-        got = self.child_env()
+        got = self.env_run(unlisted)
         for name in unlisted:
             with self.subTest(name=name):
                 self.assertNotIn(name, got)
+        self.assert_names_within(got, ())
 
     def test_env_passes_needed(self):
         needed = {
@@ -191,42 +211,89 @@ class RunEvalsTest(unittest.TestCase):
             "ANTHROPIC_API_KEY": "<REDACTED>",
             "ANTHROPIC_BASE_URL": "https://gateway.example.invalid",
             "CLAUDE_CODE_OAUTH_TOKEN": "<REDACTED>",
+            "CLAUDE_CODE_OAUTH_REFRESH_TOKEN": "<REDACTED>",
+            "CLAUDE_CODE_OAUTH_SCOPES": "user:inference",
+            "CLAUDE_CODE_SKIP_BEDROCK_AUTH": "1",
+            "CLAUDE_CODE_SKIP_ANTHROPIC_GOOGLE_CLOUD_AUTH": "1",
+            "CLAUDE_CODE_CERT_STORE": "bundled,system",
+            "CLAUDE_CODE_CLIENT_CERT": "/etc/ssl/client.pem",
+            "CLAUDE_CODE_CLIENT_KEY": "/etc/ssl/client.key",
+            "CLAUDE_CODE_CLIENT_KEY_PASSPHRASE": "<REDACTED>",
+            "CLAUDE_CODE_PROXY_RESOLVES_HOSTS": "1",
+            "CLAUDE_CODE_GATEWAY_HINT_HEADERS": "1",
             "HTTPS_PROXY": "http://proxy.example.invalid:3128",
+            "https_proxy": "http://proxy.example.invalid:3128",
+            "HTTP_PROXY": "http://proxy.example.invalid:3128",
+            "http_proxy": "http://proxy.example.invalid:3128",
+            "ALL_PROXY": "socks5://proxy.example.invalid:1080",
+            "all_proxy": "socks5://proxy.example.invalid:1080",
             "NO_PROXY": "localhost",
+            "no_proxy": "localhost",
             "NODE_EXTRA_CA_CERTS": "/etc/ssl/corp.pem",
+            "SSL_CERT_FILE": "/etc/ssl/cert.pem",
+            "SSL_CERT_DIR": "/etc/ssl/certs",
         }
-        p = self.run_script([], result="ok", extra_env=needed)
-        self.assertEqual(p.returncode, 0)
-        got = self.child_env()
+        got = self.env_run(needed)
         for name, value in needed.items():
             with self.subTest(name=name):
                 self.assertEqual(got.get(name), value)
         self.assertEqual(got.get("TMPDIR"), self.root)
+        self.assert_names_within(got, needed)
+
+    def test_env_passes_kill_switches(self):
+        switches = {
+            "DEVBREW_QUALITY_GATES_DISABLE": "1",
+            "DEVBREW_SPEC_DISTILL_DISABLE_CODEX": "1",
+            "DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE": "1",
+            "DEVBREW_DISABLE_QUALITY_GATES": "1",
+            "DEVBREW_SKIP_HOOKS": "spec-distill:review-entry",
+        }
+        got = self.env_run(switches)
+        for name, value in switches.items():
+            with self.subTest(name=name):
+                self.assertEqual(got.get(name), value)
+        self.assert_names_within(got, switches)
 
     def test_env_provider_vars_only_when_selected(self):
-        provider = {
-            "AWS_PROFILE": "some-profile",
+        aws = {"AWS_PROFILE": "some-profile"}
+        google = {
             "GOOGLE_APPLICATION_CREDENTIALS": "/nowhere/creds.json",
+            "GOOGLE_CLOUD_PROJECT": "some-project",
             "CLOUD_ML_REGION": "global",
             "VERTEX_REGION_CLAUDE_HAIKU_4_5": "us-east5",
-            "AZURE_TENANT_ID": "some-tenant",
         }
-        selectors = ("CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
+        azure = {"AZURE_TENANT_ID": "some-tenant"}
+        creds = dict(aws, **google)
+        creds.update(azure)
+        for selector, chosen, opened in (
+            ("CLAUDE_CODE_USE_BEDROCK", "1", aws),
+            ("CLAUDE_CODE_USE_MANTLE", "true", aws),
+            ("CLAUDE_CODE_USE_ANTHROPIC_AWS", "Yes", aws),
+            ("CLAUDE_CODE_USE_VERTEX", "on", google),
+            ("CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD", "TRUE", google),
+            ("CLAUDE_CODE_USE_FOUNDRY", "1", azure),
+        ):
+            env = dict(creds)
+            env[selector] = chosen
+            got = self.env_run(env)
+            with self.subTest(selector=selector):
+                self.assertEqual(got.get(selector), chosen)
+                self.assertEqual({k: got.get(k) for k in creds if k in got},
+                                 opened)
+                self.assert_names_within(got, dict(opened, **{selector: 1}))
+        selectors = ("CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_MANTLE",
+                     "CLAUDE_CODE_USE_ANTHROPIC_AWS", "CLAUDE_CODE_USE_VERTEX",
+                     "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD",
                      "CLAUDE_CODE_USE_FOUNDRY")
-        for chosen in ("1", ""):
-            env = dict(provider)
-            env.update({s: chosen for s in selectors})
-            self.run_script([], result="ok", extra_env=env)
-            got = self.child_env()
-            for name, value in provider.items():
-                with self.subTest(chosen=chosen, name=name):
-                    if chosen:
-                        self.assertEqual(got.get(name), value)
-                    else:
-                        self.assertNotIn(name, got)
-        self.run_script([], result="ok", extra_env={
-            "CLAUDE_CODE_USE_MANTLE": "1", "AWS_REGION": "us-east-1"})
-        self.assertEqual(self.child_env().get("AWS_REGION"), "us-east-1")
+        for off in ("0", "false", "OFF", ""):
+            env = dict(creds)
+            env.update({s: off for s in selectors})
+            got = self.env_run(env)
+            with self.subTest(off=off):
+                for name in creds:
+                    self.assertNotIn(name, got)
+                for s in selectors:
+                    self.assertEqual(got.get(s), off)
 
     @unittest.skipUnless(sys.platform == "darwin", "개발 도구 폴더는 macOS 만")
     def test_path_keeps_dev_tool_prefix(self):

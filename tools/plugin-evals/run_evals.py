@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""플러그인 평가(claude plugin eval)를 늘 같은 인자로 돌리고 요약 한 줄을 낸다."""
+"""플러그인 평가(claude plugin eval)를 늘 같은 인자로 돌리고 요약 한 줄을 낸다.
+
+POSIX(macOS · Linux) 전용이다 — 환경변수 이름을 대소문자를 가려 고른다.
+"""
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -11,37 +15,62 @@ from typing import List, Optional, Tuple
 
 DEFAULT_CAP = "2"
 
-# 평가 명령에 넘기는 환경 — 실행 · 로그인 · 공급자 선택에 쓰는 것만. 나머지는 넘기지 않는다.
+# 평가 명령에 넘기는 환경 — 실행 · 로그인 · 공급자 선택 · 끄기 변수만. 나머지는 넘기지 않는다.
 PASS_NAMES = frozenset((
     "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "LANG", "TERM",
     "CLAUDE_CONFIG_DIR",
     "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy",
-    "NO_PROXY", "no_proxy", "NODE_EXTRA_CA_CERTS",
-    "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
-    "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_USE_MANTLE",
-    "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_CERT_STORE",
-    "CLAUDE_CODE_CLIENT_CERT", "CLAUDE_CODE_CLIENT_KEY",
-    "CLAUDE_CODE_CLIENT_KEY_PASSPHRASE",
+    "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy",
+    "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR",
+    "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
+    "CLAUDE_CODE_OAUTH_SCOPES", "CLAUDE_CODE_API_KEY_HELPER_TTL_MS",
+    "CLAUDE_CODE_AWS_CHAIN_RESOLVE_TIMEOUT_MS",
+    "CLAUDE_CODE_DISABLE_AUTH_REFRESH_LOCK",
+    "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
+    "CLAUDE_CODE_CERT_STORE", "CLAUDE_CODE_CLIENT_CERT",
+    "CLAUDE_CODE_CLIENT_KEY", "CLAUDE_CODE_CLIENT_KEY_PASSPHRASE",
+    "CLAUDE_CODE_DISABLE_MTLS_RELOAD_ON_STALE_CONNECTION",
+    "CLAUDE_CODE_PROXY_RESOLVES_HOSTS", "CLAUDE_CODE_DISABLE_PROXY_SCHEME_REPAIR",
+    "CLAUDE_CODE_DISABLE_RESPONSE_COMPRESSION", "CLAUDE_CODE_GZIP_REQUEST_BODIES",
+    "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY",
+    "CLAUDE_CODE_GATEWAY_MODEL_DISCOVERY_TIMEOUT_MS",
+    "CLAUDE_CODE_GATEWAY_HINT_HEADERS", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS",
+    "CLAUDE_CODE_DISABLE_STRUCTURED_OUTPUTS",
+    "CLAUDE_CODE_DISABLE_BEDROCK_CONTENT_TYPE_DEFAULT",
+    "CLAUDE_CODE_DISABLE_BEDROCK_CONTENT_TYPE_GUARD",
+    "DEVBREW_SKIP_HOOKS",
 ))
-PASS_PREFIXES = ("LC_", "ANTHROPIC_")
+# CLAUDE_CODE_USE_* 는 공급자 선택, CLAUDE_CODE_SKIP_* 는 인증 · 확인 건너뛰기다.
+# 세션 안의 값(CLAUDE_CODE_SESSION_ID · CLAUDE_CODE_MESSAGING_*)은 이 접두에 걸리지 않는다.
+PASS_PREFIXES = ("LC_", "ANTHROPIC_", "CLAUDE_CODE_USE_", "CLAUDE_CODE_SKIP_")
+# devbrew 끄기 변수 — DEVBREW_<플러그인>_DISABLE[_<기능>] 꼴과 옛 DEVBREW_DISABLE_<플러그인>.
+KILL_SWITCH = re.compile(r"DEVBREW_(?:[A-Z0-9]+_)*DISABLE(?:_[A-Z0-9]+)*")
 # 클라우드 공급자의 변수는 그 공급자를 고른 때만 넘긴다(선택 변수, 이름들, 접두들).
 PROVIDER_VARS = (
-    (("CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_MANTLE"), (), ("AWS_",)),
-    (("CLAUDE_CODE_USE_VERTEX",),
-     ("GOOGLE_APPLICATION_CREDENTIALS", "CLOUD_ML_REGION"), ("VERTEX_REGION_",)),
+    (("CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_MANTLE",
+      "CLAUDE_CODE_USE_ANTHROPIC_AWS"), (), ("AWS_",)),
+    (("CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD"),
+     ("GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT",
+      "CLOUD_ML_REGION"), ("VERTEX_REGION_",)),
     (("CLAUDE_CODE_USE_FOUNDRY",), (), ("AZURE_",)),
 )
+# Claude Code 가 켬으로 읽는 값(대소문자 무관). 0 · false · no · off · 빈 값은 끔이다.
+TRUTHY = ("1", "true", "yes", "on")
+
+
+def _chosen(value: Optional[str]) -> bool:
+    return (value or "").strip().lower() in TRUTHY
 
 
 def child_env(environ, dev: Optional[str]) -> dict:
     names = set(PASS_NAMES)
     prefixes = PASS_PREFIXES
     for selectors, extra_names, extra_prefixes in PROVIDER_VARS:
-        if any(environ.get(s) for s in selectors):
+        if any(_chosen(environ.get(s)) for s in selectors):
             names.update(extra_names)
             prefixes = prefixes + extra_prefixes
     env = {k: v for k, v in environ.items()
-           if k in names or k.startswith(prefixes)}
+           if k in names or k.startswith(prefixes) or KILL_SWITCH.fullmatch(k)}
     if dev:
         env["PATH"] = dev + os.pathsep + env.get("PATH", "")
     return env
