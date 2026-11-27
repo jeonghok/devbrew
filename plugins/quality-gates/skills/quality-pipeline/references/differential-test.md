@@ -154,10 +154,12 @@ fi
 없다고 판단되면 그 사실도 여기에 적는다 — 0 단위면 D5 가 scope-empty 를 낸다. 실행 끝의 `result.md` `## 차등 테스트` 가
 이 목록을 싣는다:
 
+값 받기 — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg_nonce.py" hex` 를 먼저 돌려 나온 8자를 아래 `<8 hex>` 두 자리에 넣는다.
+
 ```bash
-cat > "<memo>/not-counted-i1.md" <<'QG_NOT_COUNTED'
+cat > "<memo>/not-counted-i1.md" <<'QG_NOT_COUNTED_<8 hex>'
 <- <테스트 경로> — <이유 한 줄> 줄들, 없으면 (없음)>
-QG_NOT_COUNTED
+QG_NOT_COUNTED_<8 hex>
 ```
 
 D3/D4 밖에서 스위트나 테스트를 돌릴 수 있다 — 원인을 찾는 조사용이다. 돌리기 전에 `> [quality-gates] 조사용 실행 — 판정에 안 씀: <명령>` 한 줄을 내고, 결과를 판정 입력 어디에도(배정 · 커버리지로 세지 않을 목록 · 행 파일 · D5 · 합성기) 넣지 않고, D3/D4 의 트리(기준선 · head 트리)에서는 돌리지 않는다. `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` 이면 조사용 실행도 하지 않는다 — 저장소 코드를 호스트에서 돌리기 때문이다.
@@ -171,24 +173,38 @@ printf '%s\n' <고른 파일들> | "$QG/scripts/run-test-selection.sh" assign "<
 
 스캔 트리는 D1 의 `head_tree` 다(비었으면 `<project_dir>`). 범위 스코프에서 이 대체는 어느 러너가 맡을지 정하는 데만 쓰인다 —
 `head_tree` 가 비면 D3 이 HEAD 축을 관측 없음으로 채우므로 지금 체크아웃(시작 커밋일 수 있다)의 테스트 결과는 판정에 들어가지 않는다. 배정 파일의 행은
-`<unit>\t<runner|unclaimed>\t<granularity>` 이고 마지막 줄은 `#qg-assign` 꼬리다. `unclaimed` 는 어느 러너 어댑터
-9종도 못 돌리는 후보다 — 판정에서 silent-drop 이 된다(R16).
+`<unit>\t<runner|unclaimed|support>\t<granularity>` 이고 마지막 줄은 `#qg-assign` 꼬리다. `unclaimed` 는 어느 러너 어댑터
+9종도 못 돌리는 후보다 — 판정에서 silent-drop 이 된다(R16). `support` 는 지원 파일이다 — 테스트 폴더(`tests/` · `test/`) 아래
+이름이 테스트 꼴이 아닌 파일(데이터 · 문서 · 도우미)로, 그 파일이 든 폴더부터 가장 가까운 테스트 폴더까지의 길 위 폴더에 러너가
+맡은 테스트가 같은 배정에 있다(경로 성분 가운데 `spike` 나 `fixtures` 와 정확히 같은 것이 든 길 위 폴더는 넓히지도 보지도 않는다 — `spikes/` 처럼 이름 일부만 맞는 폴더는 넓힌다). 후보의 바닥이 그 길 위 폴더들의 테스트를 이미 더했다. 지원 파일 자신은 러너가 아니라 돌리지 않고,
+unit 전체와 silent-drop 에서 빠진다. 그 폴더들에 맡은 테스트가 없으면 `unclaimed` 다.
 
 계획을 한 줄로 알린다. 분모는 `--total` 의 출력이다(토픽 · 범위 스코프면 `--total --tree <tree>` — 범위면 `--total --tree <end>`):
 
 > `> Differential scope: 영향 테스트 <N>개 선택 (전체 <M>개 중), 러너 <runners> — 이번 변경의 영향분만 기준선 대비로 돌린다.`
 
+`<N>` 은 배정 파일의 행 가운데 `support` 행을 뺀 수다. 분모 `<M>` 은 그대로 `--total` 의 출력이다.
 `granularity: bulk` 러너가 하나라도 있으면 같은 줄 뒤에 `커버리지 미보장(러너가 선택을 무시함)` 을 붙인다.
+배정 파일에 `support` 행이 `<n>`개 있으면 같은 줄 끝에 `· 테스트 폴더의 테스트 아닌 파일 <n>개가 바뀌어 그 폴더의 테스트를 함께 돌린다` 를 붙인다 — 0 이면 붙이지 않는다.
 
 ## D3 HEAD 축 실행
 
-배정 파일의 러너마다(unclaimed 제외) 그 러너의 unit 을 bulk 로 돌리고, fail 이나 error 행이 있으면 그 unit 만
-per-unit 으로 다시 돌린다. 다시 돈 행이 bulk 행을 교체한다:
+배정 파일의 러너마다(unclaimed · support 제외) 그 러너의 unit 을 bulk 로 돌리고, fail 이나 error 행이 있으면 그 unit 만
+per-unit 으로 다시 돌린다. 다시 돈 행이 bulk 행을 교체한다.
+
+테스트를 돌리는 명령(D3 · D4 의 `run` · D5 의 flaky 재실행)은 감싸개 `with-suite-lock.sh` 를 거친다. 세션 폴더에
+`suite-lock-path.txt` 가 없으면 감싸개는 명령만 돌린다. 있으면 그 명령이 도는 동안 공유 스위트 잠금을 쥐고, 다른 쪽이 쥐고
+있거나 잠금을 쓸 수 없으면 기다리지 않고 잠금 없이 돌린다 — 종료 코드는 언제나 명령의 것이다. `$RD/suite-lock-path.txt` 가
+있으면 테스트 명령을 나란히 돌리지 않고 하나씩 돌린다 — 러너가 둘이어도 같다. 나란히 돌리면 둘째 명령이 이 실행이 쥔
+잠금을 다른 쪽의 것으로 센다. 감싸개가 내는 겹침 줄(`> [quality-gates] 차등 테스트가 다른 전체 테스트와 겹쳐 돈다 — …`)은
+그대로 보인다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" bulk "<memo>/head-<runner>-i1.tsv" <unit>...
-"$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" per-unit "<memo>/head-<runner>-i1.tsv" <fail·error 인 unit>...
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
+"$QG/scripts/with-suite-lock.sh" "$RD" -- "$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" bulk "<memo>/head-<runner>-i1.tsv" <unit>...
+"$QG/scripts/with-suite-lock.sh" "$RD" -- "$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" per-unit "<memo>/head-<runner>-i1.tsv" <fail·error 인 unit>...
 ```
 
 D1 의 `head_tree` 가 비었으면(봉인이나 트리 생성 실패 — `head_commit=-`) stderr 를 그대로 보이고, 지금 작업 트리로 대신 돌리지 않는다. 대신 그
@@ -201,8 +217,8 @@ QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인
 
 ## D4 기준선 축 — 아직 돌지 않은 unit 만
 
-같은 실행 안에서 기준선 커밋은 바뀌지 않는다 — 아래 `<기준선 커밋>` 은 D0 이 정한 값이다. 메모에 관측된 행이 없는
-unit 만 돌린다:
+같은 실행 안에서 기준선 커밋은 바뀌지 않는다 — 아래 `<기준선 커밋>` 은 D0 이 정한 값이다. D3 과 같이 배정 파일의 러너마다
+(unclaimed · support 제외) 메모에 관측된 행이 없는 unit 만 돌린다:
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
@@ -220,8 +236,10 @@ printf 'base_tree=%s\n' "$base_tree"
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/run-test-selection.sh" run "<base_tree>" "<runner>" bulk "<memo>/baseline-<runner>.tsv" <pending unit>...
-"$QG/scripts/run-test-selection.sh" run "<base_tree>" "<runner>" per-unit "<memo>/baseline-<runner>.tsv" <fail·error 인 unit>...
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
+"$QG/scripts/with-suite-lock.sh" "$RD" -- "$QG/scripts/run-test-selection.sh" run "<base_tree>" "<runner>" bulk "<memo>/baseline-<runner>.tsv" <pending unit>...
+"$QG/scripts/with-suite-lock.sh" "$RD" -- "$QG/scripts/run-test-selection.sh" run "<base_tree>" "<runner>" per-unit "<memo>/baseline-<runner>.tsv" <fail·error 인 unit>...
 ```
 
 기준선 커밋이 `-` 이거나 `base_tree` 가 비면 stderr 를 보이고 pending unit 을 관측 없음으로 채운다 — 커밋 칸에는
@@ -268,7 +286,9 @@ fi
 
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
-"$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" flaky "<memo>/head-<runner>-i1.tsv" <NEW_REGRESSION unit>...
+TOP="$(git rev-parse --show-toplevel)" || { echo "[quality-gates] git 리포 밖이다 — /quality-gates:quality-pipeline 은 git 리포 안에서만 돈다. 멈춘다." >&2; exit 1; }
+RD="${TOP}/.claude/quality-gates/<session-id>"
+"$QG/scripts/with-suite-lock.sh" "$RD" -- "$QG/scripts/run-test-selection.sh" run "<head_tree>" "<runner>" flaky "<memo>/head-<runner>-i1.tsv" <NEW_REGRESSION unit>...
 ```
 
 ## D6 트리 정리 — 모든 종료 경로
@@ -302,7 +322,9 @@ python3 "$QG/scripts/verdict.py" --emit-args --reason error-axis
 
 판정 줄의 「차등 새 실패」 칸은 차등 결과 줄의 `--new-failures` 값이다 — D5 펜스의 `verdict.py --emit-args` 가
 그 사본의 `new_failures:` 에서 낸다. `result.md` 의 `## 차등 테스트` 에는 그 사본을 그대로 붙이고, D2 에서
-커버리지로 세지 않은 테스트 목록(`$RD/differential-not-counted.md`)을 덧붙인다. 양측 빨강을 공시하는
+커버리지로 세지 않은 테스트 목록(`$RD/differential-not-counted.md`)을 덧붙인다. 그 사본의 `support:` 는 바뀐 지원 파일의
+경로, `support_tests:` 는 그 때문에 더한 테스트 수(지원 파일의 길 위 폴더 — `spike` · `fixtures` 성분 폴더 제외 — 에 바로 든, 러너가 맡은 unit 수)다 — 사본을 붙이면
+함께 실린다. 양측 빨강을 공시하는
 `resolution_disclosure:` 줄이 있으면 판정 줄 옆에도 그대로 보인다(R10). bulk 러너가 양측 red 면 이 문장을 그대로 쓴다:
 
 > `기준선도 빨간 상태입니다. 이 러너(<runner>)는 파일 단위 지목이 안 되므로 그 안에 새 회귀가 숨었는지 구분하지 못했습니다.`

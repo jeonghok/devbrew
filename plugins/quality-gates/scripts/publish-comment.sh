@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # publish-comment.sh — qg 게시의 유일한 sink. gh 쓰기는 이 파일에만 있다(AC15).
 #
-# 순서(spec §5): kill switch → gh 존재 · origin(gh-repo.sh) → 인증 → 열린 PR → corpus + secret-scan → 이미지·HTML 태그
-# → 길이 → 코멘트. gh 호출은 전부 `-R <origin>` 을 밝힌다.
-# 마지막 stdout 줄은 `posted: <url>` · `skipped: <사유>` · `failed: <사유>` 리터럴 하나다(P6). 진단은 전부 stderr.
+# 순서(spec §5 · R7 §2): kill switch → gh 존재 · origin(gh-repo.sh) → 인증 → 열린 PR · fork 아님 · 끝 커밋 = HEAD
+# → corpus + secret-scan → 이미지·HTML 태그 → 길이 → 이미 단 댓글 확인 → 코멘트.
+# gh 호출은 전부 origin 을 밝힌다 — `gh pr` 은 `-R <origin>`, `gh auth status` 와 확인의 `gh api` 읽기 둘(계정 ·
+# 댓글 목록)은 `--hostname <origin 호스트>` 이고 목록 경로는 origin 의 `repos/<owner>/<repo>` 다.
+# 마지막 stdout 줄은 `posted: <url>` · `skipped: <사유>` · `failed: <사유>` 리터럴 하나다(P6). 진단은 전부 stderr —
+# 하나 예외: 이미 단 댓글을 묻지 못하고 게시할 때 결과 줄 바로 앞 stdout 에
+# `> [quality-gates] 이미 단 댓글을 확인하지 못했다(<사유>) — 게시한다(같은 판정이 두 번 달릴 수 있다).` 한 줄.
 # 사유 리터럴: no-pr · pr-closed · pr-mismatch · kill-switch · scan-failed · gh-unavailable · too-long ·
-# gh-unauthenticated · no-origin.
+# already-posted · gh-unauthenticated · no-origin.
+# already-posted — 이 PR 에 지금 gh 계정이 단 댓글 가운데 본문이 이번 본문과 같은 것이 이미 있다(줄 끝 CR · 끝 줄바꿈만 뗀다).
 # pr-mismatch — 브랜치 이름으로 찾은 PR 이 fork PR 이거나 그 head 가 지금 HEAD 가 아니다.
 # `failed:` 는 셋이다 — gh 가 없다(`failed: gh-unavailable`) · gh 가 로그인돼 있지 않다(`failed: gh-unauthenticated`)
 # · origin 이 없거나 URL 을 못 읽거나 gh 가 그 레포를 다루지 못한다(`failed: no-origin`).
@@ -161,7 +166,81 @@ chars="$(python3 -I -X utf8 -c 'import sys; print(len(open(sys.argv[1], encoding
 [[ "$chars" =~ ^[0-9]+$ ]] || { echo "publish-comment: 본문 길이를 재지 못했다" >&2; skip scan-failed; }
 [ "$chars" -le "$MAX_CHARS" ] || { echo "publish-comment: 본문 ${chars}자 > ${MAX_CHARS}" >&2; skip too-long; }
 
-# 6. 새 코멘트 하나. 본문은 불투명 바이트로만 넘긴다(P4).
+# 6. 이미 단 댓글 확인(R7 §2) — 이 PR 에 지금 gh 계정이 단 댓글 가운데 본문이 이번 본문과 같은 것이 있으면
+#    달지 않는다(`skipped: already-posted`). 「이미 게시함」 은 GitHub 이 정한다 — 세션 폴더의 파일을 보지 않는다.
+#    묻지 못하면(계정 · 목록 호출 실패 · 쪽 하나라도 실패 · 돌려받은 줄을 풀지 못함) 게시하고, 결과 줄 앞 stdout 에
+#    확인 못함 한 줄을 낸다. 물어서 같은 본문이 없으면 줄 없이 게시한다.
+check_note=""; check_err=""
+login_rc=0
+gh api --hostname "$host" user --jq .login >"$WORK/login.out" 2>"$WORK/login.err" || login_rc=$?
+login="$(head -n 1 "$WORK/login.out")"
+# 비신뢰 값은 전체 일치로 검사한다(V11) — 로그인 꼴이 아니면 계정을 읽지 못한 것이다.
+if [ "$login_rc" -ne 0 ] || [ "$(wc -l <"$WORK/login.out" | tr -d ' ')" != "1" ] \
+   || ! [[ "$login" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*(\[bot\])?$ ]]; then
+  check_note="계정을 읽지 못했다"; check_err="$WORK/login.err"
+else
+  list_rc=0
+  gh api --hostname "$host" --paginate "repos/${slug#*/}/issues/$pr_num/comments" \
+    --jq '.[] | [.user.login, (.body|@base64)] | @tsv' >"$WORK/comments.tsv" 2>"$WORK/comments.err" || list_rc=$?
+  if [ "$list_rc" -ne 0 ]; then
+    check_note="댓글 목록을 읽지 못했다"; check_err="$WORK/comments.err"
+  else
+    # 견주기 — 양쪽에서 \r\n → \n, 끝의 \r · \n 을 떼고 바이트 그대로. rc 0 같음 · 1 없음 · 3 읽지 못함,
+    # 그리고 그 뜻의 리터럴 한 줄(same · none). rc 와 리터럴이 함께 맞을 때만 읽는다 — 죽은 python 의 rc 1 을
+    # 「없음」 으로 읽지 않는다(P1 과 같은 꼴).
+    cmp_rc=0
+    python3 -I -X utf8 -c '
+import base64, binascii, os, sys
+def norm(b):
+    return b.replace(b"\r\n", b"\n").rstrip(b"\r\n")
+try:
+    login = os.fsencode(sys.argv[1])
+    with open(sys.argv[2], "rb") as f:
+        mine = norm(f.read())
+    with open(sys.argv[3], "rb") as f:
+        rows = f.read().split(b"\n")
+    same = bad = False
+    for row in rows:
+        if not row:
+            continue
+        cols = row.split(b"\t")
+        if len(cols) != 2:
+            bad = True
+            continue
+        try:
+            text = base64.b64decode(cols[1], validate=True)
+        except (binascii.Error, ValueError):
+            bad = True
+            continue
+        if cols[0] == login and norm(text) == mine:
+            same = True
+except Exception:
+    print("unreadable")
+    sys.exit(3)
+if same:
+    print("same")
+    sys.exit(0)
+if bad:
+    print("unreadable")
+    sys.exit(3)
+print("none")
+sys.exit(1)
+' "$login" "$body" "$WORK/comments.tsv" >"$WORK/cmp.out" 2>"$WORK/cmp.err" || cmp_rc=$?
+    cmp_out="$(head -n 1 "$WORK/cmp.out")"
+    if [ "$cmp_rc" -eq 0 ] && [ "$cmp_out" = "same" ]; then
+      echo "publish-comment: PR #${pr_num} 에 ${login} 이 단 같은 본문의 댓글이 이미 있다 — 다시 달지 않는다" >&2
+      skip already-posted
+    elif [ "$cmp_rc" -ne 1 ] || [ "$cmp_out" != "none" ]; then
+      check_note="댓글 본문을 읽지 못했다"; check_err="$WORK/cmp.err"
+    fi
+  fi
+fi
+if [ -n "$check_note" ]; then
+  tail -n 3 "$check_err" >&2
+  echo "> [quality-gates] 이미 단 댓글을 확인하지 못했다(${check_note}) — 게시한다(같은 판정이 두 번 달릴 수 있다)."
+fi
+
+# 7. 새 코멘트 하나. 본문은 불투명 바이트로만 넘긴다(P4).
 post_rc=0
 gh pr comment "$pr_num" --body-file "$body" -R "$slug" >"$WORK/post.out" 2>"$WORK/post.err" || post_rc=$?
 if [ "$post_rc" -ne 0 ]; then

@@ -50,6 +50,8 @@ DEGRADE_CAUSES = (
     "error-axis", "bulk-pre-existing", "smeared", "no-adapters",
 )
 SHA = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}|-")
+# 배정 행의 둘째 칸 가운데 러너가 아닌 값. support 는 지원 파일 — 돌리지 않고 unit 전체 · silent-drop 에서 빠진다.
+NOT_RUNNERS = ("unclaimed", "support")
 
 
 def fail4(msg: str) -> NoReturn:
@@ -153,6 +155,22 @@ def granularity_of(runner: str) -> str:
     return gran
 
 
+def support_tests_of(assign: list[tuple[str, str, str]], support: list[str]) -> int:
+    """지원 파일 때문에 더한 테스트 수 — 지원 파일마다 그 파일이 든 폴더부터 가장 가까운 tests · test 폴더까지의
+    길 위 폴더에 바로 든, 러너가 맡은 행의 수(겹치면 한 번). 배정(run-test-selection.sh assign)과 같은 도출이다.
+    길 위 폴더 가운데 경로 성분에 spike · fixtures 가 든 폴더는 넓히지 않는다(성분 전체가 맞을 때만)."""
+    dirs: set[str] = set()
+    for path in support:
+        parts = path.split("/")[:-1]
+        nearest = max((i for i, p in enumerate(parts) if p in ("tests", "test")), default=None)
+        cut = min((i for i, p in enumerate(parts) if p in ("spike", "fixtures")), default=len(parts))
+        if nearest is not None:
+            dirs.update("/".join(parts[:j + 1]) for j in range(nearest, min(len(parts), cut)))
+    # 패키지 입도의 unit 은 폴더 이름 자체다 — 그 폴더가 길 위 폴더면 센다. 파일 입도는 파일이 든 폴더로 잰다.
+    return len({u for u, r, g in assign if r not in NOT_RUNNERS
+                and (u in dirs if g == "package" else ("/" in u and u.rsplit("/", 1)[0] in dirs))})
+
+
 def same_tree(base: str, head: str) -> bool:
     """두 축이 같은 바이트면 차등이 성립하지 않는다(R12 · R13)."""
     if base == "-" or head == "-":
@@ -233,9 +251,10 @@ def main() -> int:
 
     assign, detected = read_assign(Path(args.assign))
     unclaimed = [u for u, r, _ in assign if r == "unclaimed"]
+    support = [u for u, r, _ in assign if r == "support"]
     by_runner: dict[str, list[tuple[str, str]]] = {}
     for unit, runner, gran in assign:
-        if runner != "unclaimed":
+        if runner not in NOT_RUNNERS:
             by_runner.setdefault(runner, []).append((unit, gran))
     axes_equal = same_tree(args.baseline_commit, args.head_commit)
     memo = Path(args.rows)
@@ -274,6 +293,8 @@ def main() -> int:
            f"degrade_causes: [{', '.join(causes)}]",
            f"new_failures: {totals['new_regression'] + totals['new_test_red']}"]
     out.append("unclaimed: [" + ", ".join(yaml_str(u) for u in unclaimed) + "]")
+    out.append("support: [" + ", ".join(yaml_str(u) for u in support) + "]")
+    out.append(f"support_tests: {support_tests_of(assign, support)}")
     if totals["pre_existing"]:
         # 양측 red 는 막지 않고 공시한다 — 그 안의 새 실패는 이 해상도에서 보이지 않는다(R10).
         out.append("resolution_disclosure: " + yaml_str(

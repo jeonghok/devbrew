@@ -143,7 +143,7 @@ case_final_verdict_goes_through_verdict_py_with_e2e() {
     [ -n "$f" ] && ok "R24: 판정 펜스 $m 을 표지로 찾았다(아래 부재 단언이 공허하지 않다)" || no "R24: 판정 펜스 $m 이 없다"
     assert_contains "$s" "<!-- $m:begin -->" "R24: $m 표지가 ## Final verdict 안에 있다"
     for ax in R D S E; do
-      assert_contains "$f" "<<'QG_ARGS_$ax'" "R24($m): $ax 결과 줄은 따옴표 heredoc 자리로 받는다"
+      assert_contains "$f" "<<'QG_ARGS_${ax}_<8 hex>'" "R24($m): $ax 결과 줄은 따옴표 heredoc 자리로 받는다"
     done
     assert_not_contains "$f" "QG_ARGS_X" "R24($m): 제외 결과 줄 자리가 없다(한 실행은 고치지 않는다 — 위 양성 짝)"
     for ax in R D S; do
@@ -174,7 +174,7 @@ case_final_verdict_goes_through_verdict_py_with_e2e() {
   assert_contains "$(marked final-verdict)" '[ -n "$R_LINE" ] && [ -n "$D_LINE" ] ||' "R24: 최종 판정 펜스는 리뷰 · 차등 결과 줄이 없으면 멈춘다"
   assert_contains "$(marked final-verdict)" '[ -n "$E_LINE" ] || {' "R24: 최종 판정 펜스는 e2e 결과 줄이 없으면 멈춘다(기본값 안 함 없음)"
   assert_not_contains "$(marked final-verdict)" "E_ARGS=(--e2e '안 함')" "R24: 최종 판정 펜스에 e2e 기본값이 없다"
-  assert_contains "$(marked final-verdict)" "<<'QG_ARGS_RR'" "R24: 최종 판정 펜스는 되올린 뒤 리뷰 결과 줄을 따로 받는다"
+  assert_contains "$(marked final-verdict)" "<<'QG_ARGS_RR_<8 hex>'" "R24: 최종 판정 펜스는 되올린 뒤 리뷰 결과 줄을 따로 받는다"
   assert_contains "$(marked final-verdict)" '[ "$B1" -ge "$B0" ]' "R24: 되올린 뒤 줄의 막는 지적 수가 앞 줄보다 적으면 멈춘다"
   assert_contains "$(marked trivia-verdict)" '--reason trivia --line' "trivia 펜스는 trivia 사유로 판정한다"
   assert_contains "$(marked scope-empty-verdict)" '--reason scope-empty --line' "걸러진 diff 빈 실행 펜스는 scope-empty 사유로 판정한다"
@@ -332,7 +332,7 @@ case_AC28_e2e_scenarios_are_multi_select() {
     "§2: 시나리오와 「안 한다」 · 「걸을 것 없음」을 함께 고르면 시나리오만 걷는다"
   assert_contains "$q" '고른 시나리오 하나하나가 그 시나리오의 부팅 명령' "§2: 승인은 고른 시나리오마다다"
   assert_contains "$q" '고르지 않은 시나리오의 명령' "§2: 고르지 않은 시나리오의 명령은 실행하지 않는다"
-  assert_contains "$w" '고른 시나리오를 번호 순으로 하나씩 걷는다 — 시나리오마다 SKILL 의 E1~E5 를 돌고 걷기마다 게이트를 띄운다.' \
+  assert_contains "$w" '고른 시나리오를 번호 순으로 하나씩 걷는다 — 시나리오마다 SKILL 의 E1~E5 를 돌고 걷기마다 게이트를 띄운다(선택지가 하나면 알림만).' \
     "§5: 번호 순 · 시나리오마다 E1~E5 · 걷기마다 게이트"
   assert_contains "$w" '- fail 로 둔다 · 무효로 남긴다 · kill switch(exit 3) — 남은 시나리오를 걷지 않고 끝낸다.' "§5: fail 로 둔다 · 무효로 남긴다면 남은 시나리오를 걷지 않고 끝낸다"
   assert_contains "$w" '- 다시 걷기 — 같은 시나리오를 다시 걷는다.' "§5: 다시 걷기는 같은 시나리오를 다시 걷는다"
@@ -420,6 +420,25 @@ case_gate_rows_one_pass() {
   done
   assert_eq "$(printf '%s\n' "$s" | grep -cE '(^|[^A-Za-z])CAP([^A-Za-z]|$)')" "0" "SKILL ## e2e 에 'CAP' 이 없다"
   assert_eq "$(grep -cE '(^|[^A-Za-z])CAP([^A-Za-z]|$)' "$REF")" "0" "e2e.md 에 'CAP' 이 없다"
+}
+
+case_invalid_single_option_no_question() {
+  # AC21 — 무효 걷기에서 바뀐 경로에 소스 파일이 있어 선택지가 하나만 남으면 질문 창 없이 알림 한 줄을 보이고
+  # 「무효로 남긴다」 의 길로 간다. 본문(SKILL `## e2e`)과 걷기 reference(5 절)가 같은 말을 한다.
+  # 둘이 남는 경우의 표 행은 case_gate_rows_one_pass 가 그대로 잰다.
+  local w s t name notice rec
+  w=$(section "$REF" "## 5. 걷기 직후 게이트"); s=$(section "$SKILL" "## e2e")
+  notice='`> [quality-gates] 걷는 사이 소스 파일이 바뀌었다(<경로 — 많으면 처음 몇 개와 수>) — 이 걷기는 무효로 남긴다.`'
+  rec='`질문 없이 무효 — 소스 파일이 바뀜`'
+  for name in w s; do
+    if [ "$name" = w ]; then t="$w"; else t="$s"; fi
+    assert_eq "$(printf '%s\n' "$t" | grep -cF -- "$notice")" "1" "AC21($name): 무효 걷기 알림 줄이 글자 그대로 한 번 있다"
+    assert_eq "$(printf '%s\n' "$t" | grep -cF -- "$rec")" "1" "AC21($name): 걷기 기록 글 「질문 없이 무효 — 소스 파일이 바뀜」 이 한 번 있다"
+    assert_contains "$t" '질문 창을 띄우지 않는다' "AC21($name): 선택지가 하나면 질문 창을 띄우지 않는다"
+    assert_contains "$t" '「사람이 뒤집음」 으로 적지 않는다.' "AC21($name): 질문 없는 무효를 「사람이 뒤집음」 으로 적지 않는다"
+  done
+  assert_eq "$(grep -cF -- "$notice" "$REF")" "1" "AC21: e2e.md 전체에 알림 줄이 한 번뿐이다(5 절)"
+  assert_eq "$(grep -cF -- "$notice" "$SKILL")" "1" "AC21: SKILL 전체에 알림 줄이 한 번뿐이다(## e2e)"
 }
 
 for c in $(declare -F | awk '{print $3}' | grep '^case_'); do

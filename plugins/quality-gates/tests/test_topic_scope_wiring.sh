@@ -242,7 +242,8 @@ case_filtered_diff_is_review_diff_file() {
   # 정의하는 줄 = FILTERED_DIFF 를 말하되 슬롯(${FILTERED_DIFF})으로 채워 넣는 줄이 아닌 것.
   # ∀ 정의 줄이 review-i1.diff 를 출처로 대고, 두 정의(1c · Step 3)가 리터럴 그대로 있다.
   local all defs bad
-  all=$(grep -F 'FILTERED_DIFF' "$SKILL")
+  # `FILTERED_DIFF_FILE`(칸 사본 경로 — R7 §1)은 다른 변수다 — 그 이름만 든 줄은 세지 않는다.
+  all=$(grep -E 'FILTERED_DIFF([^_]|$)' "$SKILL")
   defs=$(printf '%s\n' "$all" | grep -vF '${FILTERED_DIFF}')
   assert_eq "$(printf '%s\n' "$defs" | grep -c .)" "2" "FILTERED_DIFF 를 정의하는 줄이 둘(1c · Step 3)"
   bad=$(printf '%s\n' "$defs" | grep -vF 'review-i1.diff')

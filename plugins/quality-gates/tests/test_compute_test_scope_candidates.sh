@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # test_compute_test_scope_candidates.sh — 후보의 바닥(이름 일치 · 바뀐 테스트 · `# guards:`)과 분모.
 # 요구: R17 (docs/superpowers/specs/2026-10-08-qg-v10-rebuild-design.md §요구 목록)
+#       지원 파일(테스트 폴더의 테스트 아닌 파일)의 길 위 폴더 — docs/superpowers/specs/2026-11-24-qg-planted-text-suite-lock-design.md §5 · AC19
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS="$(cd -- "$SCRIPT_DIR/.." && pwd)/scripts"
@@ -8,7 +9,8 @@ SUT="$SCRIPTS/compute-test-scope-candidates.sh"
 . "$(cd "$SCRIPT_DIR/../../.." && pwd)/shared/tests/assert.sh"
 
 R=""
-mkrepo() {   # main 에 기준 커밋(origin/HEAD → origin/main 도 거기), feature 브랜치로 체크아웃
+mkrepo() {   # mkrepo [<함수>] — main 에 기준 커밋(origin/HEAD → origin/main 도 거기), feature 브랜치로 체크아웃.
+             #   <함수> 는 기준 커밋 앞에 $R 안에서 더 둘 파일을 만든다.
   R=$(mktemp -d) && [ -d "$R" ] || { echo "mktemp 실패" >&2; exit 1; }
   git init -q -b main "$R" || exit 1
   git -C "$R" config user.email t@t; git -C "$R" config user.name t; git -C "$R" config commit.gpgsign false
@@ -16,6 +18,7 @@ mkrepo() {   # main 에 기준 커밋(origin/HEAD → origin/main 도 거기), f
   echo 'x=1' > "$R/src/foo.py"; echo x > "$R/tests/test_foo.py"; echo x > "$R/web/bar.ts"; echo x > "$R/web/bar.test.ts"
   echo x > "$R/cmd/plain.go"
   { printf '#!/bin/bash\n'; printf '# %s: src/**\n' guards; printf 'exit 0\n'; } > "$R/lib/tests/test_lock.sh"
+  [ -n "${1:-}" ] && ( cd "$R" && "$1" )
   ( cd "$R" && git add -A && git commit -qm base \
     && git update-ref refs/remotes/origin/main main \
     && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main \
@@ -119,10 +122,138 @@ case_emit_guards_only_lists_guards() {
   rmrepo
 }
 
+# 지원 파일 — 테스트 폴더 아래 이름이 테스트 꼴이 아닌 파일(§5 · AC19). 길 위 폴더 = 그 파일이 든 폴더부터 가장 가까운
+# tests · test 폴더까지(둘 다 포함). 그 폴더들에 바로 든 테스트 꼴 파일만 더하고 하위 폴더로 내려가지 않는다.
+# 길 위 폴더 가운데 경로 성분에 `spike` · `fixtures` 가 든 폴더는 넓히지 않는다(tools/suite/run-all.sh 의 제외와 같은 규칙).
+support_layout() {
+  local q=plugins/quality-gates/tests f
+  mkdir -p "$q/fixtures/e2e-app/base/tests" "$q/spike/fixtures" "$q/mocks" "$q/data/sub" "$q/spikes" "$q/my-fixtures" \
+           shared/tests/fixtures shared/tests/sub
+  for f in "$q/fixtures/x.tsv" "$q/fixtures/test_a.sh" "$q/data/x.tsv" "$q/data/test_a.sh" "$q/data/q_test.go" \
+           "$q/data/w.spec.js" "$q/data/testing.sh" "$q/data/latest_test" "$q/data/sub/test_d.sh" \
+           "$q/test_b.py" "$q/helper.sh" "$q/e2e-scenarios.md" \
+           "$q/spike/test_codex_json_extraction.sh" "$q/spike/spike_prompt.md" "$q/spike/fixtures/codex_jsonl_sample.json" \
+           "$q/fixtures/e2e-app/base/tests/test_store.sh" "$q/fixtures/e2e-app/base/tests/store.json" "$q/mocks/mock-x.sh" \
+           "$q/spikes/test_s1.sh" "$q/spikes/notes.md" "$q/my-fixtures/test_m.sh" "$q/my-fixtures/data.tsv" \
+           shared/tests/fixtures/ask-sites.tsv shared/tests/fixtures/test_f.sh shared/tests/test_s.sh \
+           shared/tests/sub/test_z.sh; do
+    echo x > "$f"
+  done
+}
+has() { printf '%s\n' "$1" | grep -qxF -- "$2"; }
+want() {   # want <후보> <경로> <메시지>
+  has "$1" "$2" && ok "$3" || no "$3 — 후보에 '$2' 가 없다"
+}
+lack() {   # lack <후보> <경로> <메시지>
+  has "$1" "$2" && no "$3 — 후보에 '$2' 가 들었다" || ok "$3"
+}
+case_support_expands_path_dirs() {
+  mkrepo support_layout
+  local q=plugins/quality-gates/tests out
+  ( cd "$R" && echo y > "$q/data/x.tsv" )
+  out=$(cands)
+  want "$out" "$q/data/x.tsv" "support_expands_path_dirs: 바뀐 지원 파일 자신은 지금처럼 후보다"
+  want "$out" "$q/data/test_a.sh" "support_expands_path_dirs: 지원 파일이 든 폴더의 테스트(test_ 로 시작)"
+  want "$out" "$q/data/q_test.go" "support_expands_path_dirs: 같은 폴더의 _test.<확장자> 꼴"
+  want "$out" "$q/data/w.spec.js" "support_expands_path_dirs: 같은 폴더의 .spec.<확장자> 꼴"
+  want "$out" "$q/test_b.py" "support_expands_path_dirs: 위로 올라간 테스트 폴더(tests/)에 바로 든 테스트"
+  lack "$out" "$q/data/sub/test_d.sh" "support_expands_path_dirs: 지원 파일 폴더의 하위 폴더로 내려가지 않는다(AC19)"
+  lack "$out" "$q/spike/test_codex_json_extraction.sh" "support_expands_path_dirs: 다른 하위 폴더(tests/spike/)의 테스트는 들지 않는다(AC19)"
+  lack "$out" "$q/fixtures/test_a.sh" "support_expands_path_dirs: 다른 하위 폴더(tests/fixtures/)의 테스트는 들지 않는다"
+  lack "$out" "$q/mocks/mock-x.sh" "support_expands_path_dirs: 다른 하위 폴더의 테스트 아닌 파일은 들지 않는다"
+  lack "$out" "$q/helper.sh" "support_expands_path_dirs: 길 위 폴더의 테스트 꼴이 아닌 파일은 더하지 않는다"
+  lack "$out" "$q/data/testing.sh" "support_expands_path_dirs: test_ 로 시작하지 않는 testing.sh 는 테스트 꼴이 아니다"
+  lack "$out" "$q/data/latest_test" "support_expands_path_dirs: 확장자 없는 _test 는 테스트 꼴이 아니다"
+  lack "$out" "shared/tests/test_s.sh" "support_expands_path_dirs: 다른 테스트 폴더의 테스트는 들지 않는다"
+  rmrepo
+}
+# 경로 성분에 fixtures 가 든 폴더는 넓히지 않는다 — tests/fixtures/x.tsv 는 tests/ 에 바로 든 테스트만 더한다.
+case_support_in_fixtures_folder() {
+  mkrepo support_layout
+  local q=plugins/quality-gates/tests out
+  ( cd "$R" && echo y > "$q/fixtures/x.tsv" )
+  out=$(cands)
+  want "$out" "$q/fixtures/x.tsv" "support_in_fixtures_folder: 바뀐 지원 파일 자신은 지금처럼 후보다"
+  want "$out" "$q/test_b.py" "support_in_fixtures_folder: tests/ 에 바로 든 테스트는 더한다"
+  lack "$out" "$q/fixtures/test_a.sh" "support_in_fixtures_folder: tests/fixtures/ 는 넓히지 않는다"
+  lack "$out" "$q/fixtures/e2e-app/base/tests/test_store.sh" "support_in_fixtures_folder: fixture 앱으로 내려가지 않는다"
+  rmrepo
+}
+# 경로 성분에 spike 가 든 폴더(그 안의 fixtures 포함)는 넓히지 않는다 — tests/ 에 바로 든 테스트만 더한다.
+case_support_in_spike_folder() {
+  local q=plugins/quality-gates/tests out f
+  for f in "$q/spike/spike_prompt.md" "$q/spike/fixtures/codex_jsonl_sample.json"; do
+    mkrepo support_layout
+    ( cd "$R" && echo y > "$f" )
+    out=$(cands)
+    want "$out" "$f" "support_in_spike_folder: 바뀐 지원 파일 자신은 지금처럼 후보다 (${f##*/})"
+    lack "$out" "$q/spike/test_codex_json_extraction.sh" "support_in_spike_folder: tests/spike/ 는 넓히지 않는다 (${f##*/})"
+    want "$out" "$q/test_b.py" "support_in_spike_folder: tests/ 에 바로 든 테스트는 더한다 (${f##*/})"
+    rmrepo
+  done
+}
+# 테스트 폴더 위쪽 경로에 fixtures 가 들면(fixture 앱) 길 전체를 넓히지 않는다.
+case_support_in_fixture_app() {
+  mkrepo support_layout
+  local q=plugins/quality-gates/tests out
+  ( cd "$R" && echo y > "$q/fixtures/e2e-app/base/tests/store.json" )
+  out=$(cands)
+  want "$out" "$q/fixtures/e2e-app/base/tests/store.json" "support_in_fixture_app: 바뀐 지원 파일 자신은 지금처럼 후보다"
+  lack "$out" "$q/fixtures/e2e-app/base/tests/test_store.sh" "support_in_fixture_app: fixture 앱의 테스트 폴더는 넓히지 않는다"
+  rmrepo
+}
+# 성분 전체가 맞을 때만 뺀다 — spikes/ · my-fixtures/ 는 그대로 넓힌다.
+case_support_partial_component_name() {
+  mkrepo support_layout
+  local q=plugins/quality-gates/tests out
+  ( cd "$R" && echo y > "$q/spikes/notes.md" && echo y > "$q/my-fixtures/data.tsv" )
+  out=$(cands)
+  want "$out" "$q/spikes/test_s1.sh" "support_partial_component_name: tests/spikes/ 는 넓힌다"
+  want "$out" "$q/my-fixtures/test_m.sh" "support_partial_component_name: tests/my-fixtures/ 는 넓힌다"
+  rmrepo
+}
+case_support_in_tests_root() {
+  mkrepo support_layout
+  local q=plugins/quality-gates/tests out
+  ( cd "$R" && echo y > "$q/e2e-scenarios.md" )
+  out=$(cands)
+  want "$out" "$q/test_b.py" "support_in_tests_root: tests/ 바로 든 테스트를 더한다"
+  lack "$out" "$q/fixtures/test_a.sh" "support_in_tests_root: 하위 폴더(tests/fixtures/)의 테스트는 들지 않는다"
+  lack "$out" "$q/spike/test_codex_json_extraction.sh" "support_in_tests_root: tests/spike/ 의 테스트는 들지 않는다"
+  rmrepo
+}
+case_shared_tests_fixture() {
+  mkrepo support_layout
+  local out
+  ( cd "$R" && echo y > shared/tests/fixtures/ask-sites.tsv )
+  out=$(cands)
+  lack "$out" "shared/tests/fixtures/test_f.sh" "shared_tests_fixture: shared/tests/fixtures/ 는 넓히지 않는다"
+  want "$out" "shared/tests/test_s.sh" "shared_tests_fixture: shared/tests/ 바로 든 테스트"
+  lack "$out" "shared/tests/sub/test_z.sh" "shared_tests_fixture: 다른 하위 폴더(shared/tests/sub/)의 테스트는 들지 않는다"
+  lack "$out" "plugins/quality-gates/tests/test_b.py" "shared_tests_fixture: 다른 플러그인의 테스트 폴더는 들지 않는다"
+  rmrepo
+}
+case_topic_mode_same() {
+  mkrepo support_layout
+  local q=plugins/quality-gates/tests a b tree
+  ( cd "$R" && echo y > "$q/data/x.tsv" && git commit -qam c1 )
+  a=$(cands)
+  tree=$(git -C "$R" rev-parse 'HEAD^{tree}')
+  git -C "$R" checkout -q main
+  b=$(cands --topic main "$tree")
+  want "$b" "$q/data/test_a.sh" "topic_mode_same: 토픽 모드도 지원 파일의 길 위 폴더 테스트를 더한다"
+  lack "$b" "$q/spike/test_codex_json_extraction.sh" "topic_mode_same: 토픽 모드도 하위 폴더로 내려가지 않는다"
+  assert_eq "$b" "$a" "topic_mode_same: 같은 변경이면 토픽 모드와 작업 트리 모드의 후보가 같다"
+  rmrepo
+}
+
 for c in case_name_mapping_and_changed_tests case_no_change_is_empty case_unsupported_language_has_no_mapping \
          case_R17_unresolved_baseline_is_exit_4 case_default_branch_found_no_guidance case_R17_git_failure_is_exit_4 case_R17_bad_topic_args_are_exit_4 \
          case_topic_mode_reads_the_tree case_total_contains_every_candidate case_emit_guards_only_lists_guards \
-         case_subdirectory_run_matches_root_run case_deleted_test_is_a_candidate; do
+         case_subdirectory_run_matches_root_run case_deleted_test_is_a_candidate \
+         case_support_expands_path_dirs case_support_in_fixtures_folder case_support_in_spike_folder \
+         case_support_in_fixture_app case_support_partial_component_name \
+         case_support_in_tests_root case_shared_tests_fixture case_topic_mode_same; do
   echo "== $c"; $c
 done
 finish

@@ -55,7 +55,7 @@ EXEMPT_SLOTS = {
     # 대응 항목이 필요 없다. 여기 있던 ("quality-gates:adversarial",
     # "phase1_findings") 항목은 대상 agent 자체가 없어져 지운다(EXEMPT_SLOTS_BASELINE
     # 5→4, 아래).
-    ("quality-gates:artifact-adversarial", "merged_findings"):
+    ("quality-gates:artifact-adversarial", "merged_findings_file"):
         "C6(1) artifact-critic(+codex) 의 merged findings 를 verdict 하는 것이 이 agent 의 "
         "과업이다 — 대응물이 없다",
     # 최종 리뷰 A/m1 — 조인 인용 검사가 이 사유를 「너무 얇다」로 잡았다.

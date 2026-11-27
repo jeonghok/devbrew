@@ -326,14 +326,14 @@ else
   fail=$((fail + 1))
 fi
 
-# The code-recritic dispatch fence must carry the <diff>${DIFF}</diff> slot —
-# the code path threads diff (test_agent_input_slots.sh cannot see this: the
+# The code-recritic dispatch fence must carry the <diff_file>${DIFF_FILE}</diff_file> slot (the diff copy's
+# path — R7 §1) — the code path threads diff (test_agent_input_slots.sh cannot see this: the
 # shared contract declares `diff` optional).
 if [[ "$review_line" -gt 0 ]] && awk -v s="$review_line" -v e="$((review_line + 15))" \
-    'NR>=s && NR<=e && index($0, "<diff>${DIFF}</diff>") {f=1} END{exit !f}' "$SKILL_MD"; then
-  echo "PASS: code-recritic dispatch fence carries <diff>\${DIFF}</diff> slot"
+    'NR>=s && NR<=e && index($0, "<diff_file>${DIFF_FILE}</diff_file>") {f=1} END{exit !f}' "$SKILL_MD"; then
+  echo "PASS: code-recritic dispatch fence carries <diff_file>\${DIFF_FILE}</diff_file> slot"
 else
-  echo "FAIL: code-recritic dispatch fence missing <diff>\${DIFF}</diff> slot"
+  echo "FAIL: code-recritic dispatch fence missing <diff_file>\${DIFF_FILE}</diff_file> slot"
   fail=$((fail + 1))
 fi
 

@@ -324,6 +324,150 @@ class Cli(unittest.TestCase):
         rc, out = self.cli("show", "--lock", str(self.d))
         self.assertEqual((rc, out.strip()), (0, "스위트 잠금: 비어 있음"))
 
+    # ── 잠금 꼴이 아닌 것은 치우지 않는다(AC26) ──────────────────────────────
+
+    def _age(self, p):
+        old = time.time() - sl.LOCK_YOUNG - 5
+        os.utime(str(p), (old, old), follow_symlinks=False)
+
+    def _run_marking(self, *extra):
+        """잠금을 잡으면 표시 파일을 쓰는 명령으로 run 을 부른다 — (rc, 출력, 표시 파일)."""
+        mark = self.t / "ran"
+        rc, out = self.cli("run", "--lock", str(self.d), "--owner", "a", *extra, "--", sys.executable, "-c",
+                           "import pathlib, sys; pathlib.Path(sys.argv[1]).write_text('x')", str(mark))
+        return rc, out, mark
+
+    def _refused(self, rc, out, mark):
+        self.assertEqual(rc, sl.NO_LOCK_RC, out)
+        self.assertIn("[suite-lock] 잠금을 잡지 못했다 — 잠금 자리에 잠금이 아닌 것이 있다(%s) — 치우지 않는다"
+                      % self.d, out)
+        self.assertFalse(mark.exists(), "잠금 꼴이 아닌 자리에서 명령이 돌았다")
+        self.assertEqual(sorted(p.name for p in self.t.iterdir() if ".stale-" in p.name), [], "옮겨진 것이 있다")
+
+    def test_old_dir_with_other_file_not_removed(self):
+        self.d.mkdir()
+        (self.d / "report.md").write_text("keep\n", encoding="utf-8")
+        self._age(self.d)
+        rc, out, mark = self._run_marking()
+        self._refused(rc, out, mark)
+        self.assertEqual((self.d / "report.md").read_text(encoding="utf-8"), "keep\n")
+        self.assertEqual(sorted(os.listdir(str(self.d))), ["report.md"])
+
+    def test_dead_owner_dir_with_other_file_not_removed(self):
+        self.d.mkdir()
+        (self.d / "owner").write_text("%d gone t\n" % dead_pid(), encoding="utf-8")
+        (self.d / "notes.txt").write_text("keep\n", encoding="utf-8")
+        rc, out, mark = self._run_marking()
+        self._refused(rc, out, mark)
+        self.assertEqual(sorted(os.listdir(str(self.d))), ["notes.txt", "owner"])
+        self.assertEqual((self.d / "notes.txt").read_text(encoding="utf-8"), "keep\n")
+
+    def test_plain_file_at_lock_path_not_moved(self):
+        self.d.write_text("not a lock\n", encoding="utf-8")
+        for aged in (False, True):   # 나이와 무관하다 — 갓 생긴 파일도 바쁜 잠금으로 보지 않는다
+            if aged:
+                self._age(self.d)
+            rc, out, mark = self._run_marking()
+            self._refused(rc, out, mark)
+            self.assertTrue(self.d.is_file())
+            self.assertEqual(self.d.read_text(encoding="utf-8"), "not a lock\n")
+
+    def test_owner_named_folder_is_not_lock_shaped(self):
+        """`owner` 이름 하나뿐이어도 폴더면 잠금 꼴이 아니다 — 그 안의 것이 지워지지 않는다."""
+        (self.d / "owner").mkdir(parents=True)
+        (self.d / "owner" / "data.txt").write_text("keep\n", encoding="utf-8")
+        self._age(self.d)
+        rc, out, mark = self._run_marking()
+        self._refused(rc, out, mark)
+        self.assertEqual((self.d / "owner" / "data.txt").read_text(encoding="utf-8"), "keep\n")
+
+    def test_symlink_at_lock_path_is_not_lock_shaped(self):
+        """잠금 자리가 폴더를 가리키는 링크면(빈 폴더라도 · 나이와 무관하게) 링크도 대상도 건드리지 않는다."""
+        target = self.t / "elsewhere"
+        target.mkdir()
+        os.symlink(str(target), str(self.d))
+        for aged in (False, True):
+            if aged:
+                self._age(target)
+                self._age(self.d)
+            rc, out, mark = self._run_marking()
+            self._refused(rc, out, mark)
+            self.assertTrue(self.d.is_symlink())
+            self.assertTrue(target.is_dir())
+
+    def test_dangling_symlink_at_lock_path_is_refused(self):
+        """대상이 없는 링크도 잠금 꼴이 아니다 — 같은 자리를 끝없이 돌지 않고 3 으로 끝나며 링크는 그대로다."""
+        os.symlink(str(self.t / "nowhere"), str(self.d))
+        mark = self.t / "ran"
+        try:
+            p = subprocess.run([sys.executable, str(SCRIPTS / "suite_lock.py"), "run", "--lock", str(self.d), "--owner", "a",
+                                "--", sys.executable, "-c", "import pathlib, sys; pathlib.Path(sys.argv[1]).write_text('x')",
+                                str(mark)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=10)
+        except subprocess.TimeoutExpired:
+            self.fail("대상 없는 링크 자리에서 10초 안에 끝나지 않았다")
+        self._refused(p.returncode, p.stdout.decode("utf-8"), mark)
+        self.assertTrue(self.d.is_symlink())
+        self.assertFalse((self.t / "nowhere").exists())
+
+    def test_unreadable_old_dir_is_not_cleared(self):
+        """안을 읽지 못하는 폴더는 잠금 꼴인지 알 수 없어 치우지 않는다."""
+        self.d.mkdir()
+        (self.d / "report.md").write_text("keep\n", encoding="utf-8")
+        self._age(self.d)
+        os.chmod(str(self.d), 0o000)
+        try:
+            rc, out, mark = self._run_marking()
+        finally:
+            for p in [self.d] + [p for p in self.t.iterdir() if ".stale-" in p.name]:
+                if os.path.lexists(str(p)):
+                    os.chmod(str(p), 0o755)
+        self._refused(rc, out, mark)
+        self.assertEqual((self.d / "report.md").read_text(encoding="utf-8"), "keep\n")
+
+    def test_empty_or_owner_only_stale_still_cleared(self):
+        self.d.mkdir()
+        self._age(self.d)
+        rc, out, mark = self._run_marking()
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(mark.exists(), "빈 주인 없는 잠금을 치우고 명령이 돈다")
+        self.assertIn("주인 없는 잠금을 풀었다", out)
+        self.assertFalse(self.d.exists())
+        mark.unlink()
+        self.d.mkdir()
+        (self.d / "owner").write_text("%d gone t\n" % dead_pid(), encoding="utf-8")
+        rc, out, mark = self._run_marking()
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(mark.exists(), "owner 하나만 든 주인 없는 잠금을 치우고 명령이 돈다")
+        self.assertIn("주인 없는 잠금을 풀었다", out)
+        self.assertEqual(sorted(p.name for p in self.t.iterdir() if ".stale-" in p.name), [])
+
+    def test_fresh_dir_with_other_file_refused_without_wait(self):
+        """갓 생긴(60초 안) 폴더라도 owner 말고 다른 것이 들었으면 바쁜 잠금으로 기다리지 않고 3 으로 끝난다."""
+        self.d.mkdir()
+        (self.d / "report.md").write_text("keep\n", encoding="utf-8")
+        start = time.time()
+        rc, out, mark = self._run_marking("--wait", "30")
+        self.assertLess(time.time() - start, 5, "잠금 꼴이 아닌 폴더에서 기다렸다")
+        self._refused(rc, out, mark)
+        self.assertEqual((self.d / "report.md").read_text(encoding="utf-8"), "keep\n")
+
+    def test_no_wait_on_non_lock(self):
+        for make in ("dir", "file"):
+            if make == "dir":
+                self.d.mkdir()
+                (self.d / "report.md").write_text("keep\n", encoding="utf-8")
+            else:
+                self.d.write_text("x\n", encoding="utf-8")
+            self._age(self.d)
+            start = time.time()
+            rc, out, _mark = self._run_marking("--wait", "30")
+            self.assertLess(time.time() - start, 5, "%s: 잠금 꼴이 아닌 자리에서 기다렸다" % make)
+            self.assertEqual(rc, sl.NO_LOCK_RC, out)
+            if make == "dir":
+                shutil.rmtree(str(self.d))
+            else:
+                self.d.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()

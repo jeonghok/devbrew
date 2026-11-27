@@ -393,6 +393,10 @@ def test_file_count(tree: Path):
     return int(out) if p.returncode == 0 and out.isdigit() else None
 
 
+# 배정 행의 둘째 칸 가운데 러너가 아닌 값 — unclaimed(맡는 러너 없음)와 support(지원 파일 — 돌리지 않는다).
+NOT_RUNNERS = ("unclaimed", "support")
+
+
 def _assign_rows(path: Path):
     rows = []
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -409,12 +413,12 @@ def assignment(tree: Path, work: Path):
     rc, _o, err = select("assign", str(tree), str(first), stdin=files + "\n")
     if rc:
         raise Stop(3, "배정이 실패했다: %s" % err.strip()[-300:])
-    claimed = [u for u, r, _g in _assign_rows(first) if r != "unclaimed"]
+    claimed = [u for u, r, _g in _assign_rows(first) if r not in NOT_RUNNERS]
     final = work / "units.assign"
     rc, _o, err = select("assign", str(tree), str(final), stdin="\n".join(claimed) + "\n")
     if rc:
         raise Stop(3, "배정이 실패했다: %s" % err.strip()[-300:])
-    return final, [r for r in _assign_rows(final) if r[1] != "unclaimed"]
+    return final, [r for r in _assign_rows(final) if r[1] not in NOT_RUNNERS]
 
 
 def run_side(tree: Path, side: str, rows: list, work: Path, tmp: Path) -> dict:

@@ -21,6 +21,12 @@ Two phases (the same dedup_key/stagnation_key algorithm lives once here):
       nonzero `sources_failed` carried on the merged doc also forces
       degraded=true (fail-closed), symmetric to the adversarial-side guard —
       neither can silently false-converge.
+      With `--adversarial-response RESP --slot SLOT [--slot ...]` the adversary's
+      full response is first checked against each slot copy's end value
+      (`qg_nonce.check`). On failure the verdicts are NOT used, degraded_reason
+      is `adversarial`, and the extra last key `adversarial_slot` is
+      `끝 값 없음` | `읽지 못함` | `응답 없음` (empty or missing response — a dead
+      adversary; `ok` when the check passes; absent without --slot).
 
 Schema: see plan Global Constraints "데이터 계약".
 """
@@ -30,6 +36,7 @@ import sys
 
 import yaml
 
+import qg_nonce
 from adjudication import Ledger
 from render_disposition import disposition_lines, disposition_report
 
@@ -164,7 +171,18 @@ def _held_items(held):
     return out
 
 
-def phase_synth(findings_path, adversarial_path):
+def _slot_check(response_path, slots):
+    """반박자 응답 전체를 칸 사본의 끝 값과 견준다 — None(ok) · `끝 값 없음` · `읽지 못함` · `응답 없음`.
+    응답 파일을 읽지 못하거나 응답이 비었으면(죽은 반박자) `응답 없음` — 판정은 쓰지 않는다(fail-closed)."""
+    try:
+        with open(response_path, encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError:
+        return qg_nonce.NO_RESPONSE
+    return qg_nonce.check(text, list(slots))
+
+
+def phase_synth(findings_path, adversarial_path, response_path="", slots=()):
     merged_doc = _load(findings_path)
     # fail-closed: a missing / unparseable / empty / degenerate --findings file must
     # not silently read as "no findings". A genuine clean merge is ALWAYS a dict with
@@ -196,7 +214,13 @@ def phase_synth(findings_path, adversarial_path):
         L.source_failed("phase_key merge", "%d건 소실" % sources_failed,
                         primary=False)
 
-    adv_doc = _load(adversarial_path) if adversarial_path else None
+    adv_slot = _slot_check(response_path, slots) if slots else None
+    if adv_slot is not None:
+        # 끝 값이 맞지 않은 반박자 응답의 판정은 쓰지 않는다 — 판정 실패 길(degraded_reason: adversarial).
+        L.source_failed("artifact-adversarial", adv_slot, primary=True)
+        adv_doc = None
+    else:
+        adv_doc = _load(adversarial_path) if adversarial_path else None
     adv_parse_failed = adv_doc == "__ERR__" or adv_doc is None
     adv_schema_failed = False
     verdicts, new_findings = [], []
@@ -331,6 +355,8 @@ def phase_synth(findings_path, adversarial_path):
         # 뒤에 더한 키다 — 위 키들의 이름 · 순서 · 꼴은 그대로다. 항목 수는 `unadjudicated` 와 같다.
         "unadjudicated_items": _held_items(held),
     }
+    if slots:
+        out["adversarial_slot"] = adv_slot or "ok"   # 뒤에 더한 키 — --slot 을 줬을 때만
     sys.stdout.write(yaml.safe_dump(out, allow_unicode=True, sort_keys=False))
 
 
@@ -339,7 +365,15 @@ def main():
     ap.add_argument("--phase", choices=["key", "synth"], required=True)
     ap.add_argument("--findings", action="append", default=[])
     ap.add_argument("--adversarial", default="")
+    ap.add_argument("--adversarial-response", default="",
+                    help="반박자 응답 전체(끝 값 대조용) — --slot 과 함께")
+    ap.add_argument("--slot", action="append", default=[],
+                    help="반박자에게 경로로 넘긴 칸 사본(여러 번) — 끝 값을 응답과 견준다")
     args = ap.parse_args()
+    if args.slot and (args.phase != "synth" or not args.adversarial_response):
+        ap.error("--slot 은 --phase synth 와 --adversarial-response 가 함께 있어야 한다")
+    if "" in args.slot:
+        ap.error("--slot 은 빈 문자열을 받지 않는다")
     if args.phase == "key":
         # `phase_key`의 입력 실패 배선(Task 9)은 `ledger` 인자를 받아야 도는데,
         # 이 호출부가 여태 `ledger=None`으로 불러 가드 안쪽이 영영 안 돌았다
@@ -359,7 +393,7 @@ def main():
             sys.stderr.write(line + "\n")
     else:
         findings_path = args.findings[0] if args.findings else ""
-        phase_synth(findings_path, args.adversarial)
+        phase_synth(findings_path, args.adversarial, args.adversarial_response, args.slot)
 
 
 if __name__ == "__main__":

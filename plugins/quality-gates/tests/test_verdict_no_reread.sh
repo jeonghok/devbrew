@@ -393,8 +393,10 @@ case_readme_limits() {
   local lim
   lim=$(section "$README" '## 한계')
   [ -n "$lim" ] && ok "README 에 한계 절이 있다" || no "README 에 한계 절이 없다"
-  assert_contains "$lim" 'qg 는 최종 판정 수치를 레포 코드가 돌기 전 또는 만든 직후에 읽어 지킨다. 중간 단계와 레포 코드가 남긴 프로세스의 영향은 막지 않는다. 판정 뒤 게시 단계(게시 여부를 `range-scope.txt` 유무와 result.md 의 `## 게시` 줄로 정한다)도 같다' \
-    "README 한계: 설계 §7 의 문장 그대로"
+  assert_contains "$lim" 'qg 는 최종 판정 수치를 레포 코드가 돌기 전 또는 만든 직후에 읽어 지킨다. 중간 단계와 레포 코드가 남긴 프로세스의 영향은 막지 않는다. 판정 뒤 게시 단계(게시를 시도할지는 `range-scope.txt` 유무로 정하고, 이미 게시했는지는 GitHub 에 같은 본문의 댓글이 있는지로 정한다 — result.md 의 `## 게시` 줄은 읽지 않는다)도 같다' \
+    "README 한계: 설계 §7 의 문장 — 「이미 게시함」 은 GitHub 이 정한다(R7 §2)"
+  assert_not_contains "$lim" '`## 게시` 줄로 정한다' \
+    "README 한계 음성: 게시 여부를 결과 파일의 게시 줄로 정한다던 옛 문장이 없다(양성 짝: GitHub 에 같은 본문의 댓글)"
 }
 
 for c in case_final_verdict_ignores_tampered_session case_positive_control_slots_are_used case_bad_lines_fail_closed \

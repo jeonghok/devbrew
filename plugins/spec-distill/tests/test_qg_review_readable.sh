@@ -56,16 +56,16 @@ LIST="$(lead "$SF" '지적 목록:')"
 [ -n "$LIST" ] && ok "지적 목록 줄을 읽었다" || no "지적 목록 줄이 없다 — 아래 단언이 공허하다"
 
 # call-line-answered (AC15) — 지휘자가 내는 호출 줄은 --answered 를 붙인 한 꼴
-CALL_LINE='/quality-gates:quality-pipeline range <시작 커밋>..<끝 커밋> --origin <원문 파일의 레포 상대경로> --answered <「이미 답한 것」 파일의 절대경로>'
-assert_eq "$(fenced "$CALL" 'quality-pipeline range')" "$CALL_LINE" "call-line-answered: 호출 줄 펜스가 --answered 를 붙인 그 한 줄뿐"
+CALL_LINE="/quality-gates:quality-pipeline range <시작 커밋>..<끝 커밋> --origin <원문 파일의 레포 상대경로> --answered <「이미 답한 것」 파일의 절대경로> --suite-lock '<스위트 잠금 경로>'"
+assert_eq "$(fenced "$CALL" 'quality-pipeline range')" "$CALL_LINE" "call-line-answered: 호출 줄 펜스가 --answered · --suite-lock 을 붙인 그 한 줄뿐"
 one "$CALL" "$CALL_LINE" "call-line-answered: 호출 줄 절에 그 줄이 한 번"
 one "$WHOLE" 'quality-pipeline range' "call-line-answered: 파일 전체에서 quality-pipeline range 가 한 번(다른 꼴의 호출 줄이 없다)"
 
-# old-qg-retry-once (AC8 · AC15 담당자 쪽) — 호출 줄 락과 따로 묶는다
-RETRY='qg 가 `--answered` 를 모르는 인자라고 멈추면 그 인자와 값을 뺀 같은 줄로 한 번만 다시 부르고, 마지막 보고 첫머리에 「답 이어지기 없이 돌았다 — 깔린 quality-gates 가 `--answered` 를 모른다」 를 적는다.'
+# old-qg-retry-once (AC8 · AC15 담당자 쪽 → R7 AC17: 모르는 인자마다 한 번씩) — 호출 줄 락과 따로 묶는다
+RETRY='qg 가 모르는 인자라고 멈추면 멈춘 줄이 이름으로 든 인자와 그 값을 뺀 같은 줄로 다시 부른다 — 모르는 인자마다 한 번씩, 많아야 두 번.'
 one "$SF" "$RETRY" "old-qg-retry-once: 보내는 글 펜스에 옛 qg 다시 부르기 문장이 한 번"
 one "$WHOLE" "$RETRY" "old-qg-retry-once: 그 문장이 파일 전체에서 한 번(지휘자 쪽에 다른 꼴의 호출 지시가 없다)"
-zero "$CALL" '인자와 값을 뺀' "old-qg-retry-once 음성: 호출 줄 절은 인자를 빼는 꼴을 싣지 않는다(양성 짝: 보내는 글의 다시 부르기 문장)"
+zero "$CALL" '그 값을 뺀' "old-qg-retry-once 음성: 호출 줄 절은 인자를 빼는 꼴을 싣지 않는다(양성 짝: 보내는 글의 다시 부르기 문장)"
 
 # back-contract-3 (AC8)
 one "$BACK" '`contract` 가 `3` 이 아니면' "back-contract-3: 돌아왔을 때가 판 3 만 읽는다"
@@ -420,10 +420,21 @@ ver_cmp() {
 }
 LOW="$(ver_cmp "$QGMIN" 17.0.0)"
 HIGH="$(ver_cmp "$QGMIN" "$QGV")"
+# qg_max_ok <라벨> — 최소 판(QGMIN)이 지금 qg plugin.json 의 판(QGV) 이하인가(HIGH). deps-min-qg · deps-min-qg-suite-lock 이 함께 쓴다
+qg_max_ok() {
+  case "$HIGH" in -1|0) ok "${1}: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하" ;; *) no "${1}: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하 (${HIGH})" ;; esac
+}
 case "$LOW" in 0|1) ok "deps-min-qg: dependencies.md 의 quality-gates 최소 판(${QGMIN})이 17.0.0 이상" ;; *) no "deps-min-qg: dependencies.md 의 quality-gates 최소 판(${QGMIN})이 17.0.0 이상 (${LOW})" ;; esac
 # deps-low-qg (통합 리뷰 F7) — 「없을 때」 칸이 깔린 판이 낮을 때의 동작과 푸는 길도 적는다(판 칸은 check_deps.py 몫)
 assert_contains "$QGROW" '깔린 판이 17.0.0(`--answered` 와 돌려주는 꼴 3판이 처음 나온 판)보다 낮으면 리뷰는 답 이어지기 없이 돌고 의도 점검 결과는 「셀 수 없음」 이 된다 — quality-gates 를 17.0.0 이상으로 올리면 풀린다' "deps-low-qg: 낮은 판의 동작과 푸는 길이 quality-gates 행에"
-case "$HIGH" in -1|0) ok "deps-min-qg: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하" ;; *) no "deps-min-qg: 그 판(${QGMIN})이 quality-gates plugin.json 의 판(${QGV}) 이하 (${HIGH})" ;; esac
+qg_max_ok deps-min-qg
+# deps-min-qg-suite-lock (AC17) — 최소 판이 17.2.0(`--suite-lock` 이 처음 나온 판) 이상이고 지금 qg plugin.json 의 판 이하
+SLLOW="$(ver_cmp "$QGMIN" 17.2.0)"
+case "$SLLOW" in 0|1) ok "deps-min-qg-suite-lock: quality-gates 최소 판(${QGMIN})이 17.2.0 이상" ;; *) no "deps-min-qg-suite-lock: quality-gates 최소 판(${QGMIN})이 17.2.0 이상 (${SLLOW})" ;; esac
+qg_max_ok deps-min-qg-suite-lock
+# deps-low-qg-suite-lock (AC17) — 「없을 때」 칸이 잠금 인자를 모르는 낮은 판의 동작과 푸는 길도 적는다
+assert_contains "$QGROW" '스위트 잠금 자리 없이 돈다' "deps-low-qg-suite-lock: 낮은 판이면 잠금 자리 없이 돈다"
+assert_contains "$QGROW" '17.2.0 이상으로 올리면 풀린다' "deps-low-qg-suite-lock: 푸는 길(17.2.0 이상)"
 
 # readme-new-words (AC20) — spec-distill README 가 새 동작의 이름을 쓴다
 RD="$(cat "$ROOT/plugins/spec-distill/README.md")"

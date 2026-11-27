@@ -7,7 +7,9 @@
 #   compute-test-scope-candidates.sh --total [--tree <tree>]  테스트 파일 수 (계획 줄의 분모)
 #
 # 후보 = 바뀐 테스트 파일 ∪ 바뀐 소스와 이름이 맞는 테스트(test_<b>.py · <b>_test.py · <b>.test|spec.[jt]sx?)
-#        ∪ 머리 30줄의 `# guards: <글롭>...` 이 바뀐 파일에 걸리는 tests/ 아래 .sh.
+#        ∪ 머리 30줄의 `# guards: <글롭>...` 이 바뀐 파일에 걸리는 tests/ 아래 .sh
+#        ∪ 바뀐 지원 파일(tests · test 폴더 아래 이름이 테스트 꼴이 아닌 파일)의 길 위 폴더에 바로 든 테스트 꼴 파일.
+# 테스트 꼴 이름: 마지막 성분이 `test_` 로 시작하거나 `_test.<확장자>` · `.test.<확장자>` · `.spec.<확장자>` 로 끝난다.
 # 출력: 리포 상대 경로 한 줄에 하나, 정렬·중복 제거. 빈 출력은 「후보가 없다」이다.
 # Exit: 0 = 성공 · 1 = git 리포 아님 · 4 = 범위나 분모를 확정하지 못했다(빈 결과가 아니다 — R17).
 set -u
@@ -87,6 +89,27 @@ if [ -n "$wanted" ]; then
 fi
 changed_tests=$(printf '%s\n' "$changed" | grep -E "$TESTRE" || true)
 
+# 지원 파일 — 경로에 tests · test 폴더가 있고 이름이 테스트 꼴이 아닌 바뀐 파일. 그 파일이 든 폴더부터 가장 가까운
+# tests · test 폴더까지(둘 다 포함) 길 위 폴더들에 바로 든 테스트 꼴 파일을 더한다 — 하위 폴더로 내려가지 않는다.
+# 길 위 폴더 가운데 경로 성분(레포 루트부터 그 폴더까지)에 spike · fixtures 와 같은 것이 있는 폴더는 넓히지 않는다
+# (성분 전체가 맞을 때만 — spikes · my-fixtures 는 넓힌다).
+# 맡는 러너가 있는지는 배정(run-test-selection.sh assign)이 가른다.
+IS_TEST_AWK='function is_test(b) { return b ~ /^test_/ || b ~ /_test\.[A-Za-z0-9]+$/ || b ~ /\.(test|spec)\.[A-Za-z0-9]+$/ }'
+support_dirs=$(printf '%s\n' "$changed" | awk "$IS_TEST_AWK"'
+  { n = split($0, p, "/"); if (n < 2 || is_test(p[n])) next
+    k = 0; for (i = n - 1; i >= 1; i--) if (p[i] == "tests" || p[i] == "test") { k = i; break }
+    if (!k) next
+    m = n; for (i = 1; i < n; i++) if (p[i] == "spike" || p[i] == "fixtures") { m = i; break }
+    for (j = n - 1; j >= k; j--) { if (j >= m) continue
+      d = p[1]; for (i = 2; i <= j; i++) d = d "/" p[i]; print d } }' | sort -u)
+expanded=""
+if [ -n "$support_dirs" ]; then
+  expanded=$(printf '%s\n' "$universe" | awk "$IS_TEST_AWK"'
+    NR == FNR { want[$0] = 1; next }
+    { n = split($0, p, "/"); if (n < 2 || !is_test(p[n])) next
+      d = substr($0, 1, length($0) - length(p[n]) - 1); if (d in want) print }' <(printf '%s\n' "$support_dirs") -)
+fi
+
 # `# guards:` — 확장자와 무관하게 선언 글롭이 바뀐 파일에 걸리면 그 락을 후보에 넣는다.
 guarded=""
 while IFS= read -r tf; do
@@ -109,5 +132,5 @@ if [ "$emit_guards" -eq 1 ]; then
   printf '%s' "$guarded" | sed '/^[[:space:]]*$/d' | sort -u
   exit 0
 fi
-printf '%s\n%s\n%s\n' "$mapped" "$changed_tests" "$guarded" | sed '/^[[:space:]]*$/d' | sort -u
+printf '%s\n%s\n%s\n%s\n' "$mapped" "$changed_tests" "$expanded" "$guarded" | sed '/^[[:space:]]*$/d' | sort -u
 exit 0

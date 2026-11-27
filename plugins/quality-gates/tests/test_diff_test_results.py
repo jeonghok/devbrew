@@ -309,6 +309,78 @@ class Contract(DiffBase):
         self.assertIn('"x.rb"', self.field(p.stdout, "unclaimed"))
         self.assertIn("reason: silent-drop", self.verdict(p.stdout))
 
+    def test_support_rows_not_counted(self):
+        # 지원 파일(support 행)은 러너가 아니다 — 돌릴 대상 · unit 전체 · unclaimed · silent-drop 에서 빠지고, 그 경로와
+        # 그 때문에 더한 테스트 수(길 위 폴더에 바로 든, 러너가 맡은 행의 수)가 차등 출력에 실린다(AC19 · 설계 §5).
+        units = ["tests/a.sh", "tests/fixtures/test_f.sh", "tests/sub/test_s.sh"]
+        write_assign(self.memo, [("tests/a.sh", "shell", "file"), ("tests/data.tsv", "support", "file"),
+                                 ("tests/fixtures/x.tsv", "support", "file"),
+                                 ("tests/fixtures/test_f.sh", "shell", "file"),
+                                 ("tests/sub/test_s.sh", "shell", "file")])
+        rows = [(u, "pass", "0", "per-unit") for u in units]
+        write_rows(self.memo / "baseline-shell.tsv", "shell", self.repo.B, rows)
+        write_rows(self.memo / "head-shell-i1.tsv", "shell", self.repo.H, rows)
+        p = self.run_diff()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.field(p.stdout, "unclaimed"), "[]")
+        self.assertIn("silent_drop: false", p.stdout)
+        self.assertNotIn("silent-drop", self.field(p.stdout, "degrade_causes"))
+        self.assertEqual(self.field(p.stdout, "adapters"), "[shell]")
+        self.assertEqual(self.field(p.stdout, "support"), '["tests/data.tsv", "tests/fixtures/x.tsv"]')
+        # tests/fixtures/ 는 경로 성분에 fixtures 가 들어 세지 않는다 — tests/a.sh 하나다.
+        self.assertEqual(self.field(p.stdout, "support_tests"), "1")
+        self.assertIn("counts: {still_green: 3,", p.stdout)
+        self.assertNotIn('unit: "tests/data.tsv"', p.stdout)
+        self.assertIn("verdict: clean", self.verdict(p.stdout))
+
+    def test_support_tests_counts_package_units(self):
+        # 패키지 입도 러너(go)의 unit 은 폴더 이름이다 — 그 폴더가 길 위 폴더면 그 unit 을 센다.
+        write_assign(self.memo, [("lib/test", "go", "package"), ("lib/test/data.txt", "support", "file"),
+                                 ("lib", "go", "package")], adapters="go")
+        rows = [("lib/test", "pass", "0", "per-unit"), ("lib", "pass", "0", "per-unit")]
+        write_rows(self.memo / "baseline-go.tsv", "go", self.repo.B, rows)
+        write_rows(self.memo / "head-go-i1.tsv", "go", self.repo.H, rows)
+        p = self.run_diff()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.field(p.stdout, "support_tests"), "1")
+
+    def test_support_tests_skips_spike_fixtures_folders(self):
+        # 길 위 폴더 가운데 경로 성분에 spike · fixtures 가 든 폴더의 러너 파일은 세지 않는다(run-all.sh 의 제외와 같은
+        # 규칙). 성분 전체가 맞을 때만 뺀다 — tests/spikes/ 는 센다. 패키지 unit 도 같다. 가장 가까운 테스트 폴더
+        # 위쪽에 fixtures 가 든 fixture 앱(tests/fixtures/e2e-app/base/tests/)도 세지 않는다.
+        units = ["tests/a.sh", "tests/spike/test_sp.sh", "tests/spikes/test_s.sh",
+                 "tests/fixtures/e2e-app/base/tests/test_store.sh"]
+        write_assign(self.memo, [("tests/a.sh", "shell", "file"), ("tests/spike/test_sp.sh", "shell", "file"),
+                                 ("tests/spike/prompt.md", "support", "file"),
+                                 ("tests/spike/fixtures/sample.json", "support", "file"),
+                                 ("tests/spikes/test_s.sh", "shell", "file"),
+                                 ("tests/spikes/notes.md", "support", "file"),
+                                 ("tests/fixtures/e2e-app/base/tests/test_store.sh", "shell", "file"),
+                                 ("tests/fixtures/e2e-app/base/tests/store.json", "support", "file")])
+        rows = [(u, "pass", "0", "per-unit") for u in units]
+        write_rows(self.memo / "baseline-shell.tsv", "shell", self.repo.B, rows)
+        write_rows(self.memo / "head-shell-i1.tsv", "shell", self.repo.H, rows)
+        p = self.run_diff()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.field(p.stdout, "support_tests"), "2")
+
+    def test_support_tests_skips_fixtures_package_units(self):
+        write_assign(self.memo, [("lib/test/fixtures", "go", "package"),
+                                 ("lib/test/fixtures/data.txt", "support", "file"),
+                                 ("lib/test", "go", "package")], adapters="go")
+        rows = [("lib/test/fixtures", "pass", "0", "per-unit"), ("lib/test", "pass", "0", "per-unit")]
+        write_rows(self.memo / "baseline-go.tsv", "go", self.repo.B, rows)
+        write_rows(self.memo / "head-go-i1.tsv", "go", self.repo.H, rows)
+        p = self.run_diff()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.field(p.stdout, "support_tests"), "1")
+
+    def test_support_absent_prints_empty(self):
+        self.pair("shell", [("a.sh", "pass", "0", "per-unit")], [("a.sh", "pass", "0", "per-unit")])
+        p = self.run_diff()
+        self.assertEqual(self.field(p.stdout, "support"), "[]")
+        self.assertEqual(self.field(p.stdout, "support_tests"), "0")
+
     def test_R17_truncated_assign_is_exit_4(self):
         write_assign(self.memo, [("a.sh", "shell", "file")])
         text = (self.memo / "assign-i1.tsv").read_text(encoding="utf-8").splitlines()[:-1]

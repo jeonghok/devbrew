@@ -24,6 +24,7 @@ ENSURE_MODE="false"
 SESSION_ID=""
 SCOPE_ARGS=0      # 범위 인자(branch · --paths · range) 개수
 RANGE_SEEN=0      # range 인자 개수 — range 는 다른 범위 인자와 함께 줄 수 없다(branch + --paths 조합은 v9 부터 허용)
+SUITE_LOCK=""     # --suite-lock 의 잠금 폴더 절대경로 — 끝나기 직전에 잠금 자리 파일로 남긴다
 
 gone() {   # gone <인자 표기> <안내>
   GONE_ARGS="${GONE_ARGS}> [quality-gates] \`${1}\` 인자는 없어졌다 — ${2}. 실행하지 않는다."$'\n'
@@ -96,6 +97,25 @@ while [[ $# -gt 0 ]]; do
       fi
       shift
       ;;
+    --suite-lock)
+      # 공유 스위트 잠금 폴더 — 범위 인자가 아니다. 값 하나를 소비한다. 잠금 스크립트는 없는 부모 폴더를 만들어 버리므로
+      # 오타 난 경로가 아무도 보지 않는 잠금이 되지 않게 부모 폴더가 있는지도 본다.
+      shift
+      if [[ $# -eq 0 ]] || [[ "$1" =~ ^- ]]; then
+        echo "❌ --suite-lock 뒤에 잠금 폴더 경로가 없다." >&2
+        exit 1
+      fi
+      if [[ "$1" != /* ]]; then
+        echo "❌ --suite-lock 은 절대경로여야 한다: $1" >&2
+        exit 1
+      fi
+      if [[ ! -d "$(dirname -- "$1")" ]]; then
+        echo "❌ --suite-lock 의 부모 폴더가 없다: $(dirname -- "$1")" >&2
+        exit 1
+      fi
+      SUITE_LOCK="$1"
+      shift
+      ;;
     --reset)
       gone "--reset" "세션 폴더는 /quality-gates:quality-pipeline 을 시작할 때마다 지우고 다시 만든다"
       shift
@@ -147,6 +167,7 @@ OPTIONS:
   --origin <path>      Caller's origin file for the intent critic (tracked file in this repo)
                        If that file has no roadmap: line, the other-teams map reports 「로드맵 없음」.
   --answered <path>    Conductor's already-answered file for the intent critic (absolute path)
+  --suite-lock <path>  Shared suite lock folder (absolute path) — each differential test command holds it
   --session-id <id>    Session ID when CLAUDE_CODE_SESSION_ID is unset (if it is set, must equal it)
   --ensure             Keep this session's folder if it already exists (skill preflight)
   -h, --help           Show this help message
@@ -222,10 +243,13 @@ fi
 STATE_DIR="$STATE_ROOT/$SESSION_ID"
 STATE_FILE="$STATE_DIR/result.md"
 
-# --ensure: 이 세션 폴더가 이미 있으면 아무것도 하지 않는다.
-if [[ "$ENSURE_MODE" == "true" ]] && [[ -f "$STATE_FILE" ]]; then
-  exit 0
-fi
+# 잠금 자리 파일 — 시작마다 지우고 --suite-lock 이 있으면 다시 쓴다. 끊긴 앞 실행의 자리가 이 실행에 쓰이지 않는다.
+write_suite_lock_path() {
+  rm -f -- "$STATE_DIR/suite-lock-path.txt"
+  if [[ -n "$SUITE_LOCK" ]]; then
+    printf '%s\n' "$SUITE_LOCK" > "$STATE_DIR/suite-lock-path.txt"
+  fi
+}
 
 # --- 자기 세션 폴더를 지우고 다시 만든다 (E1 · E4) ---
 # `.claude` 나 state root 가 제자리의 실제 디렉토리로 풀리지 않으면(링크면 리포 안을 가리켜도) 지우지
@@ -256,6 +280,22 @@ refuse() {
   echo "[quality-gates] $1 — 지우지 않는다. 아무것도 쓰지 않는다." >&2
   exit 1
 }
+# 링크 가드 — 세션 폴더 위 자리나 세션 폴더 자신이 링크로 풀리면 지우거나 쓰기 전에 거부한다.
+guard_links() {
+  if root_escapes; then
+    refuse "'.claude' 나 state root '$STATE_ROOT' 가 제자리의 실제 디렉토리가 아니다(심볼릭 링크 등 — 실제 디렉토리로 바꿔야 /quality-gates:quality-pipeline 이 돈다)"
+  elif [[ -L "$STATE_DIR" ]]; then
+    refuse "세션 폴더 '$STATE_DIR' 자신이 링크다"
+  fi
+}
+
+# --ensure: 이 세션 폴더가 이미 있으면 링크 가드 뒤 잠금 자리 파일 말고는 아무것도 하지 않는다.
+if [[ "$ENSURE_MODE" == "true" ]] && [[ -f "$STATE_FILE" ]]; then
+  guard_links
+  write_suite_lock_path
+  exit 0
+fi
+
 load_markers() {
   local out m
   out="$(python3 -I -X utf8 -c 'import importlib.util as u, sys
@@ -273,11 +313,8 @@ EOF2
 if ! load_markers; then
   refuse "qg-gc.py 에서 세션 마커 목록을 읽지 못했다"
 fi
-if root_escapes; then
-  refuse "'.claude' 나 state root '$STATE_ROOT' 가 제자리의 실제 디렉토리가 아니다(심볼릭 링크 등 — 실제 디렉토리로 바꿔야 /quality-gates:quality-pipeline 이 돈다)"
-elif [[ -L "$STATE_DIR" ]]; then
-  refuse "세션 폴더 '$STATE_DIR' 자신이 링크다"
-elif [[ -e "$STATE_DIR" ]] && [[ ! -d "$STATE_DIR" ]]; then
+guard_links
+if [[ -e "$STATE_DIR" ]] && [[ ! -d "$STATE_DIR" ]]; then
   refuse "'$STATE_DIR' 가 폴더가 아니다"
 elif [[ -d "$STATE_DIR" ]]; then
   # 자기 세션 폴더는 그대로 지운다. 그 밖에는 비어 있거나 세션 마커가 있는 폴더만 이전 실행의 것으로 보고 지운다.
@@ -307,6 +344,7 @@ started_at: "$TIMESTAMP"
 # qg result
 EOF
 mv "$TEMP_FILE" "$STATE_FILE"
+write_suite_lock_path
 
 echo "🔄 Quality Gates 를 시작한다 — 이 턴 안에서 끝까지 돈다."
 for a in $REMOVED_ARGS; do

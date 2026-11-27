@@ -186,9 +186,13 @@ def _checked_quote(tree_root: str, quote, files: dict) -> Optional[dict]:
     if content is None:
         return None
     rows = content.split("\n")
-    if line > len(rows) or rows[line - 1].strip() != wanted:
+    if line > len(rows):
         return None
-    return {"path": path, "line": line, "text": wanted}
+    row = rows[line - 1].strip()
+    # 칸 사본에서 옮긴 인용은 `<!` 가 `&lt;!` 다 — 트리 줄을 같은 꼴로 바꿔서도 견주고, 남기는 글은 트리의 글이다.
+    if row != wanted and neutralize_markers(row) != wanted:
+        return None
+    return {"path": path, "line": line, "text": row}
 
 
 def verify_quotes(tree_root: str, quotes) -> tuple:
@@ -682,6 +686,28 @@ def strip_roadmap_doubts(text: str) -> tuple:
 _ORIGIN_HEADS = ("## 6.", "## 2.")
 _DOUBT_HEADS = ("## 5.", "## 3.")
 
+# 출처 표지 — 원문 · 로드맵 · 의심 칸에서 스크립트가 쓰는 표지 줄은 `<!-- … -->` 다. 리뷰받는 쪽 글(본문 · 표지
+# 안의 필드)의 `<!` 는 모두 `&lt;!` 로 바꿔 싣는다 — 표지 꼴을 가려 내지 않는다(어떤 꼴도 표지로 읽히지 않게).
+MARK_OPEN = "<!"
+MARK_OPEN_SAFE = "&lt;!"
+MARK_CLOSE = "-->"
+MARK_CLOSE_SAFE = "--&gt;"
+
+
+def neutralize_markers(text: str) -> str:
+    """리뷰받는 쪽 글의 `<!` 를 모두 `&lt;!` 로 바꾼다 — 표지는 스크립트가 쓴 것만 남는다."""
+    return text.replace(MARK_OPEN, MARK_OPEN_SAFE)
+
+
+def unescape_markers(text: str) -> str:
+    """리뷰어가 칸 사본에서 옮겨 적은 글을 원래 꼴로 — `marker_field` · `neutralize_markers` 의 거꾸로."""
+    return text.replace(MARK_CLOSE_SAFE, MARK_CLOSE).replace(MARK_OPEN_SAFE, MARK_OPEN)
+
+
+def marker_field(value: str) -> str:
+    """표지 안에 들어가는 필드(출처 · 경로) — 표지를 닫거나 새 표지를 여는 글자를 무력화한다."""
+    return neutralize_markers(value).replace(MARK_CLOSE, MARK_CLOSE_SAFE)
+
 
 def _note(st: dict, line: str) -> None:
     if line not in st["notices"]:
@@ -719,7 +745,8 @@ def _add_origin_doc(rel: str, text: str, st: dict) -> None:
             st["aliases"][rel] = brief
     if source not in st["sources"]:
         st["sources"].append(source)
-    marker = "<!-- origin-source: %s · file: %s -->" % (source, rel)
+    marker = "<!-- origin-source: %s · file: %s -->" % (marker_field(source), marker_field(rel))
+    text = neutralize_markers(text)
     origin_parts: List[str] = []
     doubt_parts: List[str] = []
     for head, body in split_sections(text):
@@ -760,11 +787,12 @@ def _follow_roadmaps(st: dict) -> str:
                 _note(st, "로드맵 링크 거부 — %s" % why)
             st["rejected_roadmap"] = True
             continue
-        kept, moved = strip_roadmap_doubts(body)
+        kept, moved = strip_roadmap_doubts(neutralize_markers(body))
         st["roadmaps"].append(path)
-        parts.append("<!-- roadmap: %s · from: %s -->\n%s" % (path, rel, kept))
+        parts.append("<!-- roadmap: %s · from: %s -->\n%s"
+                     % (marker_field(path), marker_field(rel), kept))
         if moved.strip():
-            st["doubts"].append("<!-- roadmap-doubts: %s -->\n%s" % (path, moved))
+            st["doubts"].append("<!-- roadmap-doubts: %s -->\n%s" % (marker_field(path), moved))
     if parts:
         return "\n".join(parts)
     reason = "로드맵 링크 거부" if st.get("rejected_roadmap") else "연 문서에 roadmap: 없음"

@@ -121,13 +121,16 @@ case_v9_one_pass_no_code_edits() {
     && git -C "$d" -c core.hooksPath=/dev/null -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q --allow-empty -m init
   rd="$(git -C "$d" rev-parse --show-toplevel)/.claude/quality-gates/$sid"; mkdir -p "$rd"
   fv="$(sec '## Final verdict' | awk '/^```bash$/{f=1;b="";next} f&&/^```$/{f=0; if (b ~ /## 판정/) {printf "%s", b; exit}; next} f{b=b $0 "\n"}')"
-  assert_contains "$fv" "cat <<'QG_FIX_LIST'" "V9 — Final verdict 기록 펜스가 고칠 목록을 따옴표 here-doc 으로 받는다"
+  assert_contains "$fv" "cat <<'QG_FIX_LIST_<8 hex>'" "V9 — Final verdict 기록 펜스가 고칠 목록을 따옴표 here-doc 으로 받는다"
   cat > "$T/v9-fill.py" <<'PY'
 import sys
 f = sys.stdin.read().split("\n")
 # 여는 줄의 따옴표 꼴은 가리지 않는다 — 따옴표가 빠진 펜스도 채워 돌려야 아래 명령 치환 단언이 그 결함을 잰다.
-i = next(k for k, l in enumerate(f) if l.endswith(("<<'QG_FIX_LIST'", '<<"QG_FIX_LIST"', "<<QG_FIX_LIST")))
-j = f.index("QG_FIX_LIST", i + 1)
+# 끝 표지 `QG_FIX_LIST_<8 hex>` 의 값 자리는 실행처럼 16진수 8자(시험 값 deadbeef)로 채운다.
+term, real = "QG_FIX_LIST_<8 hex>", "QG_FIX_LIST_deadbeef"
+i = next(k for k, l in enumerate(f) if l.endswith(("<<'%s'" % term, '<<"%s"' % term, "<<" + term)))
+j = f.index(term, i + 1)
+f[i], f[j] = f[i].replace(term, real), real
 body = ["### 막는 지적", "", "- IMPORTANT src/a.py:41 — 키를 검증하지 않는다 · 고칠 방법: $(touch PWNED)", "",
         "### 제안", "", "(없음)", "", "### 차등 회귀", "", "(없음)"]
 print("\n".join(f[:i + 1] + body + f[j:]).replace("<session-id>", sys.argv[1]).replace("<N>", "1"))

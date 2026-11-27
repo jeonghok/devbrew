@@ -41,6 +41,7 @@ import yaml
 from adjudication import Ledger
 from render_disposition import disposition_lines
 import angles as _angles
+import nofollow_write
 import scope_tuple as _scope_tuple
 import verdict as _verdict
 
@@ -588,11 +589,22 @@ def _read_text(path):
         return None, type(exc).__name__
 
 
-def load_recritic(recritic_path, map_path, diff_path, ledger):
-    """`--recritic` 진입점. 역매핑 항목의 형태도 믿지 않는다. Returns `(doc, dead)`."""
+def load_recritic(recritic_path, map_path, diff_path, ledger, slot_paths=None):
+    """`--recritic` 진입점. 역매핑 항목의 형태도 믿지 않는다. Returns `(doc, dead)`.
+
+    `slot_paths`(`--recritic-slot`)가 있으면 응답을 그 칸 사본들의 끝 값과 먼저 견준다 — 하나라도
+    없거나 틀리면 재비판자는 칸을 끝까지 읽지 않은 것이라 죽은 것으로 센다(사유 `끝 값 없음` ·
+    `읽지 못함`). 끝 값이 모두 맞으면 `QG_INPUT_UNREADABLE:` 줄을 인용해도 실패가 아니다.
+    빈 응답(공백만 — 죽은 재비판자)은 대조의 실패가 아니라 지금의 블록 읽기 사유로 죽는다.
+    """
     text, why = _read_text(recritic_path)
     if text is None:
         return _dead(ledger, f"응답 파일 {recritic_path}: {why}")
+    if slot_paths:
+        import qg_nonce
+        reason = qg_nonce.check(text, list(slot_paths))
+        if reason is not None and reason != qg_nonce.NO_RESPONSE:
+            return _dead(ledger, reason)
     mtext, why = _read_text(map_path)
     if mtext is None:
         return _dead(ledger, f"역매핑 {map_path}: {why}")
@@ -830,7 +842,9 @@ def render(findings, dropped_malformed, report, held_classes, recritic_zero=Fals
     out.append("**고칠 방법:**")
     for i, f in enumerate(findings, 1):
         fix = str(f.get("proposed_fix", "(없음)")).replace("\r", " ").replace("\n", " ")
-        out.append(f"- #{i} `{f.get('file')}:{f.get('line')}` — {fix}")
+        where = "%s:%s" % (f.get("file"), f.get("line"))
+        where = where.replace("\r", " ").replace("\n", " ")
+        out.append(f"- #{i} `{where}` — {fix}")
     return "\n".join(out) + "\n"
 
 
@@ -857,14 +871,18 @@ def _parse_restore(value):
 
 
 def _write_pre_merge(path, items):
-    """dedup 앞의 목록을 tmp 에 쓰고 `os.replace` 한다. 못 쓰면 한 줄만 내고 지나간다."""
-    tmp = path + ".tmp"
+    """dedup 앞의 목록을 같은 폴더의 임시 파일(링크를 따라가지 않는다)에 쓰고 자리를 바꾼다.
+
+    못 쓰면 옛 파일을 지우고(없으면 무시) 한 줄만 내고 지나간다 — 앞 실행의 목록이 이 실행의 것으로 읽히지 않게.
+    """
     try:
         text = yaml.safe_dump({"findings": items}, allow_unicode=True, sort_keys=False)
-        with open(tmp, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        os.replace(tmp, path)
+        nofollow_write.replace_bytes(path, text.encode("utf-8"))
     except Exception as exc:   # 판정은 이 파일에 기대지 않는다 — rc · stdout 을 바꾸지 않는다
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
         print("[synthesize_findings] 합치기 전 목록을 쓰지 못했다 — " + type(exc).__name__,
               file=sys.stderr)
 
@@ -888,6 +906,8 @@ def main(argv=None):
     ap.add_argument("--recritic", default=None)
     ap.add_argument("--recritic-map", default=None)
     ap.add_argument("--recritic-diff", default=None)
+    # 재비판자에게 경로로 넘긴 칸 사본(끝 줄 `qg-slot-end: <값>`) — 여러 번 준다.
+    ap.add_argument("--recritic-slot", action="append", default=[])
     # 사용자가 「낮춘 지적」 게이트에서 되올린 번호 — `L<k>` 쉼표 목록 또는 `all`.
     ap.add_argument("--restore-lowered", default=None)
     ap.add_argument("--pre-merge-out", default=None)
@@ -905,6 +925,10 @@ def main(argv=None):
         _usage("--recritic 과 --recritic-map 은 함께 준다")
     if args.recritic_diff is not None and args.recritic is None:
         _usage("--recritic-diff 는 --recritic 없이 의미가 없다")
+    if args.recritic_slot and args.recritic is None:
+        _usage("--recritic-slot 은 --recritic 없이 의미가 없다")
+    if "" in args.recritic_slot:
+        _usage("--recritic-slot 은 빈 문자열을 받지 않는다 (플래그를 생략하거나 실제 경로를 줘라)")
     restore = _parse_restore(args.restore_lowered)
     if restore is not None and args.recritic is None:
         _usage("--restore-lowered 는 --recritic 없이 의미가 없다 (낮춘 지적은 재비판이 만든다)")
@@ -921,7 +945,7 @@ def main(argv=None):
     ledger = Ledger(items="open")
     if args.recritic is not None:
         doc, adjudicator_dead = load_recritic(
-            args.recritic, args.recritic_map, args.recritic_diff, ledger)
+            args.recritic, args.recritic_map, args.recritic_diff, ledger, args.recritic_slot)
     else:
         doc, adjudicator_dead = None, False
     verdicts, dropped_verdicts = extract_verdicts(doc, ledger=ledger)
@@ -946,8 +970,7 @@ def main(argv=None):
                          + dropped_primary + dropped_promoted)
     review_blocked = ledger.items_unaccounted() or dropped_malformed > 0
     blocking = ledger.blocks() or dropped_malformed > 0
-    if args.pre_merge_out is not None:
-        _write_pre_merge(args.pre_merge_out, sort_findings(findings + promoted))
+    pre_merge = sort_findings(findings + promoted)
     findings = sort_findings(dedup(findings + promoted, ledger=ledger))
     split = count_split(findings)
     n_block = split["CRITICAL"] + split["IMPORTANT"]   # K-4 의 blocking
@@ -1000,6 +1023,10 @@ def main(argv=None):
             args_line = _verdict.render_args(
                 blocking=n_block, optional=split["SUGGESTION"], defect=n_block >= 1,
                 review_blocked=review_blocked, angle_absent=angle_absent, reasons=review_reasons)
+
+    # 합치기 전 목록은 판정 계산이 끝난 뒤에 쓴다 — 판정에서 멈춘(rc 4) 실행에 남지 않는다.
+    if args.pre_merge_out is not None:
+        _write_pre_merge(args.pre_merge_out, pre_merge)
 
     report = ledger.report()
     raw_verdict_count = doc.get("_raw_verdict_count", 0) if isinstance(doc, dict) else 0

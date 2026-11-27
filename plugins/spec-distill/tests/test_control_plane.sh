@@ -260,7 +260,7 @@ for p in plan/roadmaps/pa/roadmap.md plan/roadmaps/pb/plan.md; do
   assert_eq "$row" "검사 불가 — frontmatter source_brief 가 없다" \
     "로드맵 목록: 상태 계산이 검사 불가인 ${p} 에 상태 계산의 첫 사유가 붙는다"
 done
-LS="$T/ledger-scripts"; cp -R "$REAL" "$LS"
+LS="$T/ledger-scripts"; cp -RL "$REAL" "$LS"   # 링크는 설치본처럼 풀어 싣는다(suite_lock.py 는 shared/ 링크)
 printf 'import sys\nprint("JSON 아님")\nsys.exit(2)\n' > "$LS/roadmap_status.py"
 row="$(python3 "$LS/conductor_ledger.py" --root "$P" roadmaps | grep -F "plan/roadmaps/pa/roadmap.md	" | cut -f2-)"
 assert_eq "$row" "검사 불가 — 상태 계산 출력을 읽지 못했다(rc 2)" "로드맵 목록: 상태 계산 출력이 JSON 이 아니면 그 rc 를 사유로"

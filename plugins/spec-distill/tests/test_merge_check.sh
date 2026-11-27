@@ -691,4 +691,20 @@ o="$(python3 "$T/sticky.py" "$ROOT/plugins/spec-distill/scripts" 2>/dev/null)"
 assert_contains "$o" "reraised Sticky" "실행 꼴을 싣지 못해도 원래 예외를 그대로 올린다"
 assert_contains "$o" "[spec-distill] 멈춘 예외(Sticky)에 기준 사본을 어떻게 돌렸는지(listed)를 싣지 못했다(AttributeError) — 머리 줄 꼬리가 실제와 다를 수 있다" "실행 꼴을 싣지 못하면 표준 출력에 한 줄로 알린다"
 
+
+# 20 — fallback_ignores_support: 테스트 명령 설정이 없는 레포의 대체 경로는 배정의 support 행(지원 파일)을 러너로 돌리지 않는다
+#   (AC18 · qg 설계 2026-11-24 §5). 지원 파일(tests/data.txt)이 바뀌어도 그 폴더의 셸 단위만 두 사본에서 한 번씩 돈다.
+mkrepo fs; mkdir -p "$W/tests"
+cat > "$W/tests/t.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$PWD" >> "${MC_LOG:-/dev/null}"
+exit 0
+EOF
+chmod +x "$W/tests/t.sh"; put tests/data.txt a; push_base; put tests/data.txt b; branch_with feature/fs
+out="$(MC_LOG="$T/fs.log" mc --branch feature/fs)"; rc=$?
+assert_eq "$rc" "0" "fallback_ignores_support: 지원 파일이 바뀐 대조가 끝난다 → rc 0"
+assert_contains "$out" "무엇을 돌렸나: 탐지한 러너 shell" "fallback_ignores_support: 돌린 러너는 shell 하나다"
+assert_not_contains "$out" "support" "fallback_ignores_support: support 를 러너로 돌리거나 이름으로 싣지 않는다"
+assert_eq "$(wc -l < "$T/fs.log" | tr -d ' ')" "2" "fallback_ignores_support: 그 폴더의 셸 단위가 두 사본에서 한 번씩 돌았다"
+
 finish
