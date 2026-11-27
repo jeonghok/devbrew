@@ -12,6 +12,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 . "$HERE/fixtures/docreview/cases.sh"
+r1_templates_on
 case_T37_cap_and_extra
 case_config_defaults_disclosed
 case_config_env_wins
@@ -171,4 +172,8 @@ case_AC13_table_row_with_adopted_decision
 case_AC13_table_row_without_decision
 case_AC13_table_rows_bound_with_declare
 case_AC13_table_rows_without_declare
+case_r1_template_isolated
+case_r1_template_follows_doc_content
+case_r1_template_round_start_after_call
+case_r1_template_unusable_falls_back
 finish

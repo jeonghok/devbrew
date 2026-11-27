@@ -48,8 +48,11 @@ carry_fold() {   # 부모 셸에서 — 서브셸이 운반 파일에 남긴 실
   : > "$_CASES_CARRY"
 }
 eval "_cases_finish_orig() $(declare -f finish | sed 1d)"
+_R1_TEMPLATES_OWN=""   # r1_templates_on 이 이 셸에서 만든 템플릿 폴더 — finish 가 이것만 지운다(바깥에서 켜고 들어온 폴더는 두고 간다)
 finish() {   # 운반 파일은 이 파일을 source 한 셸에서만 접고 지운다 — 서브셸의 finish 가 부모 몫을 지우지 않게
-  if [ "$BASH_SUBSHELL" -eq "$_CASES_SUB0" ]; then carry_fold; rm -f "$_CASES_CARRY"; fi
+  if [ "$BASH_SUBSHELL" -eq "$_CASES_SUB0" ]; then carry_fold; rm -f "$_CASES_CARRY"
+    if [ -n "$_R1_TEMPLATES_OWN" ]; then rm -rf "$_R1_TEMPLATES_OWN"; fi
+  fi
   _cases_finish_orig
 }
 put_doc() {   # put_doc <state-dir> <doc> — 이번 라운드의 문서를 원장의 문서 자리에 옮긴다(같은 파일이면 그대로). 공유 픽스처는 덮지 않는다
@@ -212,7 +215,66 @@ F_POST='{"id":"dddd0001#r2.1","lineage":"dddd0001#r2.1","bucket":"dddd0001","ori
 st_yaml() {   # st_yaml <state-dir> <python-expr over st>   — heredoc-in-$() 파싱 함정을 피해 파일로 둔다
   python3 "$FX/st_get.py" "$1/docreview-state.md" "$2"
 }
+# ── r1 템플릿 길 — DOCREVIEW_R1_TEMPLATES(폴더)가 비지 않았을 때만. 같은 키의 1라운드 원장을 한 번 짓고 그 뒤로는 복사한다 ──
+# 템플릿 폴더의 꼴: <T>/r1-<crc>-<len>/(1라운드를 연 원장 폴더의 사본)와 <T>/r1-<crc>-<len>.meta(1행 키 글 · 2행 원본
+# 원장 폴더 · 3행 원본 상태 파일의 수정 시각 ns). .meta 는 폴더를 다 옮긴 뒤 마지막에 쓴다 — .meta 가 없으면 템플릿도 없다.
+# begin-round 가 종료 코드 0 으로 끝난 원장만 템플릿이 된다(실패한 원장은 부를 때마다 새로 짓는다).
+_r1_note() { echo "[cases.sh] r1 템플릿을 쓰지 못했다 — $1. 새로 지은 원장을 쓴다" >&2; }   # _r1_note <까닭>
+_r1_key() {   # _r1_key <profile> <doc> → 키 글 한 줄(탭 이음). 프로필 · 문서를 읽지 못하면 종료 코드 1
+  local kp kd; kp="$(cksum < "$1")" && kd="$(cksum < "$2")" || return 1
+  printf '%s\t%s\t%s\t%s\t%s' "$SCRIPTS" "$1" "$2" "$kp" "$kd"
+}
+_r1_save() {   # _r1_save <templates> <name> <key> <state-dir> — 원장 폴더를 템플릿으로 둔다. 쓰지 못하면 남긴 것을 지우고 1
+  local t="$1/$2.tmp.$$" ns
+  { mkdir -p "$1" && rm -rf "$1/$2.meta" "$1/$2" "$t" && cp -R "$4" "$t" && mv "$t" "$1/$2" \
+    && ns="$(python3 -c 'import os, sys; print(os.stat(sys.argv[1]).st_mtime_ns)' "$4/docreview-state.md")" \
+    && printf '%s\n%s\n%s\n' "$3" "$4" "$ns" > "$1/$2.meta"; } 2>/dev/null && return 0
+  rm -rf "$t" "$1/$2" "$1/$2.meta" 2>/dev/null; return 1
+}
+# 복사본의 원장을 엔진의 load_state · save_state 로 다시 적는다(손으로 고치면 원장 손상으로 읽힌다) — 문서 경로의 원본 폴더
+# 부분만 새 폴더로 바꾸고, 1라운드의 시작 표식이 정수면 (복사본 상태 파일의 수정 시각 − 원본 상태 파일의 수정 시각)만큼
+# 옮긴다(덮어쓰지 않는다 — 없거나 정수가 아닌 표식은 그대로 둔다). 인자: <SCRIPTS> <새 폴더> <원본 폴더> <원본 수정 시각 ns>.
+_R1_REWRITE='import os, sys
+sys.path.insert(0, sys.argv[1])
+import docreview_state as ds
+new, old, ns = sys.argv[2], sys.argv[3], int(sys.argv[4])
+st = ds.load_state(new)
+doc = st.get("doc")
+if not (old and isinstance(doc, str) and doc.startswith(old + "/")):
+    sys.exit(3)
+st["doc"] = new + doc[len(old):]
+rd = (st.get("rounds") or {}).get("1")
+if isinstance(rd, dict) and type(rd.get("started_mtime_ns")) is int:
+    rd["started_mtime_ns"] += os.stat(ds.state_path(new)).st_mtime_ns - ns
+ds.save_state(new, st)
+'
+_r1_templated() {   # _r1_templated <profile> <doc> — r1 과 같은 계약(1라운드를 연 상태 폴더를 한 번 낸다 · mk_state 실패면 1)
+  local T="${DOCREVIEW_R1_TEMPLATES:-}" key c name="" o ns n d s rc
+  if key="$(_r1_key "$1" "$2" 2>/dev/null)"; then
+    c="$(printf '%s' "$key" | cksum)"; name="r1-${c%% *}-${c##* }"
+    if [ -f "$T/$name.meta" ] && [ "$(sed -n 1p "$T/$name.meta" 2>/dev/null)" = "$key" ]; then
+      o="$(sed -n 2p "$T/$name.meta")"; ns="$(sed -n 3p "$T/$name.meta")"
+      if n="$(mktemp -d -t docreview-XXXXXX)" && cp -R "$T/$name/." "$n/" 2>/dev/null; then
+        if python3 -c "$_R1_REWRITE" "$SCRIPTS" "$n" "$o" "$ns" >/dev/null 2>&1; then echo "$n"; return 0; fi
+        _r1_note "원장을 다시 적지 못했다"
+      else _r1_note "복사하지 못했다"; fi
+      if [ -n "$n" ]; then rm -rf "$n"; fi
+      name=""   # 이 템플릿은 못 썼다 — 새로 짓고, 다시 저장하지 않는다(알림은 호출마다 한 줄)
+    fi
+  fi
+  d="$(mk_state "$2" "$1")" || return 1; s="$d/s1.json"; snap "$2" "$s"
+  py docreview_state.py begin-round --state-dir "$d" >/dev/null; rc=$?
+  if [ "$rc" -eq 0 ] && [ -n "$name" ]; then _r1_save "$T" "$name" "$key" "$d" || _r1_note "템플릿 폴더에 쓰지 못했다"; fi
+  echo "$d"
+}
+r1_templates_on() {   # 이 셸의 r1 을 템플릿 길로 켠다 — 이미 켜져 있으면 그대로 둔다. 종료 코드는 늘 0
+  if [ -n "${DOCREVIEW_R1_TEMPLATES:-}" ]; then return 0; fi
+  if _R1_TEMPLATES_OWN="$(mktemp -d -t docreview-r1tpl-XXXXXX)"; then DOCREVIEW_R1_TEMPLATES="$_R1_TEMPLATES_OWN"
+  else _R1_TEMPLATES_OWN=""; echo "[cases.sh] r1 템플릿 폴더를 만들지 못했다 — 템플릿 없이 돈다" >&2; fi
+  return 0
+}
 r1() {   # r1 <profile> <doc> → state dir with round 1 begun
+  if [ -n "${DOCREVIEW_R1_TEMPLATES:-}" ]; then _r1_templated "$1" "$2"; return; fi
   local d s; d="$(mk_state "$2" "$1")" || return 1; s="$d/s1.json"; snap "$2" "$s"
   py docreview_state.py begin-round --state-dir "$d" >/dev/null; echo "$d"
 }
@@ -224,6 +286,55 @@ next_round() {   # next_round <state-dir> <doc-for-this-round> [extra-quote]  �
   py docreview_anchor.py diff "$d/s$((n-1)).json" "$d/s$n.json" --exempt "$d/ex$n.json" > "$d/diff$n.json"
   py docreview_state.py observe-diff --state-dir "$d" > "$d/obs$n.json"
   echo "$d/diff$n.json"
+}
+case_r1_template_isolated() {   # r1 템플릿: 두 번째 r1 은 템플릿을 복사하고, 복사본은 서로 · 템플릿과 상태를 나누지 않는다
+  local DOCREVIEW_R1_TEMPLATES t a b o
+  t="$(mktemp -d -t docreview-r1tpl-XXXXXX)" || { no "r1 템플릿: 폴더를 만들지 못했다"; return; }
+  DOCREVIEW_R1_TEMPLATES="$t"
+  a="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  b="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$(ls "$t" | grep -c '\.meta$')" "1" "r1 템플릿: 같은 프로필 · 문서의 r1 두 번에 템플릿이 하나다"
+  next_round "$a" "$FX/design-sample.md" >/dev/null
+  printf '\nA_ONLY_q4\n' >> "$a/src/design-sample.md"
+  assert_eq "$(st_yaml "$a" 'st["round"]') $(st_yaml "$b" 'st["round"]')" "2 1" "r1 템플릿: A 의 라운드를 넘겨도 B 는 1라운드다"
+  assert_eq "$(grep -c A_ONLY_q4 "$b/src/design-sample.md")" "0" "r1 템플릿: A 의 문서 사본에 쓴 것이 B 에 없다"
+  assert_eq "$(ledger_doc "$b")" "$b/src/design-sample.md" "r1 템플릿: B 의 원장 문서는 B 안의 사본이다"
+  o="$(sed -n 2p "$t"/*.meta 2>/dev/null)"
+  assert_eq "$(grep -rlF "$t" "$b" | wc -l | tr -d ' ') $(grep -rlF "${o:-NO_ORIGIN}" "$b" | wc -l | tr -d ' ')" "0 0" \
+    "r1 템플릿: B 의 어느 파일에도 템플릿 폴더 · 원본 원장 폴더 경로가 없다"
+  rm -rf "$a" "$b" "$t"
+}
+case_r1_template_follows_doc_content() {   # r1 템플릿: 같은 경로의 문서가 바뀌면 새 내용으로 짓는다
+  local DOCREVIEW_R1_TEMPLATES w a b
+  w="$(mktemp -d -t docreview-r1tpl-XXXXXX)" || { no "r1 템플릿(내용): 폴더를 만들지 못했다"; return; }
+  DOCREVIEW_R1_TEMPLATES="$w/t"; mkdir -p "$w/t"
+  cp "$FX/design-sample.md" "$w/doc.md"; a="$(r1 "$PROF_SD/design-doc.md" "$w/doc.md")"
+  printf '\n덧붙인 문장 k2.\n' >> "$w/doc.md"; b="$(r1 "$PROF_SD/design-doc.md" "$w/doc.md")"
+  cmp -s "$b/src/doc.md" "$w/doc.md" && ok "r1 템플릿(내용): 문서가 바뀐 뒤의 원장은 바뀐 내용을 싣는다" \
+    || no "r1 템플릿(내용): 같은 경로의 문서가 바뀌었는데 낡은 템플릿을 받았다"
+  assert_eq "$(ls "$w/t" | grep -c '\.meta$')" "2" "r1 템플릿(내용): 내용이 다르면 템플릿도 따로다"
+  rm -rf "$a" "$b" "$w"
+}
+case_r1_template_round_start_after_call() {   # r1 템플릿: 복사본의 라운드 시작은 r1 을 부르기 전에 쓴 파일보다 뒤다
+  local DOCREVIEW_R1_TEMPLATES w a b
+  w="$(mktemp -d -t docreview-r1tpl-XXXXXX)" || { no "r1 템플릿(시작): 폴더를 만들지 못했다"; return; }
+  DOCREVIEW_R1_TEMPLATES="$w/t"; mkdir -p "$w/t"
+  a="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; rm -rf "$a"
+  : > "$w/before"
+  b="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  assert_eq "$(python3 -c 'import os, sys; print(int(sys.argv[1]) > os.stat(sys.argv[2]).st_mtime_ns)' \
+      "$(st_yaml "$b" 'st["rounds"]["1"]["started_mtime_ns"]')" "$w/before")" "True" \
+    "r1 템플릿(시작): 복사본의 라운드 시작 표식이 r1 을 부르기 전에 쓴 파일보다 뒤다(새로 지은 원장과 같다)"
+  rm -rf "$b" "$w"
+}
+case_r1_template_unusable_falls_back() {   # r1 템플릿: 템플릿 폴더를 쓸 수 없으면 새로 짓고 한 줄 알린다
+  local DOCREVIEW_R1_TEMPLATES w b
+  w="$(mktemp -d -t docreview-r1tpl-XXXXXX)" || { no "r1 템플릿(대체): 폴더를 만들지 못했다"; return; }
+  : > "$w/not-a-dir"; DOCREVIEW_R1_TEMPLATES="$w/not-a-dir"
+  b="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" 2>"$w/err")"
+  assert_eq "$(st_yaml "$b" 'st["round"]' 2>/dev/null)" "1" "r1 템플릿(대체): 템플릿을 못 써도 1라운드 원장을 낸다"
+  assert_eq "$(grep -c '^\[cases\.sh\] r1 템플릿을 쓰지 못했다 — ' "$w/err")" "1" "r1 템플릿(대체): 알림이 정확히 한 줄이다"
+  rm -rf "$b" "$w"
 }
 case_T18_adopt_issues_permit() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
