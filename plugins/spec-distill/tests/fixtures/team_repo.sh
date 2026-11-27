@@ -238,7 +238,8 @@ PY
 
 TEAM_TPL="$T/.team-tpl"
 # repo_copy <새 폴더> <견본> — 견본 폴더의 팀 레포를 새 폴더로 복사하고 원격을 그 사본의 bare 레포로 돌린다. use_repo 도 한다.
-# 견본: team(team_repo 를 막 부른 레포) · new(new_repo 를 막 부른 레포) · 팀 레포가 선 폴더 경로. team · new 는 처음 부를 때 TEAM_TPL 아래에 한 번 짓는다.
+# 견본: team(team_repo 를 막 부른 레포) · new(new_repo 를 막 부른 레포) · 팀 레포가 선 폴더 경로. team · new 는 처음 부를 때 TEAM_TPL 아래에 한 번 짓고,
+# 견본이 세우는 RD · TM · RM 을 TEAM_TPL/<견본>.ok 에 적는다. 이미 지어진 견본을 쓸 때는 그 파일을 읽어 RD · TM · RM 을 세운다.
 # rc 0 = 섰다 · 1 = 서지 못했다(까닭은 표준 오류 한 줄). 견본을 짓지 못함 · 없는 견본 · 새 폴더에 레포가 이미 있음이면 T · W · CLAUDE_CONFIG_DIR 를 옮기지 않는다
 repo_copy() {
   local dst="$1" src="$2" oT oW oC rc=0
@@ -257,7 +258,9 @@ repo_copy() {
         fi
         T="$oT"; W="$oW"; CLAUDE_CONFIG_DIR="$oC"; export CLAUDE_CONFIG_DIR
         if [ "$rc" != "0" ]; then echo "repo_copy: 견본 $2 를 짓지 못했다 — $(cat "$src/out.txt" "$src/led.txt" 2>/dev/null | tr '\n' ' ')" >&2; return 1; fi
-        : > "$src.ok"
+        printf 'RD=%q TM=%q RM=%q\n' "$RD" "$TM" "$RM" > "$src.ok" || { rm -f "$src.ok"; echo "repo_copy: 견본 $2 의 값을 적지 못했다: ${src}.ok" >&2; return 1; }
+      else
+        . "$src.ok" || { echo "repo_copy: 견본 $2 의 값을 읽지 못했다: ${src}.ok" >&2; return 1; }
       fi ;;
   esac
   if [ ! -d "$src/repo" ] || [ ! -d "$src/origin.git" ]; then echo "repo_copy: 견본에 팀 레포가 없다: ${src}" >&2; return 1; fi
