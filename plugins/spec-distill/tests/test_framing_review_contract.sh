@@ -161,6 +161,7 @@ assert_contains "$DB" 'seed_edit_screen.py" preview "$SEED_BASE" "$SEED_ABS"' "A
 assert_contains "$DB" 'seed_edit_screen.py" screen --hunks "$STATE_DIR/hunks.json" --reasons "$STATE_DIR/hunk-reasons.txt" --state-dir "$STATE_DIR")' "AC9: 공시 펜스가 화면을 조립한다(실행 줄 — 확정 직전 표시 없이)"
 for must in '첫 줄은 미리 보기가 낸 판본 `seed_sha256 <값>`' '고르지 않은 덩어리는 「되돌린다」 로 옮긴다' \
             '그 덩어리가 든 질문의 답 전체를 글자 그대로 적는다' '전부 되돌리려면 기타 칸에 적어 주세요' \
+            '질문이 여럿으로 나뉘면 질문마다 맡은 범위가 앞에 붙어(「편집 <처음>–<끝> 가운데 그대로 둘 곳을 고르세요. …」) 한 호출 안의 질문 글이 서로 다르다' \
             '처분하지 않고 그 질문을 다시 묻는다' '화면 조립 실패 — 줄 전체를 보인다' '그때 질문은 권장 없이 낸다' \
             '목록에 더하지 못하면 되돌리기 · 기록 · 교체를 하지 않습니다' '미리 보기는 `hunks` 를 부르지 않습니다'; do
   assert_contains "$DISC" "$must" "AC9: 저자 편집 공시가 적는다 — ${must}"

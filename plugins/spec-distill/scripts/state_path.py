@@ -42,7 +42,8 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 from legacy_names import (  # noqa: E402
-    CONTEXT_AUDIT, CONTEXT_BRIEF, CONTEXT_STATE, CONTEXT_TAIL, DEFAULT_DIR, OLD_DEFAULT_DIR, kind_matches,
+    CONTEXT_AUDIT, CONTEXT_BRIEF, CONTEXT_STATE, CONTEXT_TAIL, DEFAULT_DIR, OLD_DEFAULT_DIR, OLD_STATE_COMMAND,
+    OLD_TAIL, kind_matches, rename_notice,
 )
 
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
@@ -338,12 +339,13 @@ def _path_problem(d: Path, root: Path, stem: str) -> str | None:
 
 
 def interview_state_path(topic: str, date: str | None = None, cwd: str | None = None,
-                         hhmm: str | None = None) -> tuple[Path | None, list[str]]:
+                         hhmm: str | None = None, old: bool = False) -> tuple[Path | None, list[str]]:
     """`<작업 트리 루트>/<의도 폴더>/<날짜>-<topic>-context.state.md` — 의도 폴더는 `interview_dir()`(새 폴더).
 
     계산한 세 자리(상태 · brief · audit) 중 이미 있는 파일의 `type:` 이 그 자리의 종류(옛 글자 포함)와 다르면
     경로를 내지 않는다 — seed(`intent-seed`) · seed audit(`intent-seed-audit`) 위에 컨텍스트 쌓기를 시작하지 않는다.
     brief 자리에 `context-brief`(옛 꼴 종류 글자도 같다)가 있으면(끝난 일) `<topic>-<HHMM>` 자리를 대신 낸다.
+    old 면 옛 의도 폴더와 옛 꼴 이름 끝(`OLD_TAIL`)으로 같은 계산을 한다 — 옛 하위 명령이 쓴다.
     """
     msgs: list[str] = []
     if not topic or not KEBAB.fullmatch(topic):
@@ -356,11 +358,12 @@ def interview_state_path(topic: str, date: str | None = None, cwd: str | None = 
     root, is_git = worktree_root(cwd)
     if not is_git:
         msgs.append("[spec-distill] git 저장소가 아니다 — {0} 기준으로 경로를 냈다".format(root))
-    d, why = interview_dir(root, is_git)
+    new_d, old_d, why = intent_dirs(root, is_git)
+    d, tail = (old_d, OLD_TAIL) if old else (new_d, CONTEXT_TAIL)
     if d is None:
         msgs.append(why)
         return None, msgs
-    stem = "{0}-{1}{2}".format(date, topic, CONTEXT_TAIL)
+    stem = "{0}-{1}{2}".format(date, topic, tail)
     why = _path_problem(d, root, stem) or _slot_problem(d, stem)
     if why:
         msgs.append(why)
@@ -369,7 +372,7 @@ def interview_state_path(topic: str, date: str | None = None, cwd: str | None = 
         # 위 검사를 지났으니 brief 자리의 type 은 context-brief(옛 꼴 종류 글자 포함)다 — 끝난 일.
         done = d / (stem + ".md")
         hhmm = hhmm or datetime.datetime.now().strftime("%H%M")
-        stem2 = "{0}-{1}-{2}{3}".format(date, topic, hhmm, CONTEXT_TAIL)
+        stem2 = "{0}-{1}-{2}{3}".format(date, topic, hhmm, tail)
         new_state = d / (stem2 + ".state.md")
         why = _path_problem(d, root, stem2) or _slot_problem(d, stem2)
         if why:
@@ -430,6 +433,11 @@ def main(argv: list[str]) -> int:
         print("usage: state_path.py {state-root|session-id|context-state} …", file=sys.stderr)
         return 2
     sub = argv[1]
+    old_name = sub == OLD_STATE_COMMAND
+    if old_name:   # 옛 이름 — 한 판 동안 PR #332 앞과 같게 돈다(옛 의도 폴더 · 옛 꼴 이름), 알림 한 줄
+        print("[spec-distill] " + rename_notice("state_path.py 하위 명령", OLD_STATE_COMMAND, CONTEXT_STATE),
+              file=sys.stderr)
+        sub = CONTEXT_STATE
     if sub in ("state-root", "state-root-for"):
         pos, flags, unknown = [], 0, False
         for arg in argv[2:]:
@@ -481,7 +489,8 @@ def main(argv: list[str]) -> int:
                 if i + 1 < len(argv):
                     return argv[i + 1]
             return None
-        path, msgs = interview_state_path(opt("--topic") or "", opt("--date"), opt("--cwd"), opt("--time"))
+        path, msgs = interview_state_path(opt("--topic") or "", opt("--date"), opt("--cwd"), opt("--time"),
+                                          old=old_name)
         for m in msgs:
             print(m, file=sys.stderr)
         if path is None:

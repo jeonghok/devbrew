@@ -129,7 +129,7 @@ python3 "$SD/scripts/roadmap_write.py" check --brief "$BRIEF" --audit "${BRIEF%.
 
    - `roadmap-table: OK …` 면 승인 질문으로 간다.
    - `roadmap-table: FAIL …` 이면 그 줄과 목록을 보인 채 승인 질문으로 간다. 0 이 아닌 수가 있는 표는 생성기가 받지 않는다(`## 5.` 의 생성이 rc 1 로 돌아온다).
-   - 첫 줄이 `brief-risk: FAIL` 이면 결과물 쪽 결함이다 — `## 되돌아가는 길` 의 둘째 갈래로 간다. 그 밖의 `roadmap-table: UNKNOWN <사유>` 면 표의 꼴을 고친 뒤 다시 돌린다.
+   - 첫 줄이 `brief-risk: FAIL 못 읽었다: <사유>` 면 사유를 보이고 멈추고, 그 밖의 `brief-risk: FAIL` 은 결과물 쪽 결함이라 `## 되돌아가는 길` 의 둘째 갈래로 간다. `roadmap-table: UNKNOWN <사유>` 는 표의 결함이다 — 표의 꼴을 고친 뒤 다시 돌린다.
    - rc 2 는 사용법 오류다 — 펜스가 글자 그대로인지 맞춘 뒤 한 번만 다시 돌리고, 또 rc 2 면 출력을 보이고 멈춘다.
 
 ## 4. 고치기 · 승인
@@ -145,7 +145,7 @@ python3 "$SD/scripts/roadmap_write.py" check --brief "$BRIEF" --audit "${BRIEF%.
 SD="${CLAUDE_PLUGIN_ROOT}"; [ -n "$SD" ] || { echo "[spec-distill] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 RMDIR="$(python3 "$SD/scripts/repo_defaults.py" get roadmaps_dir)" || RMDIR=""
 [ -n "$RMDIR" ] || { echo "[spec-distill] 로드맵 폴더를 정하지 못했다 — 위 줄의 사유를 고친 뒤 다시 돌린다" >&2; exit 1; }
-BRIEF_REL="$(git -C "$(dirname -- "<결과물 절대경로>")" ls-files --full-name -- "<결과물 절대경로>")"
+BRIEF_REL="$(git -C "$(dirname -- "<결과물 절대경로>")" -c core.quotePath=false ls-files --full-name -- "<결과물 절대경로>")"
 [ -n "$BRIEF_REL" ] || { echo "[spec-distill] 결과물의 레포 상대경로를 git 에서 얻지 못했다(커밋되지 않았거나 레포 밖이다) — 진입 검사부터 다시 돈다" >&2; exit 1; }
 IFS= read -r title <<'DEVBREW_ROADMAP_TITLE_EOF'
 <주제 한 줄>
