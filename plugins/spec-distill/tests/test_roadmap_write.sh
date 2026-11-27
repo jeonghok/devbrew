@@ -131,7 +131,8 @@ assert_eq "$(tree_of "$W/docs/rm")" "$(printf './E1.md\n./E2.md\n./roadmap.md')"
 digest() { (cd "$1" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do printf '%s ' "$f"; shasum -a 256 < "$f"; done) | shasum -a 256 | cut -d' ' -f1; }
 # 기준 값 갱신(front-stage-restructure 계획 1): 로드맵 템플릿 「결정 기록」 안내의 단계 낱말 한 곳(인터뷰 → 컨텍스트 쌓기)만 달라졌고 나무의 나머지는 그대로다.
 # 기준 값 갱신(front-stage-restructure 계획 2): 묶음 §0 의 설계문서 머리 키 안내 한 문장(source_interview: → source_intent:)만 달라졌고 나무의 나머지는 그대로다.
-assert_eq "$(digest "$W/docs/rm")" "80bbc20e89b7bc18285b503a08dbf4dbe10adaca384700b4c67f2da5a699dea7" "R1 AC3: 옛 형식 create 의 나무가 변경 전과 바이트가 같다"
+# 기준 값 갱신(official-switches-state 계획 2): 로드맵 템플릿 「지휘 절차」 첫 문단에서 은퇴한 통째 끄기 안내 한 문장만 빠졌고 나무의 나머지는 그대로다.
+assert_eq "$(digest "$W/docs/rm")" "4ad43b1a213455251f062e8c9e1f6383a03524f07ad02f2ec10b84f8bdfd6db9" "R1 AC3: 옛 형식 create 의 나무가 변경 전과 바이트가 같다"
 assert_file_grep "$W/docs/rm/E1.md" 'frontmatter `source_intent:` 에 이 묶음 경로를' "묶음 본문이 설계문서 머리 키로 source_intent 를 일러 준다(AC20)"
 assert_file_absent "$W/docs/rm/E1.md" 'source_interview' "묶음 본문에 옛 머리 키가 없다(양성 짝: 위 단언)"
 assert_eq "$(four_empty docs/rm/roadmap.md)" "ok" "create: 검사기 네 목록이 빈 목록"
