@@ -14,8 +14,19 @@ T="$T0"
 err() { cat "$T/b.err"; }
 SPECL="spec 승인 · 2026-11-20 · 「승인 — 계획 담당자에게」"
 
+# ── 0 — 한 번 지어 복사하는 팀 레포(repo_copy): 사본은 원격을 따로 갖고 견본 경로를 품지 않는다 ──
+repo_copy "$T0/c0a" new && repo_copy "$T0/c0b" new && ok "0: 견본에서 사본 둘을 떴다" || { no "0: 사본을 뜨지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+assert_eq "$(git -C "$T0/c0a/repo" remote get-url origin)" "$T0/c0a/origin.git" "0: 사본의 원격은 그 사본의 bare 레포다"
+assert_eq "$(grep -rlF --exclude-dir=objects -- "$TEAM_TPL" "$T0/c0a/repo" "$T0/c0a/origin.git" "$T0/c0a/claude" 2>/dev/null)" "" "0: 사본의 레포 · 원격 · 세션 기록에 견본 경로가 남지 않는다"
+use_repo "$T0/c0a" && g checkout -q -b c0/only-a main && g push -q origin c0/only-a
+assert_eq "$(git -C "$T0/c0a/origin.git" for-each-ref --format='%(refname)' refs/heads/c0/only-a)" "refs/heads/c0/only-a" "0: 양성 대조 — 그 사본의 원격에는 올라갔다"
+assert_eq "$(git -C "$T0/c0b/origin.git" for-each-ref --format='%(refname)' refs/heads/c0/only-a)" "" "0: 한 사본의 push 가 다른 사본의 원격에 보이지 않는다"
+assert_eq "$(git -C "$TEAM_TPL/new/origin.git" for-each-ref --format='%(refname)' refs/heads/c0/only-a)" "" "0: 견본의 원격에도 보이지 않는다"
+repo_copy "$T0/c0a" new 2>/dev/null; assert_eq "$?" "1" "0: 레포가 이미 선 폴더에는 뜨지 않는다"
+repo_copy "$T0/c0c" "$T0/no-such-template" 2>/dev/null; assert_eq "$?" "1" "0: 없는 견본은 1"
+
 # ── 묶음 A — 설계 흐름(E1)과 설계 없는 흐름(E2) ──
-new_repo "$T0/a" && ok "A: 팀 레포를 세웠다(${TM})" || { no "A: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+repo_copy "$T0/a" new && ok "A: 팀 레포를 세웠다(${TM})" || { no "A: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 E1="$TM/jobs/E1"
 E2="$TM/jobs/E2"
 E3="$TM/jobs/E3"
@@ -107,7 +118,7 @@ check 0 "16: 흐름 승인 줄이 있으면 나간다" --job E2 --stage implemen
 g checkout -q main
 
 # ── 묶음 B — 관문을 끄는 길(E3 는 이 레포에서 처음 브랜치를 갖는다) ──
-new_repo "$T0/b" && ok "B: 팀 레포를 세웠다" || { no "B: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+repo_copy "$T0/b" new && ok "B: 팀 레포를 세웠다" || { no "B: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 g checkout -q -b feature/tm-e3 main
 put "$E3/design.md" "E3 설계 한 줄"
 decide E3 "$SPECL"
@@ -129,7 +140,7 @@ g revert --no-edit HEAD >/dev/null && push_main
 DEVBREW_SPEC_DISTILL_DISABLE=1 DEVBREW_SKIP_HOOKS=spec-distill:human-gate DEVBREW_SPEC_DISTILL_GATE=off DEVBREW_HUMAN_GATE=끔 human_gate=끔 check 1 "19: 환경 변수로는 관문이 꺼지지 않는다" --job E3 --stage plan --plan 1
 
 # ── 묶음 C — 계획 n 의 브랜치가 아직 없다(team-files: 에픽의 첫 보내기는 늘 이 경우) ──
-new_repo "$T0/c" && ok "C: 팀 레포를 세웠다" || { no "C: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+repo_copy "$T0/c" new && ok "C: 팀 레포를 세웠다" || { no "C: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 g checkout -q -b feature/tm-e1 main
 put "$E1/design.md" "E1 설계 한 줄"
 g commit -qm "E1 설계" && push_br feature/tm-e1
@@ -150,7 +161,7 @@ assert_contains "$(err)" "확인 못 함" "C3: 사유는 확인 못 함이다"
 assert_not_contains "$(err)" "가 아직 없다" "C3: 설계를 못 읽은 사유가 아니면 브랜치 없음 힌트를 붙이지 않는다(K20)"
 
 # ── 묶음 D — 연속 실패 멈춤 · 머지된 계획(AC13 · AC14). 이 묶음의 E1 은 새 레포에서 설계 · 계획 · 승인을 갖춘다 ──
-new_repo "$T0/d" && ok "D: 팀 레포를 세웠다" || { no "D: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+repo_copy "$T0/d" new && ok "D: 팀 레포를 세웠다" || { no "D: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 g checkout -q -b feature/tm-e1 main
 put "$E1/design.md" "$(printf '# 설계\n\n본문 하나\n\n## Acceptance Criteria\n\n- AC1: 자리표시\n')"
 g commit -qm "E1 설계" && push_br feature/tm-e1
@@ -240,7 +251,7 @@ check 0 "30: 계획 2 는 머지되지 않았으니 묶음이 나간다(양성 �
 assert_not_contains "$(err)" "머지됐다" "30: 계획 2 는 머지되지 않았다"
 
 # ── 묶음 F — 한 번도 브랜치를 만들지 않은 E3 · E2(머지 검사의 양성 대조) ──
-new_repo "$T0/f" && ok "F: 팀 레포를 세웠다" || { no "F: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+repo_copy "$T0/f" new && ok "F: 팀 레포를 세웠다" || { no "F: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 check 0 "31: 브랜치를 만든 적 없는 E3 의 design 은 나간다" --job E3 --stage design
 assert_contains "$(grep '^알림: ' "$T/b.txt")" "과제 브랜치 feature/tm-e3 가 아직 없다" "31: 브랜치 없음 알림"
 check 1 "31: 같은 E3 의 plan 은 승인 줄에서 멈춘다" --job E3 --stage plan --plan 1
@@ -251,7 +262,7 @@ assert_contains "$(err)" '`흐름 승인` 줄이 없다' "34: 사유는 흐름 �
 assert_not_contains "$(err)" "머지됐다" "34: 없는 브랜치를 머지로 읽지 않는다(32 · 33 의 양성 대조)"
 
 # ── 묶음 G — 설계 없는 흐름의 E2 가 머지된다 ──
-new_repo "$T0/g" && ok "G: 팀 레포를 세웠다" || { no "G: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+repo_copy "$T0/g" new && ok "G: 팀 레포를 세웠다" || { no "G: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 g checkout -q -b feature/tm-e2 main
 approved "흐름 승인" E2 - - 2026-11-22
 put "$E2/results/implement-1.md" "$(printf -- '---\ntype: job-result\nstage: implement\nattempt: 1\nrole: worker\nhead: %s\n---\n\n산출물: src/e2/x.md\n끝 — %s\n' "$(g rev-parse HEAD)" "$(g rev-parse HEAD)")"
@@ -287,9 +298,14 @@ PY
   g add -- "$E1/INTENT.md" && g commit -qm "INTENT 고침" && push_br feature/tm-e1
 }
 
+# 견본 T1–T3 — T1 = e1_state · T2 = T1 + spec 승인 · T3 = T2 + 계획 검토. 묶음 K · O 는 T1, H · L · P 는 T2, I · N 은 T3 에서 뜬다
+{ repo_copy "$T0/t1" new && e1_state \
+    && repo_copy "$T0/t2" "$T0/t1" && approved "spec 승인" E1 - - 2026-11-20 && push_br feature/tm-e1 \
+    && repo_copy "$T0/t3" "$T0/t2" && approved "계획 검토" E1 1 - 2026-11-21 && push_br feature/tm-e1; } \
+  && ok "견본 T1–T3 을 지었다" || { no "견본 T1–T3 을 짓지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+
 # 묶음 H — E1(설계 흐름) · E2(설계 없는 흐름). 41 – 49
-new_repo "$T0/h" && ok "H: 팀 레포를 세웠다" || { no "H: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
-e1_state && approved "spec 승인" E1 - - 2026-11-20 && push_br feature/tm-e1
+repo_copy "$T0/h" "$T0/t2" && ok "H: 팀 레포를 세웠다" || { no "H: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md)" "1" "41: 계획 검토 줄이 없으면 구현 결과를 받지 않는다(AC10)"
 case "$(sed -n 1p "$T/c.txt")" in "결과 대조: 거절 "*) ok "41: 첫 줄이 거절" ;; *) no "41: 첫 줄이 거절 — $(sed -n 1p "$T/c.txt")" ;; esac
 assert_contains "$(reasons)" '`계획 검토` 줄이 없다' "41: 거절 사유"
@@ -335,7 +351,7 @@ approved "흐름 승인" E2 - - 2026-11-22 && push_br feature/tm-e2
 assert_eq "$(rcheck --job E2 --result implement-1.md)" "0" "49: 흐름 승인 줄이 있으면 받는다"
 
 # 묶음 J — E3(설계 흐름)의 plan · design 결과. 50 · 51
-new_repo "$T0/j" && ok "J: 팀 레포를 세웠다" || { no "J: 팀 레포를 세우지 못했다"; finish; exit 1; }
+repo_copy "$T0/j" new && ok "J: 팀 레포를 세웠다" || { no "J: 팀 레포를 세우지 못했다"; finish; exit 1; }
 g checkout -q -b feature/tm-e3 main
 put "$E3/design.md" "$(printf '# 설계\n\n본문\n\n## Acceptance Criteria\n\n- AC1: 자리표시\n')"
 g commit -qm "E3 설계" && push_br feature/tm-e3
@@ -352,8 +368,7 @@ rcheck --job E3 --result plan-plan-1-1.md >/dev/null
 assert_not_contains "$(reasons)" 'spec 승인' "51: spec 승인 줄이 있으면 그 사유가 없다(양성 대조)"
 
 # 묶음 K — 관문을 끈 새 과제 E1. 52
-new_repo "$T0/k" && ok "K: 팀 레포를 세웠다" || { no "K: 팀 레포를 세우지 못했다"; finish; exit 1; }
-e1_state
+repo_copy "$T0/k" "$T0/t1" && ok "K: 팀 레포를 세웠다" || { no "K: 팀 레포를 세우지 못했다"; finish; exit 1; }
 decide E1 "$SPECL" && decide E1 "계획 검토 · 2026-11-21 · 「계획대로 구현한다」" && grep -q '^- 계획 검토 · ' "$W/$E1/INTENT.md" && ok "52: 준비 — 손으로 적은 줄 둘" || no "52: 준비 — 손으로 적은 줄 둘"
 g add -- "$E1/INTENT.md" && g commit -qm "손으로 적은 줄" && push_br feature/tm-e1
 g checkout -q main
@@ -365,8 +380,7 @@ g revert --no-edit HEAD >/dev/null && push_main
 assert_eq "$(rcheck --job E1 --result implement-plan-1-1.md --branch feature/tm-e1)" "1" "52: 되돌리면 받지 않는다(양성 대조)"
 
 # 묶음 I — human-check. 이 묶음의 E1 은 새 레포에서 설계 · 계획 · 결과 · 승인 둘을 갖춘다. 53 · 54 · 58
-new_repo "$T0/i" && ok "I: 팀 레포를 세웠다" || { no "I: 팀 레포를 세우지 못했다"; finish; exit 1; }
-e1_state && approved "spec 승인" E1 - - 2026-11-20 && approved "계획 검토" E1 1 - 2026-11-21 && push_br feature/tm-e1
+repo_copy "$T0/i" "$T0/t3" && ok "I: 팀 레포를 세웠다" || { no "I: 팀 레포를 세우지 못했다"; finish; exit 1; }
 BEFORE="$(cksum < "$W/$E1/INTENT.md")|$(g status --short -- "$TM")"
 assert_eq "$(led human-check --roadmap "$RM" --job E1)" "0" "53: 모든 줄이 지나면 0"
 assert_eq "$(wc -l < "$T/led.txt" | tr -d ' ')" "2" "53: 줄 수는 사람 줄 수와 같다"
@@ -394,8 +408,7 @@ assert_eq "$(awk 'prev !~ /^지남 — / && prev != "" && $0 ~ /^    사유: / {
 assert_eq "$(grep -c '^줄 없음' "$T/led.txt")" "0" "54: 줄이 있는 종류는 줄 없음에 다시 내지 않는다"
 
 # 묶음 L — 승인 줄 없이 받음 줄만 손으로 적었다. 55
-new_repo "$T0/l" && ok "L: 팀 레포를 세웠다" || { no "L: 팀 레포를 세우지 못했다"; finish; exit 1; }
-e1_state && approved "spec 승인" E1 - - 2026-11-20 && push_br feature/tm-e1
+repo_copy "$T0/l" "$T0/t2" && ok "L: 팀 레포를 세웠다" || { no "L: 팀 레포를 세우지 못했다"; finish; exit 1; }
 decide E1 "- 결과 받음 · 2026-11-24 · 「implement-plan-1-1.md · $(g rev-parse HEAD) · 결과 대조: 통과 — 자리표시」"
 g add -- "$E1/INTENT.md" && g commit -qm "손으로 적은 받음 줄" && push_br feature/tm-e1
 assert_eq "$(led human-check --roadmap "$RM" --job E1)" "1" "55: 계획 검토 줄이 없으면 1"
@@ -405,7 +418,7 @@ assert_eq "$(grep -c '^지남 — - spec 승인' "$T/led.txt")" "1" "55: spec �
 assert_not_contains "$(cat "$T/led.txt")" '줄 없음 — `spec 승인`' "55: spec 승인은 줄 없음이 아니다"
 
 # 묶음 M — 자취만 있고 줄이 없다. 56 · 57
-new_repo "$T0/m" && ok "M: 팀 레포를 세웠다" || { no "M: 팀 레포를 세우지 못했다"; finish; exit 1; }
+repo_copy "$T0/m" new && ok "M: 팀 레포를 세웠다" || { no "M: 팀 레포를 세우지 못했다"; finish; exit 1; }
 g checkout -q -b feature/tm-e2 main
 put "src/e2/x.md" "산출물" && g commit -qm "E2 산출물" && push_br feature/tm-e2
 hand_result E2 implement - 1 "산출물: src/e2/x.md"
@@ -423,8 +436,7 @@ mkdir -p "$W/docs/old" && printf '%s\n' '---' 'type: roadmap' '---' '' '# 옛 �
 assert_eq "$(led human-check --roadmap docs/old/roadmap.md --job E1)" "2" "59: 옛 형식 로드맵은 2"
 
 # 묶음 N — 계획 번호 없는 implement 결과(설계 흐름). I1: 켜져 있으면 사유를 또렷이, 꺼졌으면 J9(줄의 유무)
-new_repo "$T0/n" && ok "N: 팀 레포를 세웠다" || { no "N: 팀 레포를 세우지 못했다"; finish; exit 1; }
-e1_state && approved "spec 승인" E1 - - 2026-11-20 && approved "계획 검토" E1 1 - 2026-11-21 && push_br feature/tm-e1
+repo_copy "$T0/n" "$T0/t3" && ok "N: 팀 레포를 세웠다" || { no "N: 팀 레포를 세우지 못했다"; finish; exit 1; }
 hand_result E1 implement - 1 "AC1: 구현됨 — 자리표시"
 assert_eq "$(rcheck --job E1 --result implement-1.md)" "1" "N1: 켜져 있으면 계획 번호 없는 implement 결과는 받지 않는다"
 assert_contains "$(reasons)" "결과 파일 이름에 계획 번호가 없어 \`계획 검토\` 관문을 볼 수 없다" "N1: 사유가 또렷하다"
@@ -436,8 +448,7 @@ assert_eq "$(rcheck --job E1 --result implement-1.md --branch feature/tm-e1)" "0
 assert_not_contains "$(cat "$T/c.txt")" "계획 번호가 없어" "N2: 꺼졌으면 그 사유가 없다"
 
 # 묶음 O — 관문을 끈 채 날짜 칸이 틀린 손 줄. I2: human-check 와 결과 대조가 같은 줄의 유무를 본다
-new_repo "$T0/o" && ok "O: 팀 레포를 세웠다" || { no "O: 팀 레포를 세우지 못했다"; finish; exit 1; }
-e1_state
+repo_copy "$T0/o" "$T0/t1" && ok "O: 팀 레포를 세웠다" || { no "O: 팀 레포를 세우지 못했다"; finish; exit 1; }
 decide E1 "$SPECL" && decide E1 "계획 검토 · 2026-11-21 · 「계획대로 구현한다」"
 g add -- "$E1/INTENT.md" && g commit -qm "손으로 적은 줄" && push_br feature/tm-e1
 edit_intent "계획 검토 · 2026-11-21" "계획 검토 · 2026/11/21"   # 파일을 손으로 고쳐 날짜 칸을 깬다(decide 는 이 꼴을 받지 않는다)
@@ -464,8 +475,7 @@ assert_eq "$(led human-check --roadmap "$RM" --job E1)" "0" "O3: human-check 도
 assert_eq "$(grep -c '^지남 — ' "$T/led.txt")" "2" "O3: 두 줄 모두 지남"
 
 # 묶음 P — 결과 파일은 없고 꼴 맞는 받음 줄만 있다. I3: 받음 줄 모으기가 끊기면 RED
-new_repo "$T0/p" && ok "P: 팀 레포를 세웠다" || { no "P: 팀 레포를 세우지 못했다"; finish; exit 1; }
-e1_state && approved "spec 승인" E1 - - 2026-11-20 && push_br feature/tm-e1
+repo_copy "$T0/p" "$T0/t2" && ok "P: 팀 레포를 세웠다" || { no "P: 팀 레포를 세우지 못했다"; finish; exit 1; }
 decide E1 "- 결과 받음 · 2026-11-24 · 「implement-plan-1-1.md · $(g rev-parse HEAD) · 결과 대조: 통과 — 자리표시」"
 g rm -q -- "$TM/jobs/E1/results/implement-plan-1-1.md" && g add -- "$E1/INTENT.md" && g commit -qm "결과 파일을 지우고 받음 줄만 둔다" && push_br feature/tm-e1
 assert_eq "$(g ls-tree -r --name-only feature/tm-e1 | grep -c 'results/implement-plan-1-1.md')" "0" "P: 준비 — 결과 파일이 어느 끝에도 없다"

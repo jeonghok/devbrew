@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 팀 로드맵 셸 테스트가 함께 source 하는 팀 레포 만들기. 부르는 쪽이 ROOT · T 를 정하고 shared/tests/assert.sh 를 먼저 source 한다.
 # source 하면 S · RW · RS · W · g · js · status · put · decide · sync 와 사람 줄 도우미(SID · SID2 · CL · SFX · led · claim ·
-# answer · human · approved)와 시작 묶음 도우미(bundle · refused · check · finish_attempt · write_line · push_br · push_main · rcheck · reasons · hand_result · use_repo · new_repo)가 생기고, team_repo 를 부르면 W 에 레포가 선다.
+# answer · human · approved)와 시작 묶음 도우미(bundle · refused · check · finish_attempt · write_line · push_br · push_main · rcheck · reasons · hand_result · use_repo · new_repo · repo_copy)가 생기고, team_repo 를 부르면 W 에 레포가 선다.
 export PYTHONDONTWRITEBYTECODE=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 S="$ROOT/plugins/spec-distill/scripts"
 RW="$S/roadmap_write.py"
@@ -234,4 +234,35 @@ open(path, "w", encoding="utf-8").write(text[:line_end] + extra + text[line_end:
 PY
   g add -- "$TM" && g commit -qm "팀 tm" && g push -q origin main && g fetch -q origin
   g remote set-head origin main
+}
+
+TEAM_TPL="$T/.team-tpl"
+# repo_copy <새 폴더> <견본> — 견본 폴더의 팀 레포를 새 폴더로 복사하고 원격을 그 사본의 bare 레포로 돌린다. use_repo 도 한다.
+# 견본: team(team_repo 를 막 부른 레포) · new(new_repo 를 막 부른 레포) · 팀 레포가 선 폴더 경로. team · new 는 처음 부를 때 TEAM_TPL 아래에 한 번 짓는다.
+# rc 0 = 섰다 · 1 = 견본을 짓지 못함 · 없는 견본 · 새 폴더에 레포가 이미 있음(까닭은 표준 오류 한 줄 · T · W · CLAUDE_CONFIG_DIR 는 그대로)
+repo_copy() {
+  local dst="$1" src="$2" oT oW oC rc=0
+  case "$2" in
+    team|new)
+      src="$TEAM_TPL/$2"
+      if [ ! -e "$src.ok" ]; then
+        oT="$T"; oW="$W"; oC="$CLAUDE_CONFIG_DIR"
+        rm -rf "$src"
+        if [ "$2" = "team" ]; then
+          mkdir -p "$src" && use_repo "$src" && team_repo || rc=1
+        else
+          repo_copy "$src" team && g add -- "${RD}leader" "${RD}designer" "${RD}writer" "${RD}worker" "${RD}HANDBOOK.md" \
+            && g commit -qm "공통 문서" && g push -q origin main && g fetch -q origin && claim || rc=1
+        fi
+        T="$oT"; W="$oW"; CLAUDE_CONFIG_DIR="$oC"; export CLAUDE_CONFIG_DIR
+        if [ "$rc" != "0" ]; then echo "repo_copy: 견본 $2 를 짓지 못했다 — $(cat "$src/out.txt" "$src/led.txt" 2>/dev/null | tr '\n' ' ')" >&2; return 1; fi
+        : > "$src.ok"
+      fi ;;
+  esac
+  if [ ! -d "$src/repo" ] || [ ! -d "$src/origin.git" ]; then echo "repo_copy: 견본에 팀 레포가 없다: ${src}" >&2; return 1; fi
+  if [ -e "$dst/repo" ] || [ -e "$dst/origin.git" ]; then echo "repo_copy: 새 폴더에 레포가 이미 있다: ${dst}" >&2; return 1; fi
+  mkdir -p "$dst" && cp -R "$src/." "$dst/" || { echo "repo_copy: 견본을 복사하지 못했다: ${src} → ${dst}" >&2; return 1; }
+  use_repo "$dst"
+  g remote set-url origin "$dst/origin.git" || return 1
+  g fetch -q origin
 }
