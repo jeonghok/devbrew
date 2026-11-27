@@ -54,6 +54,21 @@ else
   no "pytest 가 없어 1번 장면을 돌리지 못했다 — 이 기계에 pytest 를 깔고 다시 돈다"
 fi
 
+# 1a — pytest: 영어가 아닌 글자가 든 폴더의 테스트도 단위로 짝지어 돈다(git 의 core.quotePath 기본값은
+# 그런 경로를 따옴표 · 8진 이스케이프로 감싸 낸다 — 그 글자 그대로 넘기면 단위가 빠져 새 실패가 사라진다)
+if python3 -m pytest --version >/dev/null 2>&1; then
+  mkrepo pk; put pytest.ini '[pytest]'
+  put "tests/한글/test_k.py" $'def test_a():\n    assert True'
+  push_base
+  put "tests/한글/test_k.py" $'def test_a():\n    assert True\n\ndef test_c():\n    assert 0'
+  branch_with feature/pk
+  out="$(mc --branch feature/pk)"; rc=$?
+  assert_eq "$rc" "1" "pytest: 영어가 아닌 글자가 든 폴더의 새 실패 → rc 1"
+  assert_contains "$out" "tests/한글/test_k.py::test_c" "pytest: 영어가 아닌 글자가 든 폴더의 새 실패 이름"
+else
+  no "pytest 가 없어 1a 번 장면을 돌리지 못했다 — 이 기계에 pytest 를 깔고 다시 돈다"
+fi
+
 # 1b — pytest: 양쪽 빨간 파일 안에서 fixture 가 터지는 새 테스트(ERROR 줄)도 새 실패다
 if python3 -m pytest --version >/dev/null 2>&1; then
   mkrepo pe; put pytest.ini '[pytest]'

@@ -163,7 +163,7 @@ out="$(run_rs)"; rc=$?
 assert_eq "$rc" "0" "AC22: 펜스 rc — 기록 파일이 있으면 0"
 assert_eq "$(tail -1 <<<"$out")" "raw-source: FOUND ${RSD}/x-interview-seed.audit.md" "AC22: 기록 파일 있음 → FOUND 판결 줄"
 fi
-assert_eq "$(grep -cF '풀이를 고르는 질문에는 추천을 달지 않는다 — 풀이는 저자가 쓴 것이다' "$RF")" "1" "AC13: 풀이 확인 질문은 추천을 달지 않고 이유를 적는다"
+assert_eq "$(grep -cF '풀이를 고르는 질문에는 추천을 달지 않는다 — 풀이는 저자가 쓴 것이다. 「맞다 / 아니다」 꼴도 같다.' "$RF")" "1" "AC13: 풀이 확인 질문과 「맞다 / 아니다」 질문은 추천을 달지 않고 이유를 적는다"
 assert_eq "$(grep -cF '두 꼴 모두 권하는 쪽이 있으면 첫 자리로 옮기고' "$RF")" "0" "AC13: 옛 추천 지시가 없다"
 assert_eq "$(awk -F'\t' '$3 ~ /확인 질문을 하나 더 싣습니다/ {print $2}' "$ROOT/shared/tests/fixtures/ask-sites.tsv")" "비움" "AC13: 목록의 종류가 비움이다"
 

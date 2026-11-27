@@ -75,12 +75,16 @@ def sections(text: str) -> "list[tuple[str, list[str]]]":
 
 
 def outside_two_sections(head_text: str, work_text: str) -> "list[str]":
-    """두 절(분해안 · 생성 기록)을 떼고 남은 글이 다르면 다른 절의 이름들. 같으면 빈 목록."""
+    """두 절(분해안 · 생성 기록)을 떼고 남은 글이 다르면 다른 절의 이름들. 같으면 빈 목록.
+    줄바꿈 꼴(CRLF · LF)과 절 끝의 빈 줄은 견주지 않는다 — 작업 트리는 줄바꿈을 접어 읽고, 마지막 절 뒤에
+    새 절을 빈 줄 없이 붙이면 끝 줄바꿈 뒤의 빈 칸이 새 절로 옮겨 갈 뿐 앞 절의 글자는 그대로다."""
     def kept(text: str) -> "dict[str, str]":
         bodies: "dict[str, str]" = {}
-        for title, body in sections(text):
+        for title, body in sections(text.replace("\r\n", "\n")):
             if title in (PLAN_HEADING, LOG_HEADING):
                 continue
+            while body and body[-1] == "":
+                body = body[:-1]
             bodies[title] = bodies.get(title, "") + "\n".join(body) + "\x00"
         return bodies
 
@@ -206,7 +210,9 @@ def run(brief: str) -> int:
     check(audit, "audit 이", "audit 에")
     state_status = check(state, "상태 파일이", None)  # 커밋 뒤 변경은 아래에서 두 절 안 · 밖으로 가른다
     state_text = _read(state) if os.path.isfile(state) else ""
-    if state_status != "never" and os.path.isfile(state):
+    if state_status != "never" and not os.path.isfile(state):
+        stops.append("상태 파일이 커밋된 뒤 작업 트리에서 지워졌다: %s" % state)
+    elif state_status != "never":
         sfolder, sname = _split_path(state)
         hrc, head_text = _git(sfolder, "show", "HEAD:./" + sname)
         if hrc != 0:

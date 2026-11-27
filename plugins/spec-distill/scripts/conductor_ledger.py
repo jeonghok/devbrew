@@ -416,7 +416,7 @@ def version_report(root, plugin_json: Path):
     iv = cs.version_triple(inst.get("version", ""))
     if iv is None:
         return cannot("설치본 판 %r 을 읽지 못했다" % inst.get("version"))
-    rc, out, err = git(root, "ls-files", "--", "*plugin.json")
+    rc, out, err = git(root, "-c", "core.quotePath=false", "ls-files", "--", "*plugin.json")
     if rc:
         return cannot("추적 파일 목록을 읽지 못했다: %s" % err)
     broken = []
@@ -2006,7 +2006,8 @@ def c_review_pack(root, a) -> int:
     put("handoffs.md", handoffs + "\n")
     import review_intents  # 상태 계산을 끌어오므로 늦게 불러온다
     try:
-        intents, more = review_intents.build(_status(root, a.roadmap), a.epic, tip, lambda *args: git(root, *args))
+        intents, more = review_intents.build(_status(root, a.roadmap), a.epic, tip,
+                                             lambda *args: git(root, "-c", "core.quotePath=false", *args))
         warns.extend(more)
     except Fail as exc:
         intents, more = review_intents.uncountable(exc)

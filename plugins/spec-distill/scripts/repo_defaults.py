@@ -641,6 +641,27 @@ def _cmd_roadmap_check(base: str, path: str) -> int:
     return 3
 
 
+def _old_key_argument(argv: list) -> "tuple[list, bool]":
+    """(argv, 옛 키였나). `get` · `check-path` 의 키 자리에 온 옛 키 이름을 알리고, argparse 가 받게 새 키 글자로
+    바꾼다 — 값은 부르는 쪽이 옛 의도 폴더로 낸다(한 판 동안 PR #332 앞과 같게)."""
+    if not argv or argv[0] not in ("get", "check-path"):
+        return argv, False
+    i = 1
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--roadmap", "--root"):
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        if a == legacy_names.OLD_SETTING_KEY:
+            _say(legacy_names.rename_notice("repo_defaults.py %s 인자" % argv[0], a, legacy_names.SETTING_KEY))
+            return argv[:i] + [legacy_names.SETTING_KEY] + argv[i + 1:], True
+        return argv, False
+    return argv, False
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="repo_defaults.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -658,6 +679,7 @@ def main(argv=None) -> int:
     p_rmc = sub.add_parser("roadmap-check")
     p_rmc.add_argument("path")
     p_rmc.add_argument("--root")
+    argv, old_key = _old_key_argument(sys.argv[1:] if argv is None else list(argv))
     args = ap.parse_args(argv)
     try:
         base = args.root or os.getcwd()
@@ -670,8 +692,12 @@ def main(argv=None) -> int:
                 "git 레포 밖이라 레포 설정 파일을 읽지 못하고 기본값을 쓴다(%s)" % base], default_label=_no_ref_label)
             for line in result["notices"]:
                 _say(line)
-            _say("값의 출처: %s(%s)" % (result["sources"][args.key], args.key))
-            value = result["values"][args.key]
+            if old_key:   # 옛 키 인자 — 옛 기본 폴더(PR #332 앞의 기본값)
+                _say("값의 출처: %s(%s)" % (result["sources"][args.key], legacy_names.OLD_SETTING_KEY))
+                value = intent_dirs(result)[1]
+            else:
+                _say("값의 출처: %s(%s)" % (result["sources"][args.key], args.key))
+                value = result["values"][args.key]
             if value is None:
                 return 1
             print(", ".join(value) if isinstance(value, tuple) else value)
@@ -689,11 +715,16 @@ def main(argv=None) -> int:
             for line in result["errors"]:
                 _say(line)
             return 3
-        _say("값의 출처: %s(%s)" % (result["sources"][args.key], args.key))
-        value = result["values"][args.key]
+        if old_key:   # 옛 키 인자 — 옛 의도 폴더(옛 키의 값, 없으면 옛 기본 폴더)를 PR #332 앞의 뜻으로 낸다 · 잰다
+            new_value, value = intent_dirs(result)
+            source = result["sources"][args.key] if value == new_value else "레포 설정의 옛 키"
+            _say("값의 출처: %s(%s)" % (source, legacy_names.OLD_SETTING_KEY))
+        else:
+            _say("값의 출처: %s(%s)" % (result["sources"][args.key], args.key))
+            value = result["values"][args.key]
         if args.cmd == "check-path":
-            why = judge_path(args.key, value, args.path, base)
-            if why and args.key == legacy_names.SETTING_KEY:
+            why = judge_path(legacy_names.OLD_SETTING_KEY if old_key else args.key, value, args.path, base)
+            if why and args.key == legacy_names.SETTING_KEY and not old_key:
                 why = _old_folder_verdict(result, args.key, args.path, base, why)
             if why:
                 _say(why)
