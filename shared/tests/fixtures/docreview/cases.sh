@@ -2238,7 +2238,7 @@ case_T43_recritic_dead() {
   assert_eq "$(fsum "$d" 'c.py 가 목록에 없다' '["disposition"]')" "fix" "T43: same_as 없이 critic 처분 그대로 간다"
   rm -rf "$d"
   d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" "$FX/critic-r1.txt" "$FX/codex-r1.yaml" --skip)"
-  assert_eq "$(jget "$d/fin.json" 'd["degrade"]["recritic_dead"]')" "skipped" "T43: kill switch(--recritic-skipped) 도 같은 공시"
+  assert_eq "$(jget "$d/fin.json" 'd["degrade"]["recritic_dead"]')" "skipped" "T43: 모델 판단(--recritic-skipped) 도 같은 공시"
   rm -rf "$d"
 }
 case_route_adjudication_keys() {
@@ -3618,7 +3618,7 @@ case_plain_warns_first_line() {
   assert_contains "$f" "경고 3개: " "경고 쉬운 말: 원문 여섯이 가리키는 사실 셋이 한 줄씩 실린다"
   assert_contains "$f" "codex 리뷰가 없어 다른 모델의 시각이 빠졌다 (codex: exit_nonzero)" \
     "경고 쉬운 말: codex 부재가 쉬운 문장 한 줄이고 사유 토큰은 괄호에 있다"
-  assert_contains "$f" "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다 (doc-recritic: kill switch, skipped)" \
+  assert_contains "$f" "재비판이 돌지 않아 잘못된 지적을 걸러 내지 못했다 (doc-recritic: 모델 판단, skipped)" \
     "경고 쉬운 말: 재비판 부재가 한 줄이고 두 출처의 사유를 모두 싣는다"
   assert_contains "$f" "세부 검토 결과(층 2)가 없어 세부 지적을 셀 수 없다 (layer2: block missing)" \
     "경고 쉬운 말: 층 2 부재가 한 줄이고 셀 수 없다고 말한다"

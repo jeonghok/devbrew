@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# intent-critic 단계 배선 — SKILL 자리 · 절차 문서 · 상태 형식 · kill switch 공시(AC3 · AC14 · AC17),
+# intent-critic 단계 배선 — SKILL 자리 · 절차 문서 · 상태 형식(AC3 · AC14 · AC17),
 # 판정 불변(AC4 · AC15)과 답 커밋 범위(AC10). 판정 불변과 커밋 범위는 임시 리포에서 단계를 끝까지 돌려 잰다.
-# 실행 모드 여섯(kill · kill-global · pr · range · wide · prwide). 변이 일곱(양성 대조 — 넓게 보는 실행의 둘 · 전역 스위치의 하나 포함)이
+# 실행 모드 넷(pr · range · wide · prwide). 변이 여섯(양성 대조 — 넓게 보는 실행의 둘 포함)이
 # 같은 검사를 RED 로 만들고, 바꾸지 않은 사본은 GREEN 이다. 넓게 보는 실행(새 세션 파일 other-teams.md)의 판정 불변은 AC11 이다.
-# gh 는 PATH 앞의 가짜이고 넓게 본 실행에서 불리지 않는다. kill 짝 실행은 스위치를 끈 채 그 실행만의 가짜 gh 를 부른다.
+# gh 는 PATH 앞의 가짜이고 넓게 본 실행에서 불리지 않는다.
 set -u
 PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_ROOT="$(cd "$PLUGIN_ROOT/../.." && pwd)"
@@ -14,8 +14,6 @@ PROC="$PLUGIN_ROOT/skills/quality-pipeline/references/intent-critic.md"
 SFF="$PLUGIN_ROOT/skills/quality-pipeline/references/state-file-format.md"
 RM="$PLUGIN_ROOT/README.md"
 SCRIPTS="$PLUGIN_ROOT/scripts"
-KILL=DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC
-GLOBAL=DEVBREW_QUALITY_GATES_DISABLE
 ANS_DIR=docs/qg-intent-answers
 SID=sess-intent-0001
 LEAD="intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다. 이 절은 판정에 들지 않는다."
@@ -23,7 +21,6 @@ SENT_PUBLISH="Then run [Publish](#publish), then the intent-critic stage ([\`ref
 SENT_NEXT="After the intent-critic result line and the return block, end with the user's next action — one by default; if there are several, or they can run together (in parallel), say so and list them together"
 PUB_NEXT="그다음 intent-critic 단계를 돈다 — 판정 밖이라 판정 줄 · 게시 본문에 들지 않는다."
 P2_CLEAN="( cd \"\$RD\" && find . ! -name . -prune -type f -name 'intent-*' -exec rm -f {} + )"
-KILL_BULLET='- `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC=1` — intent-critic 단계만 끈다(「intent-critic 꺼짐(kill switch)」 한 줄). 판정 밖 단계라 판정에 닿지 않는다. 집행은 `scripts/intent_critic.py gate` 이고, 준비 걸음(`prepare`)도 이 스위치를 스스로 읽어 다른 팀 읽기 · PR 조회가 함께 꺼진다.'
 ALREADY="intent-critic — 이 실행은 이미 intent-critic 단계를 돌았다"
 DESC_END="The run ends with the intent-critic stage (outside the verdict), which may ask about the user's own choices and commits the answers as answer files on the current branch (no push)."
 LAW2_READERS='`security-reviewer` · `code-recritic` · `intent-critic` are read-only (`tools: Read, Grep, Glob`).'
@@ -51,9 +48,6 @@ if [ -n "$end_ln" ] && [ -n "$next_ln" ] && [ "$next_ln" -gt "$end_ln" ]; then
 else
   no "## Publish: 게시 펜스 끝(${end_ln:-없음}) 뒤에 intent-critic 진입 줄(${next_ln:-없음})이 없다"
 fi
-KS="$(section "$S" '## kill switch')"
-assert_eq "$(printf '%s\n' "$KS" | grep -c -F -x -- "$KILL_BULLET")" 1 "## kill switch: intent-critic bullet 한 줄"
-assert_eq "$(count "$KS" "$KILL")" 1 "## kill switch: ${KILL} 가 한 번"
 assert_grep "$(section "$S" '## Requirement index')" '^\| IC1 intent-critic 은 판정 밖 — `findings\.yaml` · `qg-verdict-args:` · 게시 본문에 들지 않는다 · 답 커밋은 답 파일만 \|' "Requirement index: IC1 intent-critic 은 판정 밖(절차 문서의 걸음 I1 과 번호가 겹치지 않는다)"
 assert_not_grep "$(section "$S" '## Requirement index')" '^\| I1 ' "Requirement index: 옛 번호 I1 행이 없다(위 양성 짝)"
 P2F="$(awk '/^\*\*P2 — setup\.\*\*/{p=1} p&&/^```bash$/{f=1;next} f&&/^```$/{exit} f' "$S")"
@@ -91,13 +85,12 @@ assert_eq "$(count "$PF" 'subagent_type: "quality-gates:intent-critic"')" 2 "절
 assert_eq "$(count "$PF" '// **처분** — consumer=plugins/quality-gates/scripts/intent_critic.py · fail-open')" 2 "절차 문서: 처분 줄 2"
 assert_eq "$(count "$PF" '<roadmap>${ROADMAP}</roadmap>')" 2 "절차 문서: roadmap 칸 2"
 assert_eq "$(count "$PF" '<scope>${SCOPE}</scope>')" 2 "절차 문서: scope 칸 2"
-# gate 길 — prepare(I1 · I2)로 가는 것은 `intent-gate: run` 행 하나뿐이다. 스위치 하나가 넓게 보기와 다른 팀 읽기를 함께
-# 끄는 것(AC12)은 이 길과 prepare 자신의 스위치 검사(아래 kill 실행)가 함께 지킨다.
+# gate 길 — prepare(I1 · I2)로 가는 것은 `intent-gate: run` 행 하나뿐이다.
 GATE_RUN_ROW='| `intent-gate: run` | 아래 비용 줄을 내고 범위 모드면 [I1](#i1-리뷰-트리-범위-모드만), PR 범위면 [I2](#i2-설정--준비) |'
-GATE_SKIP_ROW='| `intent-critic 꺼짐(kill switch)` · `intent-critic — 건너뜀(…)` | 그 줄이 마지막 스크립트 출력이다 — [I7](#i7-돌려주기) |'
+GATE_SKIP_ROW='| `intent-critic — 건너뜀(…)` | 그 줄이 마지막 스크립트 출력이다 — [I7](#i7-돌려주기) |'
 assert_eq "$(printf '%s\n' "$PF" | grep -c -F -x -- "$GATE_RUN_ROW")" 1 "절차 문서: intent-gate: run 행이 I1 · I2 로 간다(한 번)"
-assert_eq "$(printf '%s\n' "$PF" | grep -c -F -x -- "$GATE_SKIP_ROW")" 1 "절차 문서: 꺼짐 · 건너뜀 행이 I7 로 간다(한 번)"
-assert_eq "$(printf '%s\n' "$PF" | grep '^|' | grep -F -e '꺼짐(kill switch)' -e '건너뜀(' | grep -c -F -e '(#i1-' -e '(#i2-')" 0 "절차 문서: 꺼짐 · 건너뜀 행은 I1 · I2 로 가지 않는다"
+assert_eq "$(printf '%s\n' "$PF" | grep -c -F -x -- "$GATE_SKIP_ROW")" 1 "절차 문서: 건너뜀 행이 I7 로 간다(한 번)"
+assert_eq "$(printf '%s\n' "$PF" | grep '^|' | grep -F -e '건너뜀(' | grep -c -F -e '(#i1-' -e '(#i2-')" 0 "절차 문서: 건너뜀 행은 I1 · I2 로 가지 않는다"
 # gate 가 내는 줄(`intent-gate:` · `intent-critic …`)로 시작하는 행 가운데 I1 · I2 로 가는 것은 하나. I1 의 출력 행(`intent-review-tree:`)은 run 뒤라 뺀다.
 assert_eq "$(printf '%s\n' "$PF" | grep -e '^| `intent-gate' -e '^| `intent-critic' | grep -c -F -e '(#i1-' -e '(#i2-')" 1 "절차 문서: I1 · I2 로 가는 gate 출력 행은 하나뿐"
 
@@ -125,12 +118,6 @@ assert_eq "$(count "$SF" 'gh 는 두 스크립트만')" 0 "Rules: 옛 gh 문장 
 assert_contains "$SF" '열린 PR 목록 읽기는 `scripts/other_teams.py` 가 한다' "Rules: other_teams 의 gh"
 assert_grep "$(section "$S" '## Requirement index')" '^\| gh 는 세 파일\(AC15.*\| .*`scripts/other_teams\.py`' "Requirement index: gh 행이 other_teams.py 를 든다"
 assert_eq "$(count "$SF" 'gh 는 두 파일')" 0 "Requirement index: 옛 gh 행(두 파일) 0"
-
-note "[kill switch 공시]"
-RKS="$(awk '/^### Kill switches/{f=1;next} f&&/^#{1,3} /{exit} f' "$RM")"
-n="$(printf '%s\n' "$RKS" | grep -c -F -- "$KILL")"
-if [ "${n:-0}" -ge 1 ]; then ok "README kill switch 표에 ${KILL} (${n})"
-else no "README kill switch 표에 ${KILL} 가 없다"; fi
 
 note "[README 뜻 문장 — AC17 자리 4]"
 assert_contains "$(flat < "$RM")" "intent-critic 은 의도대로 만들었는지가 아니라 의도 자체(사용자가 고른 방향 · 기능 · 동작)가 맞는지를 점검한다." "README: intent-critic 뜻 문장"
@@ -179,7 +166,7 @@ mkdir -p "$FAKEBIN" && : > "$GH_LOG"
 printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexit 1\n' "$GH_LOG" > "$FAKEBIN/gh" && chmod +x "$FAKEBIN/gh"
 
 ic_run() {   # ic_run <intent_critic.py> <하위 명령 …> — 이 단계의 환경 변수를 비운 채 돈다(gh 는 가짜)
-  ( unset "$KILL" "$GLOBAL" DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES \
+  ( unset DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC DEVBREW_QUALITY_GATES_DISABLE DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES \
       DEVBREW_QUALITY_GATES_OTHER_TEAMS_MAX_BYTES DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS
     PATH="$FAKEBIN:$PATH" PYTHONDONTWRITEBYTECODE=1 python3 "$@" )
 }
@@ -288,32 +275,16 @@ origin_head() {   # origin_head <리포> — origin/HEAD → origin/main(원격 
     && git -C "$1" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
 }
 
-kill_run() {   # kill_run <켤 변수 이름> <폴더> <intent_critic.py> <하위 명령 …> — 그 스위치만 켜고, PATH 앞에 이 실행만의 가짜 gh
-  local var="$1" d="$2" other
-  shift 2
-  other="$KILL"; [ "$var" = "$KILL" ] && other="$GLOBAL"
-  ( unset "$other" DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES \
-      DEVBREW_QUALITY_GATES_OTHER_TEAMS_MAX_BYTES DEVBREW_QUALITY_GATES_INTENT_DOC_MARKERS
-    export "$var=1"
-    PATH="$d/fakebin:$PATH" PYTHONDONTWRITEBYTECODE=1 python3 "$@" )
-}
-
-# run_stage <intent_critic.py> <kill|kill-global|pr|range|wide|prwide> <폴더> — 임시 리포 · 세션 폴더를 만들고 절차 순서대로 단계를 돈다.
+# run_stage <intent_critic.py> <pr|range|wide|prwide> <폴더> — 임시 리포 · 세션 폴더를 만들고 절차 순서대로 단계를 돈다.
 # wide 는 범위 모드로 돌되 돌려 본 근거 없이 바뀐 파일 목록과 읽은 인용으로 넓게 본다. prwide 는 PR 범위에서 바뀐 파일이
 # 커밋된 의도 문서 하나라 넓게 보고, 읽은 인용의 질문에 답해 답 커밋까지 간다.
 # stdout 은 <폴더>/out.txt, 하위 명령마다의 rc 는 <폴더>/rc.txt 에 모인다.
 run_stage() {
-  local ic="$1" mode="$2" d="$3" repo rd m f var
+  local ic="$1" mode="$2" d="$3" repo rd m f
   repo="$d/repo"; rd="$repo/.claude/quality-gates/$SID"
   # wide 의 리포에는 origin/HEAD 가 있고 origin URL 은 없다 — 다른 팀 읽기가 열린 PR 조회까지 가서 gh 앞에서 멈춘다.
-  # kill · kill-global 의 리포에는 origin/HEAD 와 origin URL 이 함께 있다 — 스위치가 prepare 를 끄지 못하면 이 실행의 가짜 gh 가 불린다.
   case "$mode" in
     wide) mkrepo "$repo" && origin_head "$repo" && mkrd_wide "$rd" ;;
-    kill|kill-global) mkrepo "$repo" && origin_head "$repo" \
-            && git -C "$repo" remote add origin https://example.invalid/o/r.git && mkrd_wide "$rd" \
-            && mkdir -p "$d/fakebin" && : > "$d/gh.log" \
-            && printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexit 1\n' "$d/gh.log" > "$d/fakebin/gh" \
-            && chmod +x "$d/fakebin/gh" ;;
     prwide) mkrepo "$repo" && mkrd_prwide "$repo" "$rd" ;;
     *) mkrepo "$repo" && mkrd "$rd" ;;
   esac || { echo "fixture 실패" >> "$d/out.txt"; return 1; }
@@ -321,18 +292,6 @@ run_stage() {
   for f in verdict.out comment-head.md comment.md findings.yaml result.md; do cp "$rd/$f" "$d/before/$f"; done
   git -C "$repo" rev-parse HEAD > "$d/head-before"
   : > "$d/out.txt"; : > "$d/rc.txt"
-  if [ "$mode" = kill ] || [ "$mode" = kill-global ]; then
-    var="$KILL"; [ "$mode" = kill-global ] && var="$GLOBAL"
-    kill_run "$var" "$d" "$ic" gate --rd "$rd" --path final --mode range >> "$d/out.txt" 2>> "$d/err.txt"
-    echo "$?" >> "$d/rc.txt"
-    # gate 를 건너뛰고 prepare 를 바로 불러도 스위치가 넓게 보기 · 다른 팀 읽기 · gh 조회를 끈다 — prepare 가 스스로 지킨다.
-    kill_run "$var" "$d" "$ic" config --rd "$rd" --repo "$repo" --base HEAD --project-dir "$repo" > /dev/null 2>> "$d/err.txt"
-    echo "$?" >> "$d/rc.txt"
-    kill_run "$var" "$d" "$ic" prepare --rd "$rd" --repo "$repo" --tree-root "$repo" --mode range --head HEAD \
-      --review-commit HEAD --specs-json "$rd/intent-specs.json" > "$d/prepare-out.txt" 2>> "$d/err.txt"
-    echo "$?" >> "$d/rc.txt"
-    return 0
-  fi
   m=pr; case "$mode" in range|wide) m=range ;; esac
   step() { ic_run "$ic" "$@" >> "$d/out.txt" 2>> "$d/err.txt"; echo "$?" >> "$d/rc.txt"; }
   step gate --rd "$rd" --path final --mode "$m"
@@ -357,7 +316,7 @@ run_stage() {
   step render --rd "$rd" --mode "$m"
 }
 
-# check_stage <kill|kill-global|pr|range|wide|prwide> <폴더> — 판정 불변 · 답 커밋 범위를 잰다. 줄마다 「PASS <이름>」 또는 「FAIL <이름>」.
+# check_stage <pr|range|wide|prwide> <폴더> — 판정 불변 · 답 커밋 범위를 잰다. 줄마다 「PASS <이름>」 또는 「FAIL <이름>」.
 check_stage() {
   local mode="$1" d="$2" repo rd f last cnt files staged
   repo="$d/repo"; rd="$repo/.claude/quality-gates/$SID"
@@ -375,13 +334,10 @@ lines = after.split("\n")
 heads = [i for i, line in enumerate(lines) if line == "## intent-critic"]
 posts = [i for i, line in enumerate(lines) if line == "## 게시"]
 rest = after[len(before):].lstrip("\n")
-if mode in ("kill", "kill-global"):
-    print(("PASS" if not heads else "FAIL") + " section-absent")
-else:
-    placed = len(heads) == 1 and len(posts) == 1 and heads[0] > posts[0] and rest.startswith("## intent-critic\n")
-    print(("PASS" if placed else "FAIL") + " section-after-publish")
-    first = [line for line in lines[heads[0] + 1:] if line.strip()][:1] if heads else []
-    print(("PASS" if first == [lead] else "FAIL") + " section-lead")
+placed = len(heads) == 1 and len(posts) == 1 and heads[0] > posts[0] and rest.startswith("## intent-critic\n")
+print(("PASS" if placed else "FAIL") + " section-after-publish")
+first = [line for line in lines[heads[0] + 1:] if line.strip()][:1] if heads else []
+print(("PASS" if first == [lead] else "FAIL") + " section-lead")
 PY
   grep -q '^qg-verdict-args:' "$d/out.txt"; [ "$?" = 1 ]; r no-verdict-args "$?"
   [ -s "$d/rc.txt" ] && ! grep -qv '^0$' "$d/rc.txt"; r rc-zero "$?"
@@ -403,22 +359,10 @@ PY
         grep -q -x -F '    evidence: "읽어서 봄"' "$rd/intent-return.md" 2>/dev/null; r evidence-read "$?"
       fi
       ;;
-    range|kill|kill-global|wide)
+    range|wide)
       [ "$(git -C "$repo" rev-parse HEAD)" = "$(cat "$d/head-before")" ]; r no-commit "$?"
       [ ! -e "$repo/$ANS_DIR" ]; r no-answer-files "$?"
-      if [ "$mode" = kill ] || [ "$mode" = kill-global ]; then
-        [ "$(cat "$d/out.txt")" = "intent-critic 꺼짐(kill switch)" ]; r kill-line "$?"
-        grep -q -F 'intent-critic 꺼짐(kill switch)' "$rd/intent-return.md" 2>/dev/null; r kill-return "$?"
-        grep -q -x 'reason: kill-switch' "$rd/intent-return.md" 2>/dev/null; r kill-reason "$?"
-        # 스위치 하나가 넓게 보기와 다른 팀 읽기를 함께 끈다(AC12) — gate 를 건너뛴 prepare 에서도.
-        [ "$(cat "$d/prepare-out.txt" 2>/dev/null)" = "intent-critic 꺼짐(kill switch)" ]; r prepare-kill-line "$?"
-        [ -f "$d/prepare-out.txt" ] && ! grep -q -F '넓게 본다' "$d/prepare-out.txt"; r no-wide-line "$?"
-        [ -f "$d/gh.log" ] && [ ! -s "$d/gh.log" ]; r no-gh-call "$?"
-        [ ! -e "$rd/other-teams.md" ]; r no-teams-file "$?"
-        [ ! -e "$rd/intent-scope.md" ]; r no-scope-file "$?"
-      else
-        [ "$last" = "intent-critic — 질문 1개 묻지 않음(범위 모드)" ]; r result-line "$?"
-      fi
+      [ "$last" = "intent-critic — 질문 1개 묻지 않음(범위 모드)" ]; r result-line "$?"
       if [ "$mode" = wide ]; then
         [ -f "$rd/other-teams.md" ]; r teams-file "$?"
         grep -q -x -F '다른 팀과 겹치는 곳:' "$rd/result.md"; r overlap-list "$?"
@@ -428,10 +372,10 @@ PY
 }
 
 # 모드마다 check_stage 가 내는 검사 수 — 줄면 검사가 조용히 빠진 것이다
-expect_checks() { case "$1" in kill|kill-global) echo 20 ;; wide|prwide) echo 16 ;; *) echo 14 ;; esac; }
+expect_checks() { case "$1" in wide|prwide) echo 16 ;; *) echo 14 ;; esac; }
 
 note "[판정 불변 · 답 커밋 범위 — 실제 스크립트]"
-for mode in kill kill-global pr range wide prwide; do
+for mode in pr range wide prwide; do
   d="$TMP/real-$mode"; mkdir -p "$d"
   run_stage "$SCRIPTS/intent_critic.py" "$mode" "$d"
   res="$(check_stage "$mode" "$d")"
@@ -445,30 +389,13 @@ EOF
 done
 [ -s "$TMP/real-pr/err.txt" ] && { echo "--- pr stderr"; cat "$TMP/real-pr/err.txt"; }
 VW="$TMP/real-wide/repo/.claude/quality-gates/$SID/verdict.out"
-VK="$TMP/real-kill/repo/.claude/quality-gates/$SID/verdict.out"
-[ -s "$VW" ] && [ -s "$VK" ]; assert_eq "$?" 0 "판정 줄 견주기: 넓게 본 실행 · 끈 실행의 verdict.out 이 둘 다 비어 있지 않다"
+[ -s "$VW" ]; assert_eq "$?" 0 "판정 줄 견주기: 넓게 본 실행의 verdict.out 이 비어 있지 않다"
 assert_eq "$(tail -n 1 "$VW")" "qg: defect · 지적 0 · 차등 새 실패 1" "판정 줄 견주기: 넓게 본 실행의 판정 줄이 fixture 가 쓴 줄 그대로"
-assert_eq "$(tail -n 1 "$VW")" "$(tail -n 1 "$VK")" "넓게 본 실행과 끈 실행의 판정 줄이 같다"
 
 note "[네트워크 — 열린 PR 조회는 gh 를 부르지 않고 멈춘다]"
 assert_eq "$(git -C "$TMP/real-wide/repo" remote)" "" "넓게 본 실행의 임시 리포에 원격이 없다"
 assert_file_grep "$TMP/real-wide/repo/.claude/quality-gates/$SID/other-teams.md" '^- 열린 PR 확인 못 함 — origin 을 읽지 못함$' "열린 PR 조회 길을 탔고 origin 에서 멈췄다(양의 짝)"
 assert_eq "$(wc -c < "$GH_LOG" | tr -d ' ')" 0 "가짜 gh 가 한 번도 불리지 않았다"
-
-note "[kill switch — 끈 prepare 검사의 양의 짝]"
-# 같은 리포 · 같은 세션 폴더에서 스위치만 끄면 넓게 보고 이 실행의 가짜 gh 가 불린다 — 위 kill 검사가 공허하지 않다.
-KD="$TMP/real-kill"; KRD="$KD/repo/.claude/quality-gates/$SID"
-# 가짜 gh 가 없으면 이 실행이 진짜 gh 를 부를 수 있다 — 돌리지 않는다.
-if [ -x "$KD/fakebin/gh" ]; then
-  ( unset "$KILL" "$GLOBAL"; PATH="$KD/fakebin:$PATH" PYTHONDONTWRITEBYTECODE=1 python3 "$SCRIPTS/intent_critic.py" prepare \
-      --rd "$KRD" --repo "$KD/repo" --tree-root "$KD/repo" --mode range --head HEAD --review-commit HEAD \
-      --specs-json "$KRD/intent-specs.json" ) > "$KD/prepare-on.txt" 2>> "$KD/err.txt"
-  assert_eq "$(grep -c -x -F '넓게 본다 — 범위 모드' "$KD/prepare-on.txt")" 1 "스위치를 끄면 같은 리포에서 넓게 본다(양의 짝)"
-  [ -s "$KD/gh.log" ]; assert_eq "$?" 0 "스위치를 끄면 같은 리포에서 이 실행의 가짜 gh 가 불린다(양의 짝)"
-  [ -f "$KRD/other-teams.md" ] && [ -f "$KRD/intent-scope.md" ]; assert_eq "$?" 0 "스위치를 끄면 두 파일이 생긴다(양의 짝)"
-else
-  no "kill 짝 실행: 가짜 gh 가 없다 — 진짜 gh 를 부를 수 있어 돌리지 않는다"
-fi
 
 note "[다시 돌기 — P2 정리 뒤에는 다시 렌더한다]"
 RD="$TMP/real-pr/repo/.claude/quality-gates/$SID"
@@ -526,10 +453,6 @@ d="$TMP/mut-plain-wide"; mkdir -p "$d"
 run_stage "$TMP/copy-plain/intent_critic.py" wide "$d"
 res="$(check_stage wide "$d")"
 assert_eq "$(printf '%s\n' "$res" | grep -c '^PASS ')" "$(expect_checks wide)" "바꾸지 않은 사본(넓게): 검사 전부 PASS"
-d="$TMP/mut-plain-kill-global"; mkdir -p "$d"
-run_stage "$TMP/copy-plain/intent_critic.py" kill-global "$d"
-res="$(check_stage kill-global "$d")"
-assert_eq "$(printf '%s\n' "$res" | grep -c '^PASS ')" "$(expect_checks kill-global)" "바꾸지 않은 사본(전역 스위치): 검사 전부 PASS"
 
 run_mutant() {   # run_mutant <이름> <과녁 검사[,검사 …]> [모드] — 사본 폴더 $TMP/copy-<이름> 은 이미 변이됐다. 모드 기본 pr
   local d="$TMP/mut-$1" res mode="${3:-pr}" target
@@ -572,15 +495,5 @@ mkcopy "$TMP/copy-f"
 mutate "$TMP/copy-f/intent_critic.py" $'    print("intent-ask: %d" % asked)\n' $'    print("qg-verdict-args: --wide %d" % asked)\n    print("intent-ask: %d" % asked)\n'
 assert_eq "$?" 0 "변이 f(넓게 본 결과를 판정 인자 줄로 낸다)를 심었다"
 run_mutant f no-verdict-args wide
-
-note "[변이 — 전역 스위치를 읽지 않는 꺼짐 판정]"
-mkcopy "$TMP/copy-g"
-mutate "$TMP/copy-g/intent_critic.py" '    names = _switches_on()
-    if not names:
-        return False' '    names = [n for n in _switches_on() if n != GLOBAL_KILL_ENV]
-    if not names:
-        return False'
-assert_eq "$?" 0 "변이 g(_killed 가 전역 스위치를 읽지 않는다)를 심었다"
-run_mutant g prepare-kill-line,no-gh-call kill-global
 
 finish

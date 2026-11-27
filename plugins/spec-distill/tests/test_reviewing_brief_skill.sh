@@ -103,17 +103,12 @@ grep -qE '^STATE_DIR=.*state-dir-for .*--doc "\$\{PAYLOAD:-\}"' <<<"$IN_RUN" \
 
 # ── 3. kill switch 공시 (codex 게이트 fence 밖) ─────────────────────────────
 OUTSIDE="$(awk '/codex-gate:begin/{g=1} !g; /codex-gate:end/{g=0}' "$SKILL")"
-for sw in 'DEVBREW_SPEC_DISTILL_DISABLE=1' 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1' \
-          'DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1' 'DEVBREW_SPEC_DISTILL_DISABLE_WEB=1' \
-          'DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1'; do
+for sw in 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1' 'DEVBREW_SPEC_DISTILL_DISABLE_WEB=1'; do
   has "$OUTSIDE" "$sw" && ok "kill switch: $sw 가 fence 밖 표면에 공시된다" \
                        || no "kill switch: $sw 공시가 fence 밖에 없다 (P21 — 끌 수 있다는 사실이 안 보인다)"
 done
 W_KS="$(section 'kill switch')"
 has "$W_KS" '캐시하지 않' && ok "kill switch: dispatch 직전 확인·캐시 금지 계약" || no "kill switch: 확인 시점 계약(캐시 금지)이 없다"
-{ has "$W_KS" '건너뛰었다' && has "$W_KS" 'Step B' && has "$W_KS" '조용히 건너뛰지 않는다'; } \
-  && ok "kill switch: BRIEF_REVIEW skip 은 record + loud advisory 후 Step B (조용한 생략 아님)" \
-  || no "kill switch: BRIEF_REVIEW skip 경로의 공시가 무너졌다"
 
 # ── 4. 진입 게이트 — 번들보다, 엔진보다 먼저 · 실패는 차단 ──────────────────────
 first_line() { grep -nE -- "$1" <<<"$ALL_RUN" | head -1 | cut -d: -f1; }
@@ -449,13 +444,13 @@ P='^if \[ "\$blob_rc" -ne 0 \]' awk '!inb && $0 ~ ENVIRON["P"] {inb=1; next} inb
   || no "게이트: polite stop 금지 목록에서 예외 경로가 빠졌다"
 
 # ── 17. 웹 공시 — 러너가 보는 스위치 둘 ────────────────────────────────────────
-{ has "$W_PROC" 'DEVBREW_SPEC_DISTILL_DISABLE_WEB=1' && has "$W_PROC" 'DEVBREW_QUALITY_GATES_DISABLE_WEB=1'; } \
-  && ok "웹: 러너가 웹을 끄는 두 호스트 스위치를 둘 다 공시한다" \
-  || no "웹: 공시가 러너의 웹 스위치 중 하나만 댄다"
+has "$W_PROC" 'DEVBREW_SPEC_DISTILL_DISABLE_WEB=1' \
+  && ok "웹: 러너가 웹을 끄는 호스트 스위치를 공시한다" \
+  || no "웹: 공시가 러너의 웹 스위치를 대지 않는다"
 RUNNER="$ROOT/shared/docreview/scripts/run_docreview_codex_reviewer.sh"
-{ grep -qF '"${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" != "1"' "$RUNNER" && grep -qF '"${DEVBREW_QUALITY_GATES_DISABLE_WEB:-0}" != "1"' "$RUNNER"; } \
-  && ok "웹(사실): 러너의 웹 조건이 실제로 두 스위치를 본다 — 공시가 참이다" \
-  || no "웹(사실): 러너의 웹 조건이 바뀌었다 — 두 스위치 공시가 거짓이 됐다"
+{ grep -qF '"${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" != "1"' "$RUNNER" && ! grep -qF 'DEVBREW_QUALITY_GATES_DISABLE_WEB' "$RUNNER"; } \
+  && ok "웹(사실): 러너의 웹 조건이 spec-distill 스위치를 보고 은퇴한 qg 스위치는 읽지 않는다 — 공시가 참이다" \
+  || no "웹(사실): 러너의 웹 조건이 바뀌었다 — 스위치 공시가 거짓이 됐다"
 
 # ── 18. 모델이 읽는 파일에 관리자 메모를 두지 않는다 · gap 클래스 범위의 교차 일치 ───────
 grep -qF '일곱 번째' "$SKILL" \

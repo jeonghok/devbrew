@@ -1023,16 +1023,16 @@ class EpicView(unittest.TestCase):
         self.assertIn("  열린 넘김: 1개 · 셀 수 없음 2개", self.view(r))
 
     def run_show(self, rep, epic, items=None):
-        orig = (cp.gather, cp.switch_name)
+        orig = cp.gather
         v = {"items": [(RM, rep)] if items is None else items, "interview": None, "notes": [], "minutes": None,
              "select_error": None}
-        cp.gather, cp.switch_name = (lambda *a, **k: v), (lambda: None)
+        cp.gather = lambda *a, **k: v
         buf = io.StringIO()
         try:
             with contextlib.redirect_stdout(buf):
                 rc = cp.main(["show", RM, epic])
         finally:
-            cp.gather, cp.switch_name = orig
+            cp.gather = orig
         return rc, buf.getvalue().splitlines()
 
     def test_cli_epic_branch(self):

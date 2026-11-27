@@ -187,17 +187,17 @@ mkdir -p "$REPO/.claude"; ln -s "$OUT" "$REPO/.claude/worktrees"
 [ -z "$(ls -A "$OUT")" ] && ok "밖에 아무것도 만들지 않았다" || no "밖에 만들었다"
 rm -rf "$REPO" "$OUT"
 
-echo "[old_location_cleaned]"
+echo "[old_location_not_handled]"
 mk_repo; TOP=$(cd "$REPO" && pwd -P); sha=$(cd "$REPO" && git rev-parse HEAD)
 mkdir -p "$REPO/.claude/quality-gates/worktrees"
 (cd "$REPO" && git worktree add -q --detach "$REPO/.claude/quality-gates/worktrees/base-oldloc12" "$sha" && \
   git worktree add -q --detach "$REPO/.claude/quality-gates/worktrees/base-zzzzzzzz" "$sha")
 w=$(cd "$REPO" && "$WT" create-baseline "$sha" "oldloc1234" 2>/dev/null)
-[ ! -e "$REPO/.claude/quality-gates/worktrees/base-oldloc12" ] && ok "옛 자리의 같은 세션 사본이 지워졌다" || no "옛 사본이 남았다"
 [ -d "$w" ] && ok "새 사본이 생겼다" || no "새 사본이 없다"
+[ -d "$REPO/.claude/quality-gates/worktrees/base-oldloc12" ] && ok "만들기가 옛 자리의 같은 세션 사본을 지우지 않는다" || no "만들기가 옛 자리 사본을 지웠다"
 [ -d "$REPO/.claude/quality-gates/worktrees/base-zzzzzzzz" ] && ok "옛 자리의 다른 세션 사본은 그대로다" || no "다른 세션의 옛 사본을 지웠다"
-(cd "$REPO" && "$WT" remove "$REPO/.claude/quality-gates/worktrees/base-zzzzzzzz"); assert_eq "$?" "0" "remove <옛 자리 경로> 는 받는다"
-[ ! -e "$REPO/.claude/quality-gates/worktrees/base-zzzzzzzz" ] && ok "remove 가 옛 자리 사본을 지웠다" || no "옛 자리 remove 가 안 지웠다"
+(cd "$REPO" && "$WT" remove "$REPO/.claude/quality-gates/worktrees/base-zzzzzzzz" >/dev/null 2>&1); assert_eq "$?" "2" "remove <옛 자리 경로> 는 거부한다"
+[ -d "$REPO/.claude/quality-gates/worktrees/base-zzzzzzzz" ] && ok "remove 가 거부한 옛 자리 사본은 그대로다" || no "거부했는데 옛 자리 사본이 사라졌다"
 rm -rf "$REPO"
 
 echo "[remove_scope]"
@@ -231,23 +231,6 @@ out=$(cd "$REPO" && "$WT" own-paths "ownp12345678"); assert_eq "$out" "" "지운
 (cd "$REPO" && "$WT" own-paths "" >/dev/null 2>&1); assert_eq "$?" "2" "빈 session id 는 rc 2"
 (cd "$REPO" && "$WT" own-paths >/dev/null 2>&1); assert_eq "$?" "2" "인자 없으면 rc 2"
 rm -rf "$REPO"
-echo "[old_location_escape_refused]"
-for shape in inrepo outside; do
-  mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)
-  OUT=$(mktemp -d); [ -n "$OUT" ] && [ -d "$OUT" ] || exit 1
-  if [ "$shape" = inrepo ]; then dest="$REPO/src"; lnk="../../src"; else dest="$OUT"; lnk="$OUT"; fi
-  mkdir -p "$dest/base-sess1234" "$REPO/.claude/quality-gates"; echo keep > "$dest/base-sess1234/user.txt"
-  ln -s "$lnk" "$REPO/.claude/quality-gates/worktrees"
-  (cd "$REPO" && "$WT" create-baseline "$sha" "sess12345678" >/dev/null 2>&1); assert_eq "$?" "2" "[$shape] 옛 자리 폴더가 링크면 만들기 rc 2"
-  [ -f "$dest/base-sess1234/user.txt" ] && ok "[$shape] 링크 너머 파일이 그대로다" || no "[$shape] 링크 너머를 지웠다"
-  rm -f "$REPO/.claude/quality-gates/worktrees"
-  # 한 단계 위(.claude/quality-gates)가 링크인 모양
-  rmdir "$REPO/.claude/quality-gates"; mkdir -p "$dest/worktrees/base-sess1234"; echo keep > "$dest/worktrees/base-sess1234/user.txt"
-  ln -s "$dest" "$REPO/.claude/quality-gates"
-  (cd "$REPO" && "$WT" create-baseline "$sha" "sess12345678" >/dev/null 2>&1); assert_eq "$?" "2" "[$shape] .claude/quality-gates 가 링크면 만들기 rc 2"
-  [ -f "$dest/worktrees/base-sess1234/user.txt" ] && ok "[$shape] 상위 링크 너머 파일이 그대로다" || no "[$shape] 상위 링크 너머를 지웠다"
-  rm -rf "$REPO" "$OUT"
-done
 
 echo "[case_variant_branch_holder]"
 mk_repo; sha=$(cd "$REPO" && git rev-parse HEAD)

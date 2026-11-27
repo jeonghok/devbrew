@@ -21,11 +21,6 @@ channel) when one exists. The commit validator never emits a model-channel
 command — a rewritten commit message re-matches COMMIT_MSG_RE and would
 re-fire on the retry without bound, so its suggestion stays on the human
 channel only.
-
-Kill switches:
-  DEVBREW_PROJECT_INIT_DISABLE=1                 - disables this hook entirely
-  DEVBREW_SKIP_HOOKS=project-init:post-tool-use  - skip just this one
-  DEVBREW_SKIP_HOOKS=project-init:PostToolUse    - skip every PostToolUse hook here
 """
 
 import json
@@ -38,8 +33,8 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
-from kill_switch_active import kill_switch_active  # noqa: E402
+PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PLUGIN_DIR / "scripts"))
 
 # --- Constants ---
 
@@ -605,11 +600,24 @@ def validate_commit(command):
 # --- Main ---
 
 
-def main():
-    if kill_switch_active("project-init", "post-tool-use", "PostToolUse"):
-        print(json.dumps({}))
-        sys.exit(0)
+def retired_notice(environ):
+    """켜진 은퇴 끄기 변수를 알리는 한 줄(G3), 없으면 None. 표를 못 읽으면 None."""
+    try:
+        import entry_preflight  # scripts/ 의 사전 검사 모듈 — 없으면 아래 except 로 None
 
+        rows = entry_preflight.read_table(str(PLUGIN_DIR / "switches.md"), "project-init")
+        names = []
+        for row in rows:
+            if row["state"] == "은퇴":
+                names.extend(entry_preflight.active_names(row, environ))
+    except Exception:  # noqa: BLE001 — 표 때문에 훅의 알림이 사라지면 안 된다
+        return None
+    if not names:
+        return None
+    return "[devbrew-switch] 더 듣지 않는다 — 플러그인 끄기를 쓴다({0})".format(" · ".join(names))
+
+
+def main():
     try:
         input_data = json.load(sys.stdin)
     except (json.JSONDecodeError, EOFError):
@@ -650,6 +658,10 @@ def main():
             results.append(commit)
     human = [h for h, _m in results if h]
     model = [m for _h, m in results if m]
+    if human:
+        notice = retired_notice(os.environ)
+        if notice:
+            human.append(notice)
 
     out = {}
     if human:

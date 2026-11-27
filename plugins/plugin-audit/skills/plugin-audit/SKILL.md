@@ -47,17 +47,14 @@ parse만 되고 `check()`엔 전달되지 않는 dead flag — cwd 민감성의 
 
 ## 진입 단계
 
-이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽는다. 감시줄 아래에 `[devbrew-switch]` 로 시작하는 줄이 있으면 감시줄이 무엇이든 그 줄들을 고치지 않고 사용자에게 보인다.
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽는다. 감시줄 아래에 `[devbrew-switch]` 로 시작하는 줄이 있으면 감시줄이 무엇이든 그 줄들을 고치지 않고 사용자에게 보인다. 감시줄 아래에 `[devbrew-switch] 더 듣지 않는다 — plugin-audit 전체(` 로 시작하는 줄이나 `[devbrew-switch] 끄기 변수 표를 읽지 못했다` 로 시작하는 줄이 있으면 그 줄을 보인 뒤 `AskUserQuestion` 으로 계속할지 한 번 묻고, 「계속한다」 를 고를 때만 간다 — 물을 수 없거나 답이 없으면 멈춘다. 질문 `끄던 변수가 켜져 있지만 더 듣지 않는다 — 계속하면 이 skill 이 그대로 돈다(codex · 웹 조사로 내용을 보내거나, 남의 코드를 돌리거나, PR 에 글을 올릴 수 있다). 계속할까?` · 선택지 `계속한다`(얻음: 이 skill 을 지금 쓴다 · 내줌: 꺼 두었다고 믿던 일이 돈다) · `멈춘다`(얻음: 아무것도 돌지 않는다 · 내줌: 변수를 풀거나 플러그인 끄기를 쓴 뒤 다시 불러야 한다). (추천을 달지 않는다 — 꺼 두었다고 믿던 일을 다시 돌릴지는 사용자가 고른다)
 
 | 그 자리의 내용 | 동작 |
 |---|---|
 | `[devbrew-entry] ok …` | 아래 의존 확인 펜스로 간다. 그 줄의 `root=` 값을 `--seed` 상대경로에 쓴다 |
-| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op). 실행 디렉토리를 만들지 않는다 |
 | `[devbrew-entry] error …` | `[plugin-audit] 사전 검사 실패 — <reason= 값>. 감사를 시작하지 않는다.` 를 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[plugin-audit] 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 감사를 시작하지 않는다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[plugin-audit] 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 감사를 시작하지 않는다.` 를 내고 멈춘다 |
-
-이 표가 보는 kill switch 는 `DEVBREW_PLUGIN_AUDIT_DISABLE=1` 하나다.
 
 의존 확인 — 아래 펜스를 Bash 로 한 번 돌린다.
 
@@ -76,13 +73,12 @@ python3 "$PA/scripts/check_deps.py" entry --plugin-root "$PA" --need python
 
 ## phase 0 — 범위 고르기 (dispatch 전 필수)
 
-1. **kill switch**: `DEVBREW_PLUGIN_AUDIT_DISABLE=1` 이면 `## 진입 단계` 가 이미 멈췄다(no-op).
-2. **target 검증** — `<target>`이 **평범한 플러그인 이름**인지 확인한다: `plugins/<target>/`이 실존하는
+1. **target 검증** — `<target>`이 **평범한 플러그인 이름**인지 확인한다: `plugins/<target>/`이 실존하는
    디렉토리여야 하고, `../`나 경로 구분자(`/`)를 포함하면 즉시 거부한다. 이 검증은 scope 문자열이나
    샌드박스 경로(`run-own-tests.sh`, `check-integrity.sh --target`)에 target을 꽂아 넣기 **전에** 끝낸다
    — 검증되지 않은 target을 경로 조립에 먼저 쓰면 그 아래의 모든 격리가 무의미해진다. 실패 시
    loud abort("target 플러그인 없음" 또는 "target 형식 불허") — 범위 고르기 이전.
-3. **범위 고르기 · 규모 공시 (cost_class: high)** — 감사할 축을 고르고, 고른 규모를 한 줄로 알리고 진행한다 — 지출 승인을 묻지 않는다.
+2. **범위 고르기 · 규모 공시 (cost_class: high)** — 감사할 축을 고르고, 고른 규모를 한 줄로 알리고 진행한다 — 지출 승인을 묻지 않는다.
    (a) **축 고르기** — `AskUserQuestion` 한 질문: 「여섯 축 전부 (권장)」 · 「축 골라서」 · 「중단」. 선택지 설명에 규모를 싣는다 —
    설명은 이렇게 쓴다 — 「여섯 축 전부」: 얻음: 여섯 축을 모두 감사해 빠진 축이 없다 · 내줌: 감사자 6 · 반박 최대 6 · codex 6회(설치 시)에 심층검증(지적마다 2회, 상한 없음)까지 가장 크게 돈다 / 「축 골라서」: 얻음: 고른 축만 감사해 축마다 감사자 1 · 반박 최대 1 · codex 1회(설치 시)로 줄인다 · 내줌: 고르지 않은 축은 「검증 안 됨」으로 채워진다 / 「중단」: 얻음: 아무것도 띄우지 않고 실행 디렉토리도 만들지 않는다 · 내줌: 감사가 이뤄지지 않아 갭이 하나도 나오지 않는다.
    「중단」이면 종료한다 — 실행 디렉토리를 만들지 않는다. 「축 골라서」면 한 번의
@@ -92,8 +88,8 @@ python3 "$PA/scripts/check_deps.py" entry --plugin-root "$PA" --need python
    (b) **규모 공시** — 질문이 아니라 한 줄이다. 고른 축 수를 k 라 하고 「감사자 k · 반박 최대 k · codex 감사 k회(설치돼 있으면)와 그 반박 1 · 심층검증은 반박을 통과한 심각·중요 지적마다 2회 — 상한 없음, 몇 건인지는 감사 뒤에 정해지고 시작 직전 실행 기록에 찍힌다」를 보인다.
    축을 골라 뺐으면 「고르지 않은 축의 seed 단서와 질문은 「검증 안 됨」으로 채워진다」 줄을 함께 싣는다. 보안
    축(6)을 뺐으면 맨 앞에 「보안 축을 뺐다 — 사용자 파일 파괴 경로를 아무도 보지 않는다」 줄을 싣는다. 공시 뒤에는 묻지 않고
-   4 로 간다 — 도는 중인 감사를 멈추는 길은 끼어들기이고, kill switch(`DEVBREW_PLUGIN_AUDIT_DISABLE=1`)는 다음 진입에서 듣는다.
-4. **실행 디렉토리** — 공시 직후 **한 번만** 부른다:
+   3 으로 간다 — 도는 중인 감사를 멈추는 길은 끼어들기다.
+3. **실행 디렉토리** — 공시 직후 **한 번만** 부른다:
    `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-run-dir.py" <target> --repo-root .`
    rc≠0 이거나 stdout 이 정확히 두 줄이 아니면 stderr 를 그대로 보이고 멈춘다(loud abort) — 디렉토리를
    손으로 만들지 않고, 실행 키를 sandbox id 로 쓰지 않는다.
@@ -107,7 +103,7 @@ python3 "$PA/scripts/check_deps.py" entry --plugin-root "$PA" --need python
    가드한다 — 빈 값이면 `"$RUN_DIR/audit-data.json"` 이 루트의 `/audit-data.json` 이 된다. 한 감사
    안에서 다시 부르지 않는다 — 다시 부르면 `-2` 가 생겨 산출이 두 디렉토리로 갈라진다.
    consent 아티팩트(`{at, fanout, axes}` — `at` 은 공시한 때)를 `$RUN_DIR/consent.json` 으로 저술한다 — `fanout` 은
-   step 3 (b) 의 규모 문장 그대로, `axes` 는 step 3 (a) 의 목록이다. 이후의 모든
+   step 2 (b) 의 규모 문장 그대로, `axes` 는 step 2 (a) 의 목록이다. 이후의 모든
    중간 파일(무결성 스냅샷 · 축 질문 `$AXIS_FILE` · `$CODEX_JSON` · `wf.json` · `codex.json` ·
    `meta.json` · `assigned.json`)도 `$RUN_DIR` 에 둔다.
    **중간 abort** — 실행 디렉토리가 생긴 뒤(pre-0 hard error · 무결성 불일치 등) 멈추면 디렉토리를
@@ -164,7 +160,7 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
      `facts` · `excluded`. 그 스크립트가 안 돌았거나 실패하면 `staleness_excluded` 키를 빼 둔다 —
      0 으로 채우지 않는다(감사자와 리포트가 「셀 수 없음」을 본다). `own_tests`는
      `run-own-tests.sh plugins/<target> <sandbox id>` — `<sandbox id>` 는
-     phase 0 step 4 의 둘째 줄이다. `audit-sandbox.sh create-sandbox` 는 id 의 앞 8글자만 sandbox 이름에 쓰고
+     phase 0 step 3 의 둘째 줄이다. `audit-sandbox.sh create-sandbox` 는 id 의 앞 8글자만 sandbox 이름에 쓰고
      같은 이름의 sandbox 를 지우고 다시 만들므로 실행 키를 그대로 넘기지 않는다. `structure_facts`/
      `shape_gaps`는 pre-0의 E/F 출력을 그대로 이관한다.
 
@@ -305,7 +301,6 @@ args는 JSON 문자열로 전달됨([[reference_workflow_args_string]]) — 스�
 
 이 절은 kill switch와 degrade 경로를 함께 다룬다.
 
-- `DEVBREW_PLUGIN_AUDIT_DISABLE=1` → 즉시 종료.
 - plugin-dev 부재(E) → loud degrade(core는 F가 커버). `DEVBREW_PLUGIN_AUDIT_DISABLE_RUNTIME_SANDBOX=1`
   (run-own-tests) → 자체 테스트 skip 배너. 옛 이름 `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` 도 같은 skip.
 - codex 미설치 → Claude-only degrade 배너(model diversity 없음).

@@ -62,6 +62,7 @@ fi
 # (`tools.web_search`·`web_search` 모드)을 양방향 대조하고, 웹 ON 인 곳은
 # **kill switch를 세팅한 채 두 번째로 실행**해 분기가 실제로 두 값을 OFF로
 # 뒤집는지 관측한다 — 헤더가 아니라 effect를 잰다(Critical 1을 직접 겨냥).
+# 감사 러너는 그 예외다 — 웹 끄기가 은퇴해, 은퇴한 이름을 켜도 웹이 켜진 채인지를 본다.
 #
 # OBS_REPO는 **소싱 전에** 명시적으로 세팅한다. codex_observation.sh 자신의
 # fallback(`${OBS_REPO:-$(dirname BASH_SOURCE[0])/../../..}`)은 이 파일 위치
@@ -95,28 +96,20 @@ else
       # 넘기는 profile의 posture"를 잰다 — 아래 루프 앞에서 `OBS_DOCREVIEW_WEB=true` 로
       # obs_invoke 가 `web: true` 프로필을 넘기게 하므로 on 이다. 그래서 brief 자리의 웹 ON
       # 경로가 다른 호출부와 **같은 계약**(두 열 양방향 · kill switch effect · `=yes` 엄격성)
-      # 으로 재진다. 두 배포 경로가 두 호스트 스위치를 하나씩 맡는다(kill_switch_for).
+      # 으로 재진다. 두 배포 경로가 같은 변수를 맡는다(kill_switch_for).
       # `shared/tests/test_docreview_codex.sh` 는 프로필 web 필드 × 스위치 조합의 `live`
       # 여부를 따로 잰다.
       run_docreview_codex_reviewer.sh) echo on ;;
       *) echo '' ;;
     esac
   }
-  # ON 사이트에만 의미가 있다. qg 두 곳은 현재 OFF라 이 표에 미도달이지만, ON
-  # 전환 시 쓸 이름을 미리 등록해둔다(지금 죽은 스위치를 만들지는 않는다).
-  # docreview 러너는 두 플러그인에 같은 파일로 배포되고 두 호스트 스위치를 모두 본다(P11 OR).
-  # 배포 경로마다 그 호스트의 스위치를 하나씩 맡겨, 두 스위치가 각각 effect·엄격성으로 재진다.
-  # 경로 패턴은 `plugins/` 뒤 구분자 수에 기대지 않는다(수집기 출력이 `plugins//x` 일 수 있다).
+  # ON 사이트에만 의미가 있다. qg 두 러너는 지금 OFF 라 이 표에 닿지 않는다 — 웹을 켜는
+  # 쪽이 새 끄기 변수 이름을 정해 여기에 등록한다(등록이 없으면 아래 「특정할 수 없다」 가 RED).
+  # docreview 러너는 두 플러그인에 같은 파일로 배포되고 spec-distill 웹 끄기 변수만 본다 —
+  # 어느 배포 경로로 불러도 그 변수가 effect·엄격성으로 재진다.
   kill_switch_for() {  # <candidate path> -> switch var name
     case "$(basename "$1")" in
-      run_audit_codex_reviewer.sh) echo 'DEVBREW_PLUGIN_AUDIT_DISABLE_WEB' ;;
-      run_codex_reviewer.sh|run_artifact_codex_reviewer.sh) echo 'DEVBREW_QUALITY_GATES_DISABLE_WEB' ;;
-      run_docreview_codex_reviewer.sh)
-        case "$1" in
-          */spec-distill/scripts/*) echo 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' ;;
-          */quality-gates/scripts/*) echo 'DEVBREW_QUALITY_GATES_DISABLE_WEB' ;;
-          *) echo '' ;;
-        esac ;;
+      run_docreview_codex_reviewer.sh) echo 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' ;;
       *) echo '' ;;
     esac
   }
@@ -251,6 +244,23 @@ EOF_KNOWN
 
       if [[ "$exp" == on ]]; then
         sw="$(kill_switch_for "$f")"
+        if [[ "$bn" == run_audit_codex_reviewer.sh ]]; then
+          # 감사 웹 끄기는 은퇴했다 — 은퇴한 이름을 켜도 웹은 프로필대로 켜진 채다.
+          cap_retired="$SCRATCH/ac21-retired-$slug"
+          mkdir -p "$cap_retired"
+          export DEVBREW_PLUGIN_AUDIT_DISABLE_WEB=1
+          obs_invoke "$f" "$cap_retired" || true
+          unset DEVBREW_PLUGIN_AUDIT_DISABLE_WEB
+          if [[ "$(obs_call_count "$cap_retired")" -lt 1 ]]; then
+            no "$bn: 은퇴한 감사 웹 끄기를 켜고 실행했으나 codex 호출이 관측되지 않았다"
+          else
+            for d in "$cap_retired"/call-*; do
+              [ -d "$d" ] || continue
+              check_posture "$d" "$bn (은퇴한 웹 끄기를 켜도, $(basename "$d"))" "on"
+            done
+          fi
+          continue
+        fi
         if [[ -z "$sw" ]]; then
           no "$bn: ON인데 kill switch 변수를 특정할 수 없다(kill_switch_for에 등록하라)"
           continue
@@ -401,7 +411,7 @@ done
 # ① 탐지 dispatch 의 선택 펜스 — 웹 도구를 가진 doc-critic-web 을 dispatch 하므로 위 (b) 루프가
 # 스위치 확인 블록을 요구하고, 스위치가 켜지면 웹 없는 doc-critic 으로 내려가는 것은
 # test_reviewing_brief_critic_select.sh 가 차가운 셸 실행으로 잰다. ② codex 러너 — 그 집행은
-# 위 (a) AC21 표가 두 열 · `=yes` 엄격성으로 잰다(두 배포 경로가 두 호스트 스위치를 하나씩).
+# 위 (a) AC21 표가 두 열 · `=yes` 엄격성으로 잰다(두 배포 경로가 같은 spec-distill 웹 끄기 변수 하나를 본다).
 # 러너는 **프로필이** `web: true` 일 때만 웹을 켠다 — 이 자리에서 스위치가 무엇이라도 끄려면
 # 그 전제가 서 있어야 하고, skill 표면은 스위치를 공시해야 한다. 둘 중 하나라도 무너지면 사용자가
 # 끈 것과 실제로 꺼진 것이 갈린다(P21).

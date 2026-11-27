@@ -39,9 +39,6 @@ ENTRY="$(awk '/^## 진입 단계/{f=1;next} f&&/^## /{exit} f' "$CMD")"
 [ -n "$ENTRY" ] && ok "진입 단계(양성): \`## 진입 단계\` 절을 읽었다" \
   || no "진입 단계(양성): \`## 진입 단계\` 절이 없다 — 아래 단언이 공허하다"
 
-assert_contains "$ENTRY" '[devbrew-entry] disabled' "kill switch: 진입 단계가 disabled 감시줄에서 멈춘다"
-assert_contains "$ENTRY" 'DEVBREW_SPEC_DISTILL_DISABLE=1' "kill switch: 진입 단계가 스위치 이름을 밝힌다"
-
 assert_contains "$ENTRY" 'references/trivia-escape.md' "trivia escape 정본 포인터가 진입 단계에 있다"
 assert_contains "$ENTRY" '`spec-distill:intent-sync`' "trivia 안내의 <command> = 완전명"
 
@@ -134,7 +131,6 @@ grep -qF '<접두><kebab-topic>' <<<"$wt_block" && ok "AC12: <접두><kebab-topi
 grep -qF 'repo_defaults.py" get branch_prefix' <<<"${wt_block%%AskUserQuestion(*}" && ok "AC12: 브랜치 접두는 질문 앞에 레포 설정에서 얻는다" || no "AC12: 질문 앞에 브랜치 접두를 얻는 줄이 없다"
 grep -qF 'feature/' <<<"$wt_block" && no "AC12: 워크트리 절에 브랜치 접두 글자(feature/)가 남았다" || ok "AC12: 워크트리 절에 브랜치 접두 글자가 없다"
 [[ "$(grep -cE '^[1-5]\. ' <<<"$wt_block")" -eq 5 ]] && ok "AC12: 5단계 절차" || no "AC12: 5단계가 아니다 ($(grep -cE '^[1-5]\. ' <<<"$wt_block"))"
-grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE' <<<"$wt_block" && ok "AC12: kill switch 를 절이 본다" || no "AC12: 절에 kill switch 부재"
 # 수정 라운드 1: base-ref 풋건이 질문 «앞»에서 확인되고 질문 본문에 실리는가(질문 뒤에만
 # 적으면 사용자가 이미 고른 뒤에야 안다 — 리뷰 지적). 리터럴은 실제 실행 줄에만 있는
 # 것으로 좁힌다 — bare 'rev-list'/'확인 못함' 은 같은 구간의 설명 산문(주석·caveat 문단)에도
@@ -191,8 +187,6 @@ rm -rf "$bsr"
 { grep -qF '실측한 것' <<<"$wt_block" && grep -qF '실측 밖' <<<"$wt_block"; } && ok "AC12: 단정 범위 문장이 잰 것/안 잰 것을 가른다" || no "AC12: 단정 범위 문장이 자기모순(모두 단정 안 함으로 읽힘)"
 grep -qF '워크트리 없음 —' <<<"$wt_block" && ok "AC12: 거절/부재 시 audit §5 문구" || no "AC12: 강등 문구 부재"
 grep -qE '(거절|부재|스위치)[^.]{0,60}seed[^.]{0,20}막지 않' <<<"$wt_flat" && ok "AC12: 어느 경우도 seed 작성을 막지 않는다" || no "AC12: 비차단 선언 부재"
-ks_block="$(awk '/^## kill switch/{f=1;print;next} /^## /{f=0} f' "$SK")"
-grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE=1' <<<"$ks_block" && ok "AC12: kill switch 목록 등재" || no "AC12: kill switch 목록에 없다"
 gate_block="$(awk '/^## 확정 — proceed 게이트/{f=1;print;next} /^## /{f=0} f' "$SK")"
 gate_flat="$(tr '\n' ' ' <<<"$gate_block" | tr -s ' ')"
 grep -qF 'docs(intent): <topic> intent seed + audit' <<<"$gate_block" && ok "AC12: 커밋 메시지 리터럴 (C10 과 동일)" || no "AC12: 커밋 메시지 리터럴 부재/불일치"

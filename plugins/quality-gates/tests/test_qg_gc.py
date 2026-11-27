@@ -80,11 +80,16 @@ class TestQgGc(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertTrue(new.exists(), msg="folders within ctime grace must not be GC'd")
 
-    def test_kill_switch(self):
-        old = make_session_dir(self.tmp, "killsess1234", mtime_offset_seconds=-25 * 3600)
-        proc = run_gc(self.tmp, env_extra={"DEVBREW_QUALITY_GATES_DISABLE": "1"})
-        self.assertEqual(proc.returncode, 0)
-        self.assertTrue(old.exists(), msg="kill switch must skip GC")
+    def test_retired_kill_switches_do_not_stop_gc(self):
+        # 은퇴한 통째 끄기 · qg-gc 토큰은 더 듣지 않는다 — 켜도 만료 폴더가 지워진다.
+        # 짝: 같은 만료 폴더가 끄기 변수 없이도 지워진다(test_old_folder_removed).
+        for extra in ({"DEVBREW_QUALITY_GATES_DISABLE": "1"},
+                      {"DEVBREW_SKIP_HOOKS": "quality-gates:qg-gc"}):
+            with self.subTest(extra=extra):
+                old = make_session_dir(self.tmp, "retsess12345", mtime_offset_seconds=-25 * 3600)
+                proc = run_gc(self.tmp, env_extra=extra)
+                self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+                self.assertFalse(old.exists(), msg="retired switch must not skip GC")
 
     def test_lock_contention_silent_exit(self):
         # 락은 state root 디렉토리 자신이다 — 다른 프로세스가 그것을 쥐면 GC 는 조용히 비켜선다.

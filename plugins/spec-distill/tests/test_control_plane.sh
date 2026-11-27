@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# control_plane.py — 캐시 · 받은 시각 · 끄기 스위치 · 읽기 전용 · 작업 목록 rc 를 버릴 git 저장소에서 잰다
-# (R6 AC3 · AC4 · AC5 · AC6 · AC7 · AC11 · AC13). 상태 계산은 대역으로 바꿔 호출 수를 센다 — 대역은
+# control_plane.py — 캐시 · 받은 시각 · 은퇴한 끄기 변수 · 읽기 전용 · 작업 목록 rc 를 버릴 git 저장소에서 잰다
+# (R6 AC3 · AC4 · AC5 · AC7 · AC11 · AC13 · 은퇴 AC18). 상태 계산은 대역으로 바꿔 호출 수를 센다 — 대역은
 # 부를 때마다 calls.log 에 인자를 적는다. 끝에서 진짜 상태 계산으로 인자 계약을 한 번 잰다.
 # Run (리포 루트에서): bash plugins/spec-distill/tests/test_control_plane.sh
 set -u
@@ -36,7 +36,7 @@ printf 'x\n' > "$U/README.txt" && u add README.txt && u commit -qm init && u pus
 git clone -q "$T/origin.git" "$W" 2>/dev/null
 push_file "$RM" "$(rmtext 로드맵)"
 mkdir -p "$S"
-cp "$REAL/control_plane.py" "$REAL/kill_switch_active.py" "$REAL/conductor_state.py" "$REAL/repo_defaults.py" \
+cp "$REAL/control_plane.py" "$REAL/conductor_state.py" "$REAL/repo_defaults.py" \
   "$REAL/ledger_marker.py" "$REAL/roadmap_model.py" "$REAL/team_layout.py" "$REAL/section6.py" "$REAL/brief_body.py" "$REAL/suite_lock.py" \
   "$REAL/workflow_superpowers.py" "$REAL/legacy_names.py" "$S/"
 # 기계 상태 읽기는 scripts/ 의 형제 .claude-plugin/plugin.json 에서 자기 판을 읽는다 — 사본(S · m-*)의 부모에도 둔다
@@ -164,23 +164,20 @@ python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8"));
 left="$(find "$W/.git/devbrew" -name '.control-plane.*' | wc -l | tr -d ' ')"
 assert_eq "$left" "0" "임시 파일이 남지 않는다"
 
-echo "=== 끄기 스위치(AC6) ==="
+echo "=== 은퇴한 끄기 변수는 듣지 않는다(AC18) ==="
 rm -f "$CACHE"
-before="$(calls)"
-out="$(cd "$W" && DEVBREW_SPEC_DISTILL_DISABLE=1 python3 "$S/control_plane.py" statusline </dev/null)"; rc=$?
-assert_eq "$out|$rc" "|0" "DISABLE=1 — 상태줄 빈 줄 · rc 0"
-out="$(cd "$W" && DEVBREW_SPEC_DISTILL_DISABLE=1 python3 "$S/control_plane.py" show)"; rc=$?
-assert_eq "$out|$rc" "꺼져 있다 — DEVBREW_SPEC_DISTILL_DISABLE=1|0" "DISABLE=1 — 지도 한 줄 · rc 0"
-out="$(cd "$W" && DEVBREW_SKIP_HOOKS="x:y,spec-distill:statusline" python3 "$S/control_plane.py" statusline </dev/null)"; rc=$?
-assert_eq "$out|$rc" "|0" "SKIP_HOOKS — 상태줄 빈 줄 · rc 0"
-out="$(cd "$W" && DEVBREW_SKIP_HOOKS="spec-distill:statusline" python3 "$S/control_plane.py" show)"; rc=$?
-assert_eq "$out|$rc" "꺼져 있다 — DEVBREW_SKIP_HOOKS 의 spec-distill:statusline|0" "SKIP_HOOKS — 지도 한 줄 · rc 0"
-out="$(cd "$W" && DEVBREW_SPEC_DISTILL_DISABLE=1 python3 "$S/control_plane.py" show --tasks 2>"$T/err")"; rc=$?
-assert_eq "$out|$rc" "|3" "꺼짐 — 작업 목록 줄은 비고 rc 3"
-assert_contains "$(cat "$T/err")" "꺼져 있다 — DEVBREW_SPEC_DISTILL_DISABLE=1" "꺼짐 — 사유는 표준 오류"
-assert_eq "$(calls)" "$before" "꺼져 있으면 상태 계산을 부르지 않는다"
-assert_eq "$(cd "$W" && DEVBREW_SPEC_DISTILL_DISABLE=0 python3 "$S/control_plane.py" statusline </dev/null)" "$LINE" "양성 대조: DISABLE=0 은 끄지 않는다"
-assert_eq "$(cd "$W" && DEVBREW_SKIP_HOOKS="spec-distill:statusline-x" python3 "$S/control_plane.py" statusline </dev/null)" "$LINE" "양성 대조: 다른 토큰은 끄지 않는다"
+base_show="$(show)"
+assert_contains "$base_show" "R1 하나" "양성 짝: 변수 없이 show 는 지도를 낸다"
+assert_eq "$(sl)" "$LINE" "양성 짝: 변수 없이 상태줄은 한 줄을 낸다"
+for sw in "DEVBREW_SPEC_DISTILL_DISABLE=1" "DEVBREW_SKIP_HOOKS=spec-distill:statusline" "DEVBREW_SKIP_HOOKS=x:y,spec-distill:statusline"; do
+  out="$(cd "$W" && env "$sw" python3 "$S/control_plane.py" statusline </dev/null)"; rc=$?
+  assert_eq "$out|$rc" "$LINE|0" "$sw — 상태줄이 빈 줄이 아니다"
+  out="$(cd "$W" && env "$sw" python3 "$S/control_plane.py" show </dev/null)"; rc=$?
+  assert_eq "$out|$rc" "$base_show|0" "$sw — show 가 같은 지도를 낸다"
+  assert_not_contains "$out" "꺼져 있다" "$sw — show 가 꺼짐을 말하지 않는다"
+  (cd "$W" && env "$sw" python3 "$S/control_plane.py" show --tasks </dev/null >/dev/null 2>&1); rc=$?
+  assert_eq "$rc" "0" "$sw — show --tasks rc 0"
+done
 
 echo "=== 읽기 전용(AC7) ==="
 rm -f "$CACHE"
@@ -404,9 +401,6 @@ cp "$REAL/state_path.py" "$T/m-stampsctl/state_path.py"
 [[ "$(msl stampsctl)" == *"컨텍스트 쌓기 조사 3/20" ]] && ok "양성 대조: 변이 없는 사본은 인터뷰 조각을 낸다" || no "양성 대조 실패 — 아래 단언이 공허하다"
 [[ "$(msl stamps)" != *"컨텍스트 쌓기 조사"* ]] && ok "변이 잡힘: 인터뷰를 안 읽으면 인터뷰 조각 단언이 RED" || no "변이 생존: 인터뷰 읽기"
 rm -rf "$W/docs/superpowers/intent"
-mutant switch "        if switch_name():" "        if False:"
-out="$(cd "$W" && DEVBREW_SPEC_DISTILL_DISABLE=1 python3 "$T/m-switch/control_plane.py" statusline </dev/null)"
-[ -n "$out" ] && ok "변이 잡힘: 끄기 스위치를 안 보면 빈 줄 단언이 RED" || no "변이 생존: 끄기 스위치"
 mutant place 'Path(repo.cwd, common) / "devbrew"' 'Path(repo.cwd) / "devbrew"'
 s0="$(g status --porcelain --untracked-files=all)"; msl place >/dev/null
 [ "$(g status --porcelain --untracked-files=all)" != "$s0" ] && ok "변이 잡힘: 캐시를 작업 트리에 쓰면 읽기 전용 단언이 RED" || no "변이 생존: 캐시 자리"

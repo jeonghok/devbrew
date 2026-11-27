@@ -48,7 +48,6 @@ ALLOW_TMPL = "Bash(python3 " + _SCRIPT + ")"
 ENTRY_HEADING = "## 진입 단계"
 SENTINEL_ROWS = (
     "[devbrew-entry] ok",
-    "[devbrew-entry] disabled",
     "[devbrew-entry] error",
     "[shell command execution disabled by policy]",
     "감시줄 없음 · 그 밖",

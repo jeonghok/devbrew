@@ -11,7 +11,6 @@ _BUGGY_ARTIFACTS_DIR_FORM = re.compile(r'--artifacts\s+"?\$RUN_DIR/?"?(\s|$)')
 # 각 불변식 = body-unique 문구 (헤더-satisfiable 금지)
 INVARIANTS = [
     "cost_class: high",                                    # 범위 고르기 · 규모 공시 owner
-    "DEVBREW_PLUGIN_AUDIT_DISABLE",                         # kill switch
     "AskUserQuestion",                                     # 축 고르기 질문(범위)
     "check-law2.py",                                        # pre-0 정적 게이트
     "check-no-verdict-injection.py",                       # B
@@ -116,8 +115,8 @@ class TestSkillOrchestration(unittest.TestCase):
 
     def test_scope_and_disclosure_announce_axes_and_scale(self):
         body = SKILL.read_text(encoding="utf-8")
-        start = body.index("3. **범위 고르기 · 규모 공시")
-        sec = body[start:body.index("4. **실행 디렉토리**", start)]
+        start = body.index("2. **범위 고르기 · 규모 공시")
+        sec = body[start:body.index("3. **실행 디렉토리**", start)]
         for need in ("「여섯 축 전부 (권장)」", "「축 골라서」", "「중단」",
                      "감사자 6 · 반박 최대 6",
                      "아무것도 띄우지 않고 실행 디렉토리도 만들지 않는다",

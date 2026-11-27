@@ -38,7 +38,7 @@ ENTRY = [("spec-distill", "intent-sync", False), ("spec-distill", "context-build
          ("quality-gates", "quality-pipeline", False), ("quality-gates", "artifact-critique", False)]
 for p, s, user_only in ENTRY:
     fm = "---\nname: %s\ndescription: x\nmetadata:\n  cost_class: low\n%s" % (s, "disable-model-invocation: true\n" if user_only else "")
-    rows = ("\n| `[devbrew-entry] ok …` | 간다 |\n| `[devbrew-entry] disabled …` | 멈춘다 |\n"
+    rows = ("\n| `[devbrew-entry] ok …` | 간다 |\n"
             "| `[devbrew-entry] error …` | 멈춘다 |\n| `[shell command execution disabled by policy]` | 멈춘다 |\n"
             "| 감시줄 없음 · 그 밖 | 멈춘다 |\n")
     w("plugins/%s/skills/%s/SKILL.md" % (p, s), fm + head(p, s) + rows + "\n## 본문\n\n/%s:%s 로 부른다.\n" % (p, s))

@@ -263,4 +263,10 @@ fi
 assert_file_absent "$SKILL" '/compact 설계문서' "spec-review: 옛 /compact 보존 틀이 없다"
 assert_file_absent "$SKILL" '① 의 정지 요건' "spec-review: 옛 「① 의 정지 요건」 불릿 이름이 없다"
 assert_file_grep "$ROOT/plugins/spec-distill/references/conducting.md" 'epic-handoff\.md' "conducting.md 가 에픽 넘김 줄 reference 를 가리킨다(고아 reference 방지 — 나눈 일의 다음 세션 줄은 지휘자 호출이 됐다)"
+# 「위 복귀 문장」 을 가리키는 행보다 앞에 그 문장의 전문이 있다 — 가리킬 앞 자리가 사라지면 모델이 복귀 지시를 낼 근거가 없다
+first_full="$(grep -nF "[spec-distill] $RETURN_TAIL" "$SKILL" | head -1 | cut -d: -f1)"
+first_ref="$(grep -nF '위 복귀 문장' "$SKILL" | head -1 | cut -d: -f1)"
+if [ -n "$first_full" ] && [ -n "$first_ref" ] && [ "$first_full" -lt "$first_ref" ]; then ok "「위 복귀 문장」 이 처음 나오는 줄($first_ref)보다 앞($first_full)에 복귀 문장 전문이 있다"
+else no "「위 복귀 문장」 이 처음 나오는 줄(${first_ref:-없음})보다 앞에 복귀 문장 전문이 없다(전문 줄 ${first_full:-없음})"; fi
+
 finish

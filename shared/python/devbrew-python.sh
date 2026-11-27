@@ -2,6 +2,7 @@
 # devbrew 훅의 Python 인터프리터 해석기. 훅 `command` 가
 # `/bin/sh <이 파일> --event E --plugin P --hook H <훅.py>` 로 부르고,
 # 바닥을 만족하는 인터프리터를 찾아 exec 한다.
+# `--plugin` · `--hook` 은 받되 쓰지 않는다(훅 등록 파일과의 호환). `--event` 는 바닥 미만 안내를 낼 때만 쓴다.
 #
 # 출하 바닥 도출 규칙 — 「개발 당시 훅이 실제로 쓴 해석기 판(`dependencies.md` 의 `python-hook` 행) — 측정 명령이 잰다」.
 #   아래 두 숫자는 그 행의 앞 두 숫자다(지금 3.12). 다음 재검토 시점은 3.12 EOL(2028-10).
@@ -10,8 +11,7 @@ FLOOR_MAJOR=3
 FLOOR_MINOR=12
 
 # 이 스크립트는 **외부 명령을 하나도 부르지 않는다**(자기가 판정하는 파이썬 제외).
-# `tr`·`sed` 를 쓰면 PATH 에 /usr/bin 이 없을 때 `command not found` 로 아래 kill switch
-# 판정이 조용히 fail-open 한다 — 실측했다. PATH 를 불신하는 것이 이 파일의 일이다.
+# PATH 를 불신하는 것이 이 파일의 일이다.
 
 EVENT=""; PLUGIN=""; HOOK=""
 while [ $# -gt 0 ]; do
@@ -24,67 +24,6 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ $# -ge 1 ] || exit 0
-
-# ── kill switch (C2) — 어떤 일보다 앞. 의미는 정본과 같다:
-#    shared/killswitch/kill_switch_active.py
-#      DEVBREW_<플러그인>_DISABLE=1  — 이름을 플러그인명에서 **도출한다**(`-`→`_`, 대문자).
-#                                     예: spec-distill -> DEVBREW_SPEC_DISTILL_DISABLE=1
-#      DEVBREW_SKIP_HOOKS=<plugin>:<hook>  또는  <plugin>:<event>  (쉼표 목록, 전체 토큰)
-#    plugin-audit(check-shape-completeness.py)은 훅 파일에서 그 플러그인 자기 이름의
-#    DEVBREW_<자기>_DISABLE · DEVBREW_SKIP_HOOKS · kill_switch_active("<자기>" 중 하나를 찾는다.
-#    이 해석기는 플러그인마다 같은 사본이라 자기 이름 스위치를 글자로 적을 수 없고(위처럼
-#    --plugin 에서 도출한다), 감사기는 본문의 DEVBREW_SKIP_HOOKS 를 읽고 통과시킨다.
-#    shared/tests/test_python_floor.sh 의 A11 과 축 C(AC11)가 잰다.
-_ks_trim() {   # 앞뒤 공백 제거 — 정본의 `.strip()` 자리
-  _s="$1"
-  _s="${_s#"${_s%%[![:space:]]*}"}"
-  _s="${_s%"${_s##*[![:space:]]}"}"
-  printf '%s' "$_s"
-}
-
-_ks_skip_has() {   # DEVBREW_SKIP_HOOKS 에 «전체 토큰» $1 이 있는가 (부분 일치 금지)
-  [ -n "${DEVBREW_SKIP_HOOKS-}" ] || return 1
-  # `set -f` 가 없으면 unquoted 확장이 IFS 분리 **뒤에 pathname expansion** 을 탄다 —
-  # cwd 에 우연히 맞는 파일이 있으면 `DEVBREW_SKIP_HOOKS='qg:*'` 가 훅을 끄고 없으면 안
-  # 끈다〔실측〕. 정본은 `skip.split(",")` 라 cwd 와 무관하다. 보안 컨트롤의 판정이 작업
-  # 디렉토리 «내용» 에 좌우되면 안 된다. 같은 함정과 같은 처방이
-  # plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh:67-70 에 실측으로 적혀 있다.
-  _ifs_save="$IFS"; IFS=","; set -f
-  for _tok in ${DEVBREW_SKIP_HOOKS}; do
-    IFS="$_ifs_save"; set +f
-    [ "$(_ks_trim "$_tok")" = "$1" ] && return 0
-    IFS=","; set -f
-  done
-  IFS="$_ifs_save"; set +f
-  return 1
-}
-
-kill_switch_active() {   # $1 plugin, $2 hook, $3 event(빈 값 가능)
-  _up=""; _rest="$1"
-  while [ -n "$_rest" ]; do
-    _ch="${_rest%"${_rest#?}"}"; _rest="${_rest#?}"
-    case "$_ch" in
-      a) _ch=A;; b) _ch=B;; c) _ch=C;; d) _ch=D;; e) _ch=E;; f) _ch=F;; g) _ch=G;;
-      h) _ch=H;; i) _ch=I;; j) _ch=J;; k) _ch=K;; l) _ch=L;; m) _ch=M;; n) _ch=N;;
-      o) _ch=O;; p) _ch=P;; q) _ch=Q;; r) _ch=R;; s) _ch=S;; t) _ch=T;; u) _ch=U;;
-      v) _ch=V;; w) _ch=W;; x) _ch=X;; y) _ch=Y;; z) _ch=Z;; -) _ch=_;;
-      [A-Z0-9_]) ;;
-      *) _ch="" ;;   # eval 에 들어갈 «이름» 이므로 그 밖의 글자는 버린다
-    esac
-    _up="$_up$_ch"
-  done
-  eval "_dis=\${DEVBREW_${_up}_DISABLE-}"
-  [ "$_dis" = "1" ] && return 0
-  # 별칭 둘: 훅명 **또는** 이벤트명. 빈 이벤트는 별칭을 만들지 않는다(정본과 같다 —
-  # `<plugin>:` 꼴의 문서화되지 않은 와일드카드가 생기지 않게).
-  _ks_skip_has "$1:$2" && return 0
-  [ -n "$3" ] && _ks_skip_has "$1:$3" && return 0
-  return 1
-}
-
-if kill_switch_active "$PLUGIN" "$HOOK" "$EVENT"; then
-  exit 0
-fi
 
 # ── 버전 판정 — 이름이나 실행 권한이 아니라 «물어본 답» 이 근거다 ──────────────
 PROBE_MAJOR=0; PROBE_MINOR=0

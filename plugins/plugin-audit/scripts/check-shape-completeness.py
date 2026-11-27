@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """F 결정론부 — canonical devbrew-플러그인 shape 대비 누락을 사실로 열거. 판정 없음(축⑤ 몫). C15: 단일 패스."""
-import argparse, json, re, sys
+import argparse, json, os, re, sys
 from pathlib import Path
 
 # 하드코딩 checklist — CLAUDE.md §Plugin Shape의 진리원천 반영 (회귀 락이 drift 감시)
@@ -11,6 +11,7 @@ CHECKLIST = [
     ("agents_allowlist", "CLAUDE.md §컴포넌트 격리"),
     ("skills_cost_class", "CLAUDE.md §컴포넌트 격리"),
     ("deps_declared", "CLAUDE.md §컴포넌트 격리"),
+    ("switches_have_readers", "CLAUDE.md §런타임 상태 & 훅"),
 ]
 
 
@@ -25,9 +26,12 @@ def check(plugin_dir):
     pd = Path(plugin_dir)
     gaps = []
 
-    def add(req, present):
+    def add(req, present, missing=None):
         src = dict(CHECKLIST)[req]
-        gaps.append({"requirement": req, "present": bool(present), "source_doc": src})
+        gap = {"requirement": req, "present": bool(present), "source_doc": src}
+        if missing:
+            gap["missing"] = missing   # 빠진 이름 목록(G7)
+        gaps.append(gap)
 
     pj_text = _read(pd / ".claude-plugin" / "plugin.json")
     try:
@@ -65,7 +69,82 @@ def check(plugin_dir):
     cross_dispatch = _has_cross_plugin_dispatch(pd, own_name)
     add("deps_declared",
         (not cross_dispatch) or ("Prerequisites" in readme) or ("prerequisites" in readme.lower()))
+    unread = _switch_readers_gaps(pd, own_name)
+    add("switches_have_readers", not unread, unread)
     return {"shape_gaps": gaps}
+
+
+_SWITCH_NAME_RE = re.compile(r"DEVBREW_[A-Z0-9_]*DISABLE[A-Z0-9_]*")
+_NOT_READ_BASES = ("switches.md", "README.md", "CHANGELOG.md", "entry_preflight.py")
+
+
+def _table_switch_names(pd):
+    """switches.md 표의 이름 칸 이름들 — (은퇴가 아닌 행, 은퇴 행). 머리줄 · 상태 칸만 본다."""
+    kept, retired, cols = set(), set(), None
+    for line in (_read(pd / "switches.md") or "").splitlines():
+        if not line.lstrip().startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if cols is None:
+            if "이름" in cells and "상태" in cells:
+                cols = (cells.index("이름"), cells.index("상태"))
+            continue
+        if len(cells) > max(cols):
+            (retired if cells[cols[1]] == "은퇴" else kept).update(_SWITCH_NAME_RE.findall(cells[cols[0]]))
+    return kept, retired
+
+
+def _candidate_lines(pd):
+    """읽는 곳 후보 — (파일 이름, 줄들). md 는 bash 펜스 안만, 나머지는 전부. 주석 · 출력 줄은 뺀다."""
+    out = []
+    for root, dirs, names in os.walk(str(pd)):
+        dirs[:] = sorted(x for x in dirs if x != "tests")
+        for n in sorted(names):
+            text = None if n in _NOT_READ_BASES else _read(Path(root) / n)
+            if text is None:
+                continue
+            lines, fenced = [], False
+            for ln in text.split("\n"):
+                s = ln.lstrip()
+                if n.endswith(".md"):
+                    if s.startswith("```"):
+                        fenced = (not fenced) and s[3:].strip() == "bash"
+                        continue
+                    if not fenced:
+                        continue
+                if s.startswith(("#", "print(")) or (s.split(None, 1) or [""])[0] in ("echo", "printf"):
+                    continue
+                lines.append(ln)
+            out.append((n, lines))
+    return out
+
+
+def _switch_readers_gaps(pd, own_name):
+    """이름을 댄 끄기 변수 가운데 읽는 코드를 못 찾은 이름(정렬). `은퇴` 행의 이름은 센 대상이 아니다.
+    플러그인의 끄기 변수는 `DEVBREW_<플러그인>_…` 꼴이다(설계 5 · CLAUDE.md 이름 규칙) — 글에서는 그 접두만
+    모으고(다른 플러그인 이름 · 옛 꼴 이름은 빠진다), switches.md 의 은퇴 아닌 행은 접두와 무관하게 더한다."""
+    prefix = "DEVBREW_" + str(own_name).upper().replace("-", "_") + "_"
+    named = set()
+    for f in sorted((pd / "skills").glob("*/SKILL.md")) + [pd / "README.md"]:
+        named.update(x for x in _SWITCH_NAME_RE.findall(_read(f) or "") if x.startswith(prefix))
+    kept, retired = _table_switch_names(pd)
+    named = (named | kept) - retired
+    files = _candidate_lines(pd)
+    keys = {}   # .conf 의 `키=이름` — 스크립트가 키로 간접해서 읽는다
+    for n, lines in files:
+        for ln in (lines if n.endswith(".conf") else []):
+            m = re.match(r"([A-Za-z_]\w*)=[\"']?(\w+)[\"']?\s*$", ln.strip())
+            if m:
+                keys.setdefault(m.group(2), []).append(m.group(1))
+    missing = []
+    for name in sorted(named):
+        q = re.escape(name)
+        pats = [r"\$\{?%s(?!\w)" % q, r"(?:environ\.get|getenv)\(\s*[\"']%s[\"']" % q,
+                r"environ\[\s*[\"']%s[\"']" % q]
+        pats += [r"\$\{!%s(?!\w)" % re.escape(k) for k in keys.get(name, [])]
+        if not any(re.search(p, ln) for _, lines in files for ln in lines for p in pats):
+            missing.append(name)
+    return missing
 
 
 _NS_REF_RE = re.compile(r"\b([a-z][a-z0-9-]+):([a-z][a-z0-9-]+)\b")

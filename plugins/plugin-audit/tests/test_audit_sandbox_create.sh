@@ -277,42 +277,25 @@ assert_eq "$rc" "2" "밖을 가리키는 .claude → die"
 [ -z "$(ls -A "$OUTSIDE")" ] && ok "밖에는 아무것도 없다" || no "밖에 만들었다"
 rm -rf "$REPO" "$OUTSIDE"
 
-echo "[옛 자리: 같은 세션 이름만 치운다 (AC15) · 부모가 밖으로 풀리면 지우지 않는다]"
+echo "[옛 자리: 만들기는 건드리지 않고 remove 는 거부한다]"
 mk_repo_checked
 OLD="$REPO/.claude/plugin-audit/worktrees"
 mkdir -p "$OLD/rt-oldsess1" "$OLD/rt-other123" && printf 'x\n' > "$OLD/rt-oldsess1/f" && printf 'y\n' > "$OLD/rt-other123/f"
 (cd "$REPO" && "$WT" create-sandbox "oldsess1abcdefgh" >/dev/null 2>&1); rc=$?
-[ "$rc" -eq 0 ] && [ ! -e "$OLD/rt-oldsess1" ] && ok "옛 자리의 같은 세션 이름을 치웠다" || no "옛 같은 이름 rc=$rc"
-[ -f "$OLD/rt-other123/f" ] && ok "옛 자리의 다른 세션 사본은 그대로" || no "다른 세션의 옛 사본이 지워졌다"
-(cd "$REPO" && "$WT" remove "$OLD/rt-other123" >/dev/null 2>&1) && [ ! -e "$OLD/rt-other123" ] \
-  && ok "remove 는 옛 자리 경로도 받는다" || no "remove <옛 경로> 실패"
+[ "$rc" -eq 0 ] && [ -f "$OLD/rt-oldsess1/f" ] && ok "만들기는 옛 자리의 같은 세션 이름을 치우지 않는다" || no "옛 같은 이름 rc=$rc"
+(cd "$REPO" && "$WT" remove "$OLD/rt-other123" >/dev/null 2>&1); assert_eq "$?" "2" "remove 는 옛 자리 경로를 거부한다"
+[ -f "$OLD/rt-other123/f" ] && ok "거부한 옛 자리 사본은 그대로다" || no "거부했는데 옛 사본이 사라졌다"
 rm -rf "$REPO"
-for linkpoint in plugin-audit worktrees; do
-  mk_repo_checked; mk_outside_checked
-  if [ "$linkpoint" = "plugin-audit" ]; then
-    mkdir -p "$OUTSIDE/worktrees/rt-lnk00001" && printf 'v\n' > "$OUTSIDE/worktrees/rt-lnk00001/f"
-    mkdir -p "$REPO/.claude" && ln -s "$OUTSIDE" "$REPO/.claude/plugin-audit"
-  else
-    mkdir -p "$OUTSIDE/rt-lnk00001" && printf 'v\n' > "$OUTSIDE/rt-lnk00001/f"
-    mkdir -p "$REPO/.claude/plugin-audit" && ln -s "$OUTSIDE" "$REPO/.claude/plugin-audit/worktrees"
-  fi
-  (cd "$REPO" && "$WT" create-sandbox "lnk00001abcdefgh" >/dev/null 2>&1); rc=$?
-  assert_eq "$rc" "2" "옛 자리 부모($linkpoint)가 링크 → die"
-  [ -f "$(find "$OUTSIDE" -name f | head -1)" ] && ok "링크 너머($linkpoint)는 그대로" || no "링크 너머($linkpoint)가 지워졌다"
-  rm -rf "$REPO" "$OUTSIDE"
-done
 
-echo "[test_copy_skips_audit_trees: 다른 세션 사본 · 옛 자리는 빼고 같은 폴더의 다른 worktree 는 복사 (AC14)]"
+echo "[test_copy_skips_audit_trees: 다른 세션 사본은 빼고 같은 폴더의 다른 worktree 는 복사 (AC14)]"
 mk_repo_checked   # .claude 를 무시하지 않는 저장소
 (cd "$REPO" && git worktree add -q --detach "$REPO/.claude/worktrees/audit-rt-zzzzzzzz" HEAD >/dev/null 2>&1)
 (cd "$REPO" && git branch feat-x && git worktree add -q "$REPO/.claude/worktrees/feat-x" feat-x >/dev/null 2>&1)
 printf 'fx\n' > "$REPO/.claude/worktrees/feat-x/note.txt"
-mkdir -p "$REPO/.claude/plugin-audit/worktrees/rt-yyyyyyyy" && printf 'old\n' > "$REPO/.claude/plugin-audit/worktrees/rt-yyyyyyyy/f.txt"
 OUT=$(cd "$REPO" && "$WT" create-sandbox "copy01234567" 2>/dev/null); rc=$?
 SANDBOX=$(printf '%s\n' "$OUT" | sed -n '1p')
 [ "$rc" -eq 0 ] && [ -d "$SANDBOX" ] || no "create-sandbox 실패 rc=$rc"
 [ ! -e "$SANDBOX/.claude/worktrees/audit-rt-zzzzzzzz" ] && ok "다른 세션의 audit-rt-* 는 사본 안에 없다" || no "다른 세션 사본이 복사됐다"
-[ ! -e "$SANDBOX/.claude/plugin-audit/worktrees" ] && ok "옛 .claude/plugin-audit/worktrees/* 는 사본 안에 없다" || no "옛 자리가 복사됐다"
 [ -f "$SANDBOX/.claude/worktrees/feat-x/note.txt" ] && ok "같은 폴더의 feat-x 는 지금처럼 복사된다" || no "feat-x 가 새로 빠졌다"
 [ -d "$REPO/.claude/worktrees/audit-rt-zzzzzzzz" ] && ok "다른 세션 사본은 원래 자리에 그대로" || no "다른 세션 사본이 지워졌다"
 rm -rf "$REPO"
@@ -335,26 +318,24 @@ mkdir -p "$REPO/outside-ns" && : > "$REPO/outside-ns/keep"
 rm -rf "$REPO"
 echo "[remove: 이름 범위 — 자기 꼴이 아닌 이름은 rc 2 · 그대로 둔다]"
 mk_repo_checked; mk_outside_checked
-WTS="$REPO/.claude/worktrees"; OLDW="$REPO/.claude/plugin-audit/worktrees"
-mkdir -p "$WTS" "$OLDW" "$OLDW/feat-x" "$WTS/plain-folder" "$WTS/AUDIT-RT-case0001" "$WTS/audit-rt-12345678x" "$WTS/qg-base-abc"
+WTS="$REPO/.claude/worktrees"
+mkdir -p "$WTS" "$WTS/plain-folder" "$WTS/AUDIT-RT-case0001" "$WTS/audit-rt-12345678x" "$WTS/qg-base-abc"
 (cd "$REPO" && git worktree add -q --detach "$WTS/user-detached" HEAD && git branch feat-x && git worktree add -q "$WTS/feat-x" feat-x) >/dev/null 2>&1
-for d in "$WTS/user-detached" "$WTS/feat-x" "$WTS/plain-folder" "$WTS/AUDIT-RT-case0001" "$WTS/audit-rt-12345678x" "$WTS/qg-base-abc" "$OLDW/feat-x" "$OUTSIDE"; do printf 'keep\n' > "$d/keep.txt"; done
-mkdir -p "$OLDW/rt-123456789" "$OLDW/rt-" && printf 'keep\n' > "$OLDW/rt-123456789/keep.txt" && printf 'keep\n' > "$OLDW/rt-/keep.txt"
+for d in "$WTS/user-detached" "$WTS/feat-x" "$WTS/plain-folder" "$WTS/AUDIT-RT-case0001" "$WTS/audit-rt-12345678x" "$WTS/qg-base-abc" "$OUTSIDE"; do printf 'keep\n' > "$d/keep.txt"; done
 mkdir -p "$WTS/audit-rt-" && printf 'keep\n' > "$WTS/audit-rt-/keep.txt"
 for t in "$WTS/feat-x" "$WTS/user-detached" "$WTS/plain-folder" "$WTS/audit-rt-12345678x" "$WTS/audit-rt-123456789" "$WTS/audit-rt-" \
-         "$WTS/audit-rt-x/../feat-x" "$WTS/AUDIT-RT-case0001" "$WTS/qg-base-abc" "$OLDW/feat-x" "$OLDW/rt-123456789" "$OLDW/rt-" "$OUTSIDE" "$WTS" "$OLDW"; do
+         "$WTS/audit-rt-x/../feat-x" "$WTS/AUDIT-RT-case0001" "$WTS/qg-base-abc" "$OUTSIDE" "$WTS"; do
   (cd "$REPO" && "$WT" remove "$t" >/dev/null 2>&1); assert_eq "$?" "2" "범위 밖 이름은 rc 2: ${t#$REPO}"
 done
-for d in "$WTS/user-detached" "$WTS/feat-x" "$WTS/plain-folder" "$WTS/AUDIT-RT-case0001" "$WTS/audit-rt-12345678x" "$WTS/qg-base-abc" "$WTS/audit-rt-" "$OLDW/feat-x" "$OLDW/rt-123456789" "$OLDW/rt-" "$OUTSIDE"; do
+for d in "$WTS/user-detached" "$WTS/feat-x" "$WTS/plain-folder" "$WTS/AUDIT-RT-case0001" "$WTS/audit-rt-12345678x" "$WTS/qg-base-abc" "$WTS/audit-rt-" "$OUTSIDE"; do
   [ -f "$d/keep.txt" ] && ok "그대로다: ${d#$REPO}" || no "범위 밖 대상이 사라졌다: ${d#$REPO}"
 done
 (cd "$REPO" && git worktree list | grep -q "user-detached") && (cd "$REPO" && git worktree list | grep -q "feat-x") \
   && ok "사용자 worktree 등록이 그대로다" || no "사용자 worktree 등록이 풀렸다"
-# 양의 짝 — 자기 이름은 새 자리 · 옛 자리 모두 받는다
-mkdir -p "$WTS/audit-rt-ok000001" "$OLDW/rt-okold001" && : > "$WTS/audit-rt-ok000001/f" && : > "$OLDW/rt-okold001/f"
+# 양의 짝 — 자기 이름은 받는다
+mkdir -p "$WTS/audit-rt-ok000001" && : > "$WTS/audit-rt-ok000001/f"
 (cd "$REPO" && "$WT" remove "$WTS/audit-rt-ok000001" >/dev/null 2>&1); assert_eq "$?" "0" "자기 이름(새 자리)은 받는다"
-(cd "$REPO" && "$WT" remove "$OLDW/rt-okold001" >/dev/null 2>&1); assert_eq "$?" "0" "자기 이름(옛 자리)은 받는다"
-[ ! -e "$WTS/audit-rt-ok000001" ] && [ ! -e "$OLDW/rt-okold001" ] && ok "자기 이름 둘이 지워졌다" || no "자기 이름이 남았다"
+[ ! -e "$WTS/audit-rt-ok000001" ] && ok "자기 이름이 지워졌다" || no "자기 이름이 남았다"
 rm -rf "$REPO" "$OUTSIDE"
 
 echo "[링크는 링크만 지운다 — 링크가 등록된 사용자 worktree 를 가리킬 때]"

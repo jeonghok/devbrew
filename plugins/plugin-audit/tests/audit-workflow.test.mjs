@@ -144,6 +144,18 @@ test('WB1 — CONTRACT renders structure_facts/shape_gaps OBJECTS, not [object O
     'objects must be field-formatted, not stringified to [object Object]')
 })
 
+test('WB1b — shape_gaps 의 missing 이름이 있을 때만 리포트 근거에 실린다 (AC24)', async () => {
+  const run = async (gap) => {
+    const args = { target: 'sample', evidencePack: { ...DEFAULT_PACK, shape_gaps: [gap] }, codexFindings: [] }
+    const { calls } = await runWorkflow(WF, { args, stubAgent: stubOneFinding() })
+    return calls.find((c) => c.opts.phase === '감사').prompt
+  }
+  const base = { requirement: 'switches_have_readers', present: false, source_doc: 'CLAUDE.md' }
+  assert.ok(/switches_have_readers.*missing=DEVBREW_FX_DISABLE_A,DEVBREW_FX_DISABLE_B/.test(
+    await run({ ...base, missing: ['DEVBREW_FX_DISABLE_A', 'DEVBREW_FX_DISABLE_B'] })), 'missing names must render')
+  assert.ok(!/missing=/.test(await run({ ...base, present: true })), 'no missing= when the field is absent')
+})
+
 test('WB3 — own_tests consumer reads the REAL contract shape (no undefined / null/null)', async () => {
   // producer(run-own-tests.sh)의 실제 shape: {ran, passed, total, forced_downgrade, why}.
   // passed/total은 현재 항상 null이고 .failed/.framework는 존재하지 않는다. 예전 소비자는

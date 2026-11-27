@@ -85,17 +85,10 @@ advisory(`[spec-distill] brief 리뷰 degrade 원장 기록 불가 (<reason>) �
 
 전부 dispatch 직전에 확인하고 캐시하지 않는다. 발화한 스위치는 `## degrade 채널` 로 공시한다.
 
-- `DEVBREW_SPEC_DISTILL_DISABLE=1` → 진입하지 않는다(상태 보존).
-- `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1` → 리뷰 전체 skip. record(`pipeline` / `all` /
-  `skipped`)를 남기고 loud advisory 후 Step B 로 돌아간다 — 조용히 건너뛰지 않는다:
-
-  > `[spec-distill] brief 리뷰를 건너뛰었다 (DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1) — 리뷰 라운드도 냉독도 돌지 않았다. 다음 단계 게이트에서 확인해 주세요.`
-
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` → codex 만 끈다(아래 codex 게이트가 집행한다). 탐지·재비판은 그대로.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` → 이 자리의 웹 둘에 걸린다 — `## dispatch 블록 둘` 의 선택 펜스가 탐지
   dispatch 대상으로 웹 도구가 없는 `spec-distill:doc-critic` 을 지명하고(dispatch 는 지명된 블록을 따른다 — 그
   선택을 강제하는 훅은 없다), 러너가 codex 의 웹 검색을 끈다(`## 절차` 의 「웹」).
-- `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` → 재비판만 끈다.
 
 record 의 필드는 `component` · `affected_axis` · `verification_status` · `reason` 넷이고(이 문서의
 `a` / `b` / `c` 표기가 앞의 셋이다), 종료 코드를 그 자리에서 잡아 실패하면 두 번째 채널 — Bash 도구는
@@ -481,8 +474,8 @@ fi
 허용하면 `## dispatch 블록 둘` 의 선택 펜스가 웹 도구(`WebSearch`·`WebFetch`)를 가진 `spec-distill:doc-critic-web`
 을 고르고, 그 리뷰어가 층 1(방향)의 외부 근거를 URL 로 인용한다. 재비판자 `doc-recritic` 은 웹이 없다
 (`tools: Read, Grep, Glob`). codex 쪽은 러너가 프로필 frontmatter 의 `web:` 을 읽어 codex 웹 검색을 켜고,
-두 호스트 스위치 `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` · `DEVBREW_QUALITY_GATES_DISABLE_WEB=1` 중 하나라도
-켜져 있으면 끈다(공유 러너가 두 호스트의 스위치를 함께 본다). `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 은 그에 더해
+호스트 스위치 `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 이
+켜져 있으면 끈다. `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 은 그에 더해
 선택 펜스가 탐지 dispatch 대상으로 웹 도구 없는 `spec-distill:doc-critic` 을 **지명**하게 한다 — 스위치가 켜져
 있거나 프로필이 웹을 허용하지 않으면 펜스는 웹 사본을 지명하지 않고, dispatch 는 지명된 블록을 따른다. 그 선택을
 강제하는 훅은 없다 — 물리적인 것은 웹 없는 사본의 `tools:` 에 웹 도구가 없다는 것뿐이다(진입 게이트의
@@ -715,7 +708,7 @@ python3 "$PR/scripts/docreview_state.py" ask-material --state-dir "$STATE_DIR" -
   둘, 또는 finalize 보고서가 없는 `unrouted`) 라벨이 없어도 그 사실과 사유를 그대로 Step B 로 넘긴다 — 그 라운드는 리뷰
   완료가 아니고, 렌더 첫 줄도 「이상 없음」·「경고 없음」이 아니다.
 - **polite stop 금지 (AP2)** — 이 skill 을 끝내는 모든 경로는 게이트 결과를 싣고 Step B 로 돌아가거나,
-  게이트를 거치지 않는 예외 경로(kill switch · 진입 게이트 차단 · 엔진 상태 디렉토리 없음 · 엔진 init 거부 ·
+  게이트를 거치지 않는 예외 경로(진입 게이트 차단 · 엔진 상태 디렉토리 없음 · 엔진 init 거부 ·
   번들 실패)면 record 와 명시적 advisory 단락을 동반하고 Step B 로 돌아간다. 조용한 종료는 금지다.
 
 ## 냉독 — 엔진 밖, advisory
@@ -807,7 +800,7 @@ Step B(`context-build` `finishing.md` 의 `#### B-A`)가 끝에서 한 번 보�
   게이트 앞 글에는 이 첫 줄을 그대로 쓰고 `advisory[]` 원문을 다시 늘어놓지 않는다. 질문의 경고 줄은
   엔진의 상태 줄과 다른 채널의 짧은 줄을 이은 것이다 — 개수를 더하지 않는다. 렌더 첫 줄의 끝 문구(이상 없음 · 경고 없음 · 경고 K개)는 문서 리뷰 엔진 몫의 결론이다. 다른 채널에 경고가 있으면 첫 줄 아래에 그 줄들을 따로 쓴다.
 - 이 자리의 둘 — `brief_review_state.py get "$STATE"` 의 `brief_review_degradations`(진입 게이트 강등 ·
-  번들 위생 미달 · 냉독 실패 · BRIEF_REVIEW skip · 원장 기록 불가처럼 엔진 밖의 사건) · 그 기록이
+  번들 위생 미달 · 냉독 실패 · 원장 기록 불가처럼 엔진 밖의 사건) · 그 기록이
   실패했을 때의 `$DEGRADE_FALLBACK_FILE` 줄들(머리가 매 호출 같은 파일로 다시 도출한다).
 
 그리고 매번 싣는 한 줄(경고가 아니라 질문의 경고 줄에는 싣지 않는다) — `웹: Claude <doc-critic-web | doc-critic(DISABLE_WEB) | doc-critic(프로필 판독 불가)> ·

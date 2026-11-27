@@ -135,15 +135,16 @@ assert_eq "$rc" "1" "E1: .claude 자체가 밖을 가리키는 링크면 exit 1 
 assert_eq "$(snap "$OUTd")" "$before" "E1: 링크인 .claude 너머에 아무 파일도 쓰지 않는다"
 assert_contains "$err" "지우지 않는다" "E1: .claude 링크 거부도 한 줄로 알린다"
 
-# kill switch — setup 직접 호출도 막는다. (test_kill_switches.py 의
-# test_skill_setup_qg_honors_disable_kill_switch 를 이어받는 자리: 그 파일이 지워져도 이 단언이 남는다.)
+# 은퇴한 통째 끄기는 더 듣지 않는다 — 켜도 setup 이 세션 폴더를 만든다.
+# 짝: 켜지 않은 같은 호출도 폴더를 만든다(양의 짝) — 폴더가 생겼다는 사실이 두 호출 모두에서 같다.
 WK="$TMP/ks"; mkdir -p "$WK"
 (cd "$WK" && DEVBREW_QUALITY_GATES_DISABLE=1 "$SETUP" --session-id "kssession0001" >/dev/null 2>&1); rc=$?
-assert_eq "$([ "$rc" -ne 0 ] && echo nonzero || echo zero)" "nonzero" "E1(kill switch): DEVBREW_QUALITY_GATES_DISABLE=1 이면 setup 이 0 이 아닌 코드로 끝난다"
-[ ! -e "$WK/.claude/quality-gates/kssession0001" ] \
-  && ok "E1(kill switch): 스위치가 켜져 있으면 세션 폴더를 만들지 않는다" || no "E1(kill switch): 스위치가 켜졌는데 세션 폴더가 생겼다"
+assert_eq "$rc" "0" "E1(은퇴한 끄기): DEVBREW_QUALITY_GATES_DISABLE=1 이어도 setup 이 0 으로 끝난다"
+[ -d "$WK/.claude/quality-gates/kssession0001" ] \
+  && ok "E1(은퇴한 끄기): 은퇴한 스위치가 켜져 있어도 세션 폴더를 만든다" || no "E1(은퇴한 끄기): 은퇴한 스위치가 켜졌다고 세션 폴더를 만들지 않았다"
+rm -rf "$WK/.claude"
 (cd "$WK" && "$SETUP" --session-id "kssession0001" >/dev/null 2>&1); rc=$?
-assert_eq "$rc" "0" "E1(kill switch): 스위치가 없으면 같은 호출이 폴더를 만든다 (양의 짝)"
+assert_eq "$rc" "0" "E1(은퇴한 끄기): 스위치가 없는 같은 호출도 폴더를 만든다 (양의 짝)"
 
 note "── E1(비-세션 폴더): SID 패턴을 통과해도 세션 폴더가 아니면 지우지 않는다"
 refusal_check() {   # refusal_check <라벨> <작업 디렉토리> <sid> [setup 추가 인자…] — rc 1 · stderr 정확히 한 줄 · 트리 불변
@@ -156,7 +157,7 @@ refusal_check() {   # refusal_check <라벨> <작업 디렉토리> <sid> [setup 
   assert_eq "$(printf '%s\n' "$e" | grep -c .)" "1" "E1: $label — stderr 가 정확히 한 줄이다"
   assert_eq "$after" "$before" "E1: $label — 아무것도 지우거나 쓰지 않았다"
 }
-for reserved in worktrees baseline-cache; do
+for reserved in baseline-cache; do
   WR="$TMP/e1res-$reserved"
   mkdir -p "$WR/.claude/quality-gates/$reserved/qg-baseline-abc"
   : > "$WR/.claude/quality-gates/$reserved/qg-baseline-abc/file"
@@ -170,6 +171,11 @@ for reserved in worktrees baseline-cache; do
   : > "$WR2/.claude/quality-gates/$reserved/pipeline.md"
   refusal_check "예약 이름 $reserved (마커가 이미 있어도)" "$WR2" "$reserved"
 done
+# 짝 — `worktrees` 는 예약이 아니라 보통 세션 id 로 받는다(`baseline-cache` 는 위에서 거부한다).
+WW="$TMP/e1wtsid"; mkdir -p "$WW"
+(cd "$WW" && "$SETUP" --session-id worktrees >/dev/null 2>&1); rc=$?
+assert_eq "$rc" "0" "E1: 세션 id worktrees 는 받는다"
+[ -f "$WW/.claude/quality-gates/worktrees/result.md" ] && ok "E1: worktrees 세션 폴더에 result.md 를 둔다" || no "E1: worktrees 세션 폴더가 만들어지지 않았다"
 WM="$TMP/e1nomarker"
 mkdir -p "$WM/.claude/quality-gates/unrelatedfolder1"
 : > "$WM/.claude/quality-gates/unrelatedfolder1/notes.txt"
@@ -260,13 +266,6 @@ assert_eq "$rc" "2" "E1: setup-qg.sh critique docs/x.md 는 exit 2"
 assert_contains "$out" "/quality-gates:artifact-critique" "E1: critique 는 stdout 에 새 이름을 안내한다"
 assert_eq "$(cat "$TMP/critique.err")" "" "E1: critique 는 stderr 가 비어 있다"
 [ ! -e "$WC/.claude" ] && ok "E1: critique 는 세션 폴더를 만들지 않는다" || no "E1: critique 가 상태를 남겼다"
-# kill switch 는 모든 인자 처리보다 먼저다(계획 Task 1) — 꺼 둔 qg 는 critique 안내도 내지 않는다. 켜지 않았을 때의 안내는 위 단언이 양의 짝이다.
-for ca in "critique docs/x.md" "--ensure critique docs/x.md" "branch critique"; do
-  out="$(cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 DEVBREW_QUALITY_GATES_DISABLE=1 "$SETUP" $ca 2>&1)"; rc=$?
-  assert_eq "$rc" "1" "E1: kill switch 가 켜져 있으면 critique($ca)도 exit 1"
-  assert_contains "$out" "DEVBREW_QUALITY_GATES_DISABLE=1" "E1: kill switch 메시지가 나온다($ca)"
-  assert_eq "$(printf '%s' "$out" | grep -c 'artifact-critique')" "0" "E1: kill switch 가 켜지면 critique 안내는 없다($ca)"
-done
 out="$(cd "$WC" && CLAUDE_CODE_SESSION_ID=critiquesess1 "$SETUP" --ensure critique docs/x.md 2>"$TMP/critique.err")"; rc=$?
 assert_eq "$rc" "2" "E1: SKILL P2 의 실제 모양(--ensure critique docs/x.md)도 exit 2"
 assert_contains "$out" "/quality-gates:artifact-critique" "E1: --ensure critique 도 새 이름을 안내한다"
@@ -315,19 +314,6 @@ note "── E4: GC 는 루트 탈출 · 심링크 루트를 거부하고 안전
 out="$(cd "$SCRIPT_DIR" && python3 -m unittest test_qg_gc.QgGcRootSafetyTest 2>&1)"; rc=$?
 assert_eq "$rc" "0" "E4: test_qg_gc.QgGcRootSafetyTest 가 통과한다"
 assert_grep "$out" '^Ran [1-9][0-9]* tests' "E4: 루트 안전 테스트가 실제로 돌았다 (0건이 아니다)"
-
-note "── E5: kill switch 는 전체 토큰으로 일치시킨다"
-e5() {   # e5 <DEVBREW_SKIP_HOOKS 값> → 만료 세션 폴더가 남았으면 kept, 지워졌으면 gone
-  local w="$TMP/e5-$RANDOM"
-  stale_session "$w" "stalee5sess01"
-  (cd "$w" && DEVBREW_SKIP_HOOKS="$1" python3 "$GC" >/dev/null 2>&1)
-  if [ -d "$w/.claude/quality-gates/stalee5sess01" ]; then echo kept; else echo gone; fi
-}
-assert_eq "$(e5 'quality-gates:qg-gc')" "kept" "E5: 전체 토큰 quality-gates:qg-gc 는 GC 를 끈다"
-assert_eq "$(e5 ' quality-gates:qg-gc ,other:x')" "kept" "E5: 앞뒤 공백 · 쉼표 목록 안의 전체 토큰도 끈다"
-assert_eq "$(e5 'quality-gates:qg')" "gone" "E5: 부분 일치 quality-gates:qg 는 끄지 않는다"
-assert_eq "$(e5 'quality-gates:qg-gc:sub')" "gone" "E5: 더 긴 토큰 quality-gates:qg-gc:sub 는 끄지 않는다"
-assert_eq "$(e5 '')" "gone" "E5: 스위치가 없으면 GC 가 돈다 (양의 짝)"
 
 note "── E6: 리뷰 대상 리포의 git 훅을 끈다 (core.hooksPath)"
 R="$TMP/e6"; M="$TMP/e6-marks"; mkdir -p "$R" "$M"

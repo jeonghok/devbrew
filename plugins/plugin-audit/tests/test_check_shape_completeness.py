@@ -13,7 +13,42 @@ ANCHORS = {
     "agents_allowlist": "`tools:` allowlist를 선언",
     "skills_cost_class": "모든 skill 은 frontmatter `metadata` 아래에 `cost_class` 를 선언한다",
     "deps_declared": "최소 버전이 선언된 의존성",
+    "switches_have_readers": "끄기 변수마다 읽는 코드가 있다",
 }
+# 읽는 코드 검사의 fixture 플러그인 — 임시 폴더에 만든다(추적 파일로 두면 레포의 skill · README 글롭에 섞인다).
+_FX_TABLE = ("---\ntype: devbrew-switches\nplugin: fx\n---\n\n# fx 끄기 변수\n\n"
+             "| 이름 | 끄는 것 | 상태 | 대신할 길 |\n|---|---|---|---|\n"
+             "| `DEVBREW_FX_DISABLE_A` | x | 남음 | - |\n")
+_FX_SKILL = ("---\nname: x\ndescription: d\nmetadata:\n  cost_class: low\n---\n# x\n\n"
+             "`DEVBREW_FX_DISABLE_A` 가 켜져 있으면 멈춘다.\n")
+_FX_SCRIPTS = {
+    "reads": {"a.sh": '#!/usr/bin/env bash\n[ "${DEVBREW_FX_DISABLE_A:-}" = 1 ] && exit 0\n'},
+    "nowhere": {"a.sh": "#!/usr/bin/env bash\nexit 0\n"},
+    "comment-only": {
+        "a.sh": ("#!/usr/bin/env bash\n"
+                 "# DEVBREW_FX_DISABLE_A=1 이면 끈다 ${DEVBREW_FX_DISABLE_A}\n"
+                 'echo "set ${DEVBREW_FX_DISABLE_A} to stop"\n'
+                 'printf "%s\\n" "${DEVBREW_FX_DISABLE_A}"\n'),
+        "p.py": 'import os\nprint(os.environ.get("DEVBREW_FX_DISABLE_A"))\n',
+    },
+    "indirect": {"b.sh": '#!/usr/bin/env bash\n. "$(dirname "$0")/x.conf"\n[ "${!K:-}" = 1 ] && exit 0\n',
+                 "x.conf": "K=DEVBREW_FX_DISABLE_A\n"},
+}
+
+
+def _mk_fx(d, case):
+    dd = Path(d) / "fx"
+    (dd / ".claude-plugin").mkdir(parents=True)
+    (dd / ".claude-plugin" / "plugin.json").write_text(
+        '{"name":"fx","description":"x","version":"0.1.0"}\n', encoding="utf-8")
+    (dd / "README.md").write_text("# fx\n## Principles Instantiated\n- Law 1\n", encoding="utf-8")
+    (dd / "switches.md").write_text(_FX_TABLE, encoding="utf-8")
+    (dd / "skills" / "x").mkdir(parents=True)
+    (dd / "skills" / "x" / "SKILL.md").write_text(_FX_SKILL, encoding="utf-8")
+    (dd / "scripts").mkdir()
+    for name, body in _FX_SCRIPTS[case].items():
+        (dd / "scripts" / name).write_text(body, encoding="utf-8")
+    return dd
 
 
 def run(plugin_dir):
@@ -236,12 +271,95 @@ class TestShapeCompleteness(unittest.TestCase):
                 self.assertTrue(gaps[req]["present"], req)
             self.assertTrue(gaps["deps_declared"]["present"])
 
-    def test_checklist_names(self):  # AC9 — 요건은 정확히 여섯
+    def _readers(self, case):
+        with tempfile.TemporaryDirectory() as d:
+            return self._readers_at(_mk_fx(d, case))
+
+    def test_switch_with_reader_is_present(self):   # AC24 — 읽는 코드가 있다
+        self.assertEqual(self._readers("reads"), (True, None))
+
+    def test_switch_named_but_never_read_is_gap(self):   # AC24 — 이름만 댄다
+        self.assertEqual(self._readers("nowhere"), (False, ["DEVBREW_FX_DISABLE_A"]))
+
+    def test_comment_and_echo_lines_are_not_readers(self):   # AC24 — 주석 · echo 줄은 읽는 곳이 아니다
+        self.assertEqual(self._readers("comment-only"), (False, ["DEVBREW_FX_DISABLE_A"]))
+
+    def test_indirect_conf_reader_is_present(self):   # AC24 — .conf 의 키로 간접해서 읽는다
+        self.assertEqual(self._readers("indirect"), (True, None))
+
+    def test_retired_row_name_is_not_a_gap(self):   # AC24 — 은퇴 행의 이름은 읽는 곳이 없어도 gap 이 아니다
+        with tempfile.TemporaryDirectory() as d:
+            dd = _mk_fx(d, "nowhere")
+            self.assertFalse(self._gaps(dd)["switches_have_readers"]["present"])   # 양성 대조 — 남음 행이면 gap
+            sw = dd / "switches.md"
+            sw.write_text(sw.read_text(encoding="utf-8").replace("| 남음 |", "| 은퇴 |"), encoding="utf-8")
+            self.assertTrue(self._gaps(dd)["switches_have_readers"]["present"])
+
+    def test_other_plugin_and_old_form_names_are_not_gaps(self):   # AC24 — 이 플러그인 접두가 아닌 이름은 센 대상이 아니다
+        with tempfile.TemporaryDirectory() as d:
+            dd = _mk_fx(d, "reads")
+            sk =dd / "skills" / "x" / "SKILL.md"
+            sk.write_text(sk.read_text(encoding="utf-8") + "`DEVBREW_OTHER_DISABLE_X` · `DEVBREW_DISABLE_FX_A`\n", encoding="utf-8")
+            self.assertEqual(self._readers_at(dd), (True, None))
+            sk.write_text(sk.read_text(encoding="utf-8") + "`DEVBREW_FX_DISABLE_B`\n", encoding="utf-8")   # 양성 대조 — 접두가 맞으면 잡힌다
+            self.assertEqual(self._readers_at(dd), (False, ["DEVBREW_FX_DISABLE_B"]))
+
+    def test_table_row_without_reader_is_gap_even_if_text_is_silent(self):   # AC24 — 표에 있는데 읽는 곳이 없다
+        with tempfile.TemporaryDirectory() as d:
+            dd = _mk_fx(d, "nowhere")
+            sk =dd / "skills" / "x" / "SKILL.md"
+            sk.write_text("---\nname: x\ndescription: d\nmetadata:\n  cost_class: low\n---\nbody\n", encoding="utf-8")
+            self.assertEqual(self._readers_at(dd), (False, ["DEVBREW_FX_DISABLE_A"]))
+
+    def _skill_variant(self, d, skill_tail, tests_script=None):
+        dd = _mk_fx(d, "nowhere")
+        (dd / "skills" / "x" / "SKILL.md").write_text(
+            "---\nname: x\ndescription: d\nmetadata:\n  cost_class: low\n---\n" + skill_tail, encoding="utf-8")
+        if tests_script:
+            (dd / "tests").mkdir()
+            (dd / "tests" / "t.sh").write_text(tests_script, encoding="utf-8")
+        return self._readers_at(dd)
+
+    READ = '[ "${DEVBREW_FX_DISABLE_A:-}" = 1 ]'
+
+    def test_read_form_in_skill_prose_is_not_a_reader(self):   # AC24 — skill 문장으로만 꺼지는 스위치
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(self._skill_variant(d, "`DEVBREW_FX_DISABLE_A` " + self.READ + "\n"),
+                             (False, ["DEVBREW_FX_DISABLE_A"]))
+
+    def test_read_form_in_skill_bash_fence_is_a_reader(self):   # AC24 — 양성 짝
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(self._skill_variant(d, "`DEVBREW_FX_DISABLE_A`\n```bash\n" + self.READ + "\n```\n"),
+                             (True, None))
+
+    def test_read_form_in_non_bash_fence_is_not_a_reader(self):   # AC24
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(self._skill_variant(d, "`DEVBREW_FX_DISABLE_A`\n```text\n" + self.READ + "\n```\n"),
+                             (False, ["DEVBREW_FX_DISABLE_A"]))
+
+    def test_read_form_only_in_tests_is_not_a_reader(self):   # AC24
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(self._skill_variant(d, "`DEVBREW_FX_DISABLE_A`\n", tests_script=self.READ + "\n"),
+                             (False, ["DEVBREW_FX_DISABLE_A"]))
+
+    def test_every_plugin_of_this_repo_has_readers_present(self):   # AC24 — 이 레포의 플러그인마다 끄기 변수에 읽는 코드가 있다
+        plugins = sorted(p for p in (REPO / "plugins").iterdir() if (p / ".claude-plugin" / "plugin.json").is_file())
+        self.assertGreaterEqual(len(plugins), 4)
+        for p in plugins:
+            with self.subTest(plugin=p.name):
+                self.assertEqual(self._readers_at(p), (True, None))
+
+    def _readers_at(self, dd):
+        g = self._gaps(dd)["switches_have_readers"]
+        return g["present"], g.get("missing")
+
+    def test_checklist_names(self):  # AC9 · AC24 — 요건은 정확히 일곱
         with tempfile.TemporaryDirectory() as d:
             _mk_plugin(d)
             names = [g["requirement"] for g in self._gaps_list(d)]
             self.assertEqual(names, ["plugin_json_fields", "readme_principles", "changelog_if_v1",
-                                     "agents_allowlist", "skills_cost_class", "deps_declared"])
+                                     "agents_allowlist", "skills_cost_class", "deps_declared",
+                                     "switches_have_readers"])
 
     def _gaps_list(self, d):
         r, obj = run(d)

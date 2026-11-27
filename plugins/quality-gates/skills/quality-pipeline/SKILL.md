@@ -22,12 +22,11 @@ allowed-tools:
 
 ## 진입 단계
 
-이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽는다. 감시줄 아래에 `[devbrew-switch]` 로 시작하는 줄이 있으면 감시줄이 무엇이든 그 줄들을 고치지 않고 사용자에게 보인다.
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽는다. 감시줄 아래에 `[devbrew-switch]` 로 시작하는 줄이 있으면 감시줄이 무엇이든 그 줄들을 고치지 않고 사용자에게 보인다. 감시줄 아래에 `[devbrew-switch] 더 듣지 않는다 — quality-gates 전체(` 로 시작하는 줄이나 `[devbrew-switch] 끄기 변수 표를 읽지 못했다` 로 시작하는 줄이 있으면 그 줄을 보인 뒤 `AskUserQuestion` 으로 계속할지 한 번 묻고, 「계속한다」 를 고를 때만 간다 — 물을 수 없거나 답이 없으면 멈춘다. 질문 `끄던 변수가 켜져 있지만 더 듣지 않는다 — 계속하면 이 skill 이 그대로 돈다(codex · 웹 조사로 내용을 보내거나, 남의 코드를 돌리거나, PR 에 글을 올릴 수 있다). 계속할까?` · 선택지 `계속한다`(얻음: 이 skill 을 지금 쓴다 · 내줌: 꺼 두었다고 믿던 일이 돈다) · `멈춘다`(얻음: 아무것도 돌지 않는다 · 내줌: 변수를 풀거나 플러그인 끄기를 쓴 뒤 다시 불러야 한다). (추천을 달지 않는다 — 꺼 두었다고 믿던 일을 다시 돌릴지는 사용자가 고른다)
 
 | 그 자리의 내용 | 동작 |
 |---|---|
 | `[devbrew-entry] ok …` | 아래 의존 확인 펜스로 간다 |
-| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다 |
 | `[devbrew-entry] error …` | `[quality-gates] quality-pipeline 사전 검사 실패 — <reason= 값>.` 을 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[quality-gates] quality-pipeline 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[quality-gates] quality-pipeline 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실).` 을 내고 멈춘다 |
@@ -45,7 +44,7 @@ python3 "$QG/scripts/check_deps.py" entry --plugin-root "$QG" --need python,git,
 | rc 3 (`[devbrew-deps] 멈춤 …`) | 펜스 출력을 그대로 보이고 멈춘다 |
 | 그 밖 | `[quality-gates] quality-pipeline 의존 확인 실패 — 필요한 프로그램의 판을 확인하지 못했다(rc <값>).` 와 펜스 출력을 내고 멈춘다 |
 
-# Quality Gates — In-Turn Orchestrator (v17.0.0)
+# Quality Gates — In-Turn Orchestrator (v18.0.0)
 
 <!-- plain-language:begin -->
 ## 사람에게 쓰는 글
@@ -83,9 +82,6 @@ needs the root assigns it in that same fence — shell state does not carry betw
 ```bash
 QG="${CLAUDE_PLUGIN_ROOT}"; [ -n "$QG" ] || { echo "[quality-gates] 플러그인 루트 미해석 — SKILL.md 가 플러그인 절대 경로를 보여 줬다면 이 펜스의 루트 변수를 그 값으로 바꿔 다시 실행하고, 보여 준 적이 없으면 경로를 추측하지 말고(cwd 포함) 멈춰 보고하라" >&2; exit 1; }
 ```
-
-**P1 — global kill switch.** If `DEVBREW_QUALITY_GATES_DISABLE=1`, emit
-`[quality-gates] disabled via DEVBREW_QUALITY_GATES_DISABLE=1` and return. No script, no agent.
 
 **P1b — 문서 비평 요청은 새 이름으로 안내한다.** 사용자의 인자나 요청이 코드가 아닌 문서(설계문서 · 명세 · 계획 · 설정 · 글)를 비평해 달라는 뜻이면 파이프라인을 돌리지 않는다. 아래 한 줄만 내고 setup 도 돌리지 않은 채 멈춘다. 코드 변경을 검증해 달라는 요청에는 적용하지 않는다 — 그때는 P2 로 간다.
 
@@ -206,7 +202,7 @@ reviewers, and it never lowers or skips a finding.
 
 ```
 /quality-gates:quality-pipeline
- ├ Preflight ── kill switch · setup · 범위(range 일 때 두 커밋으로 얼림) · intent: 한 줄
+ ├ Preflight ── setup · 범위(range 일 때 두 커밋으로 얼림) · intent: 한 줄
  ├ trivia 판단 ── 한 문장 diff 면 not-certified (trivia) 로 끝 (토픽 · 범위는 Step 1c 뒤에 전체 diff 로)
  │   ① 리뷰        Review Step 1 · 1b · 3 · 3.5  (시작 구성 + 근거를 적어 더한 리뷰어 → code-recritic)
  │       Step 1c 의 걸러진 diff 가 비면 → not-certified (scope-empty) 로 끝
@@ -406,23 +402,6 @@ If `pr-review-toolkit` is not installed, continue and print
 `model:` override into any external dispatch.
 
 **보안 각도 — `quality-gates:security-reviewer`, 늘 부른다.** 스코프 판단으로 빼지 않는다.
-
-**Kill switch — `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`.** 아래
-`security-reviewer` Agent 리터럴을 발행하기 **직전에** 이 게이트를 통과시킨다:
-
-IF `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`:
-1. 아래 `quality-gates:security-reviewer` Agent 리터럴을 **발행하지 않는다.** 다른 리뷰어 ·
-   재비판 · codex 는 그대로 fire 한다.
-2. 재비판의 `findings` 슬롯에는 실제로 받은 것만 넣는다.
-3. **loud advisory** — 이 줄을 그대로 보인다:
-   > `> [quality-gates] security-reviewer disabled via DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1 — 이 실행에는 보안 리뷰가 없었다 (보안 각도 부재).`
-4. 이 실행의 각도 파일(Step 4)에 `security: absent` 를 쓴다. 판정은
-   `not-certified (angle-absent)` 가 된다 — 탐지가 0 이어도(V5).
-
-ELSE: 아래 리터럴을 평소대로 발행한다.
-
-codex 의 kill switch 와 달리 이것은 loud 다 — codex 는 다른 전제 각도라 부재를 공시만 하고,
-보안 각도가 빠지면 판정을 막는다.
 
 ```
 Agent({
@@ -632,7 +611,6 @@ different-premise: absent(not-installed)
 | 각도 | 값 | 조건 |
 |---|---|---|
 | `security` | `filled` | `security-reviewer` 를 디스패치했고 그 출력을 `findings.yaml` 에 넣었다(0건 포함) |
-| | `absent` | `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` |
 | | `absent(source-failed)` | 디스패치가 실패했거나 출력을 읽을 수 없었다 |
 | `adjudication` | `filled` | **항상** — 재비판자가 죽으면 합성기가 관측으로 `absent(source-failed)` 를 얹는다 |
 | `different-premise` | `filled` | codex 러너가 돌았고 `meta.codex_failed: false` 를 읽었다 |
@@ -1374,13 +1352,9 @@ Read ${CLAUDE_PLUGIN_ROOT}/skills/quality-pipeline/references/intent-critic.md
 
 ## kill switch
 
-- `DEVBREW_QUALITY_GATES_DISABLE=1` — 전역. Preflight P1.
 - `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — codex 만 끈다(다른 전제 각도 `absent`). Review Step 3 「Codex skip 안내」.
-- `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` — 보안 각도의 `security-reviewer` 만 skip 한다 → `not-certified (angle-absent)`. Review Step 3.
 - `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1` — ② 를 건너뛴다 → `not-certified (kill-switch)`. Differential test. e2e 부팅도 막는다 — 「리뷰 대상 저장소의 코드를 호스트에서 돌리지 않는다」를 e2e 까지 넓힌다. 같은 `e2e-state.sh` 가 집행한다(`## e2e` 의 e2e 칸은 `꺼짐(kill switch)`).
 - `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` — 게시만 끈다. 집행은 sink `scripts/publish-comment.sh` 의 첫 검사다(gh 호출 0, `skipped: kill-switch`). 판정 · 로컬 결과는 그대로다. `## Publish`.
-- `DEVBREW_QUALITY_GATES_DISABLE_E2E=1` — e2e 만 끈다. `## e2e` E0 의 지문이 exit 3 으로 끝나 질문이 뜨지 않고, e2e 칸이 `꺼짐(kill switch)` 이다. 집행은 `e2e-state.sh` 다.
-- `DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC=1` — intent-critic 단계만 끈다(「intent-critic 꺼짐(kill switch)」 한 줄). 판정 밖 단계라 판정에 닿지 않는다. 집행은 `scripts/intent_critic.py gate` 이고, 준비 걸음(`prepare`)도 이 스위치를 스스로 읽어 다른 팀 읽기 · PR 조회가 함께 꺼진다.
 
 ## Rules
 

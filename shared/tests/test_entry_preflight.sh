@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# guards: shared/entry/entry_preflight.py plugins/*/scripts/entry_preflight.py shared/killswitch/kill_switch_active.py plugins/*/switches.md
+# guards: shared/entry/entry_preflight.py plugins/*/scripts/entry_preflight.py plugins/*/switches.md
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
 S="$ROOT/shared/entry/entry_preflight.py"
 # 사전 검사 링크와 끄기 변수 표를 싣는 플러그인 — 아래 「깨끗한 환경」 과 절 1 이 이 목록으로 읽고, --emit-scanned 도 이 목록으로 낸다
 PLUGINS="spec-distill quality-gates plugin-audit project-init"
 if [ "${1:-}" = "--emit-scanned" ]; then
-  printf '%s\n' shared/entry/entry_preflight.py shared/killswitch/kill_switch_active.py
+  printf '%s\n' shared/entry/entry_preflight.py
   for p in $PLUGINS; do
     printf '%s\n' "plugins/$p/scripts/entry_preflight.py" "plugins/$p/switches.md"
   done
@@ -85,22 +85,34 @@ out="$($CLEAN "$PY" "$S")"; rc=$?
 assert_eq "$rc" "0" "인자 없음: rc 0"
 assert_contains "$out" "[devbrew-entry] error plugin=? skill=? reason=usage" "인자 없음: error 줄"
 
-# 7. kill switch — 값이 정확히 "1" 일 때만. 도출은 정본 kill_switch_active 의 DISABLE 판정과 같다
-for p in spec-distill plugin-audit project-init; do
+# 7. 통째 끄기 변수 — 은퇴했다. 켜도 감시줄은 ok 이고 「더 듣지 않는다」 줄이 둘째 줄에 붙는다(값이 정확히 "1" 일 때만)
+for p in spec-distill quality-gates plugin-audit project-init; do
   var="DEVBREW_$(printf '%s' "$p" | tr 'a-z-' 'A-Z_')_DISABLE"
-  for v in 1 true " 1" 0 ""; do
-    got="$(cd "$PLAIN" && $CLEAN "$var=$v" "$PY" "$(L "$p")" "$p" s | head -n 1 | awk '{print $2}')"
-    want="$($CLEAN "$var=$v" "$PY" -c 'import sys; sys.path.insert(0, sys.argv[1]); from kill_switch_active import kill_switch_active as k; print("disabled" if k(sys.argv[2], "_") else "ok")' "$ROOT/shared/killswitch" "$p")"
-    assert_eq "$got" "$want" "$p $var='$v': 진입 판정 = 정본 DISABLE 판정"
+  out="$(cd "$PLAIN" && $CLEAN "$var=1" "$PY" "$(L "$p")" "$p" s)"
+  case "$(printf '%s\n' "$out" | sed -n 1p)" in
+    "[devbrew-entry] ok plugin=$p "*) ok "$p $var=1: 첫 줄이 ok 감시줄이다" ;;
+    *) no "$p $var=1: 첫 줄이 ok 감시줄이다"; printf '      out: %s\n' "$out" ;;
+  esac
+  line2="$(printf '%s\n' "$out" | sed -n 2p)"
+  case "$line2" in
+    "[devbrew-switch] 더 듣지 않는다 — $p 전체"*) ok "$p $var=1: 둘째 줄이 은퇴 줄이다" ;;
+    *) no "$p $var=1: 둘째 줄이 은퇴 줄이다"; printf '      line2: %s\n' "$line2" ;;
+  esac
+  assert_contains "$line2" "). 대신: Claude Code 의 플러그인 끄기" "$p $var=1: 은퇴 줄이 대신할 길을 보인다"
+  assert_not_contains "$out" " disabled " "$p $var=1: 출력 어디에도 disabled 가 없다"
+  assert_eq "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" "2" "$p $var=1: 두 줄이다(양성 짝 — 값 1 은 줄을 낸다)"
+  for v in true " 1" 0 ""; do
+    out="$(cd "$PLAIN" && $CLEAN "$var=$v" "$PY" "$(L "$p")" "$p" s)"
+    assert_eq "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" "1" "$p $var='$v': 감시줄 한 줄뿐이다"
+    assert_not_contains "$out" "[devbrew-switch]" "$p $var='$v': 은퇴 줄이 없다"
   done
 done
-out="$(cd "$PLAIN" && $CLEAN DEVBREW_PROJECT_INIT_DISABLE=1 "$PY" "$(L project-init)" project-init project-init)"
-assert_eq "$(printf '%s\n' "$out" | head -n 1)" "[devbrew-entry] disabled plugin=project-init skill=project-init switch=DEVBREW_PROJECT_INIT_DISABLE=1" "disabled 줄 모양(첫 줄)"
-line2="$(printf '%s\n' "$out" | sed -n 2p)"
-case "$line2" in
-  "[devbrew-switch] 꺼져 있다 — project-init 전체(훅과 셋업)(DEVBREW_PROJECT_INIT_DISABLE=1). 곧 은퇴한다 — 대신: "*) ok "통째 끄기 변수가 켜지면 은퇴 예정 줄이 둘째 줄에 붙는다" ;;
-  *) no "통째 끄기 변수가 켜지면 은퇴 예정 줄이 둘째 줄에 붙는다"; printf '      line2: %s\n' "$line2" ;;
+out="$(cd "$PLAIN" && $CLEAN DEVBREW_SKIP_HOOKS=spec-distill:statusline "$PY" "$(L spec-distill)" spec-distill s)"
+case "$(printf '%s\n' "$out" | sed -n 1p)" in
+  "[devbrew-entry] ok plugin=spec-distill "*) ok "SKIP_HOOKS 토큰: 첫 줄이 ok 감시줄이다" ;;
+  *) no "SKIP_HOOKS 토큰: 첫 줄이 ok 감시줄이다" ;;
 esac
+assert_contains "$(printf '%s\n' "$out" | sed -n 2p)" "[devbrew-switch] 더 듣지 않는다 — 상태줄과 로드맵 지도" "SKIP_HOOKS 토큰: 둘째 줄이 은퇴 줄이다"
 out="$(cd "$PLAIN" && $CLEAN DEVBREW_SKIP_HOOKS="spec-distill:spec-review,spec-distill:_" "$PY" "$(L spec-distill)" spec-distill spec-review | head -n 1 | awk '{print $2}')"
 assert_eq "$out" "ok" "DEVBREW_SKIP_HOOKS 는 진입에 걸리지 않는다(D1.1)"
 

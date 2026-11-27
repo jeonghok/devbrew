@@ -240,7 +240,7 @@ class OldSessionTest(Base):
 
 
 class SafetyTest(Base):
-    def test_kill_switches_spare_everything(self):
+    def test_retired_switches_do_not_spare(self):
         envs = [{"DEVBREW_SPEC_DISTILL_DISABLE": "1"},
                 {"DEVBREW_SKIP_HOOKS": "spec-distill:SessionEnd"},
                 {"DEVBREW_SKIP_HOOKS": "spec-distill:session-end-cleanup"},
@@ -248,11 +248,10 @@ class SafetyTest(Base):
         for env in envs:
             s = self.old_session("oldsess%02d" % envs.index(env))
             d = key_for(self.root, str(self.docs / "gone.md")); write_ledger(d, str(self.docs / "gone.md")); age(d)
+            self.assertTrue(s.exists() and d.exists(), env)      # 돌리기 전에 있었다
             self.sweep(env)
-            self.assertTrue(s.exists(), env)
-            self.assertTrue(d.exists(), env)
-        self.sweep()                                   # 양성 대조 — 스위치 없으면 지운다
-        self.assertFalse(d.exists())
+            self.assertFalse(s.exists(), env)
+            self.assertFalse(d.exists(), env)
 
     def test_root_escape_refused(self):
         real = self.tmp / "elsewhere"; real.mkdir()
@@ -375,8 +374,15 @@ class OldGcIgnoresDocreviewTest(unittest.TestCase):
                              "옛 GC 를 git 에서 꺼내지 못했다(커밋 %s 도달 불가) — 도출 불가는 RED" % OLD_GC_COMMIT)
             tools = tmp / "oldgc"; tools.mkdir()
             (tools / "spec-distill-gc.py").write_text(src.stdout, encoding="utf-8")
-            for n in ("state_path.py", "legacy_names.py", "gc_common.py", "kill_switch_active.py"):
+            for n in ("state_path.py", "legacy_names.py", "gc_common.py"):
                 shutil.copy(SCRIPTS / n, tools / n)
+            # 옛 GC 가 import 하는 판정 모듈은 지금 나무에 없다 — 같은 옛 커밋의 것을 꺼내 쓴다.
+            ks = subprocess.run(["git", "-C", str(REPO), "show",
+                                 OLD_GC_COMMIT + ":plugins/spec-distill/scripts/kill_switch_active.py"],
+                                capture_output=True, text=True)
+            self.assertEqual(ks.returncode, 0,
+                             "옛 판정 모듈을 git 에서 꺼내지 못했다(커밋 %s 도달 불가) — 도출 불가는 RED" % OLD_GC_COMMIT)
+            (tools / "kill_switch_active.py").write_text(ks.stdout, encoding="utf-8")
             repo = tmp / "repo"; repo.mkdir()
             subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
             root = repo / ".claude" / "spec-distill"; root.mkdir(parents=True)

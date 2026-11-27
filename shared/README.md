@@ -28,7 +28,6 @@
 |---|---|
 | `adjudication/` | subagent 발견의 처분 회계 (수용·기각·보류 + 흡수·강제·입력실패·원리적 미상) |
 | `codex/` | codex 가용성 판정 · 출력 변환 · 러너 공통 조각 · P21 프롬프트 프리앰블 |
-| `killswitch/` | kill switch 판정 |
 | `entry/` | 진입 skill 사전 검사(`entry_preflight.py`, 네 플러그인에 심볼릭 링크) · 호출 표면 정합 락(`check_invocation_surface.py`) |
 | `deps/` | 플러그인 의존 목록(`dependencies.md`) 판독 · 판 측정(`check_deps.py`, 네 플러그인에 심볼릭 링크) |
 | `test-selection/` | qg 차등 테스트 실행 공유본(스크립트 넷 · 소비자 규칙은 그 폴더 README) |

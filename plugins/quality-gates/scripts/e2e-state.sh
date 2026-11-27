@@ -18,8 +18,7 @@
 # exit: 0 성공(compare 는 same) · 1 compare changed · 2 잘못된 호출 · 3 kill switch ·
 #       4 측정·판독 실패 또는 부팅 실패 · 5 정지 후에도 프로세스가 남음
 #
-# kill switch — DEVBREW_QUALITY_GATES_DISABLE · DEVBREW_QUALITY_GATES_DISABLE_E2E ·
-# DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST 중 하나라도 정확히 1 이면 fingerprint ·
+# kill switch — DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST 가 정확히 1 이면 fingerprint ·
 # compare · boot 가 측정·실행 전에 exit 3 으로 끝난다(X5). stop · propose 는 리뷰 대상 코드를
 # 실행하지 않으므로 막지 않는다 — 꺼진 뒤에도 남은 앱은 내릴 수 있어야 한다.
 set -u
@@ -37,7 +36,7 @@ sys.exit(0 if s.connect_ex(("127.0.0.1", int(sys.argv[1]))) == 0 else 1)' "$1"
 
 killed_by_switch() {
   local v
-  for v in DEVBREW_QUALITY_GATES_DISABLE DEVBREW_QUALITY_GATES_DISABLE_E2E DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST; do
+  for v in DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST; do
     if [ "$(printenv "$v" 2>/dev/null)" = "1" ]; then
       echo "[quality-gates] e2e 가 ${v}=1 로 꺼져 있다 — 리뷰 대상 코드를 실행하지 않는다" >&2
       return 0

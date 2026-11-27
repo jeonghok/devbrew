@@ -75,7 +75,7 @@
 - **Law 1 (Clarity Before Code)** — 이 플러그인이 있는 이유다: 명세가 모호하면 구현으로 가지 않는다. 컨텍스트 쌓기 → brief → design doc → reviewer → human gate. **설계문서 리뷰어가 필수 섹션 누락을 승인을 막는 지적으로 낸다 — 기계 게이트는 아니다** — `doc-critic` 층 2 의 `required_sections` 를 프로필이 `must_catch` 로 지목해 승인 게이트의 질문이 된다. 그 밖의 명확성은 같은 층 2(`placeholder`·`ambiguity`)와 승인 게이트가 판정하고, 섹션 유무를 기계로 막는 게이트는 없다.
 - **Law 1 (Clarity) — 문제공간 게이트** — 컨텍스트 쌓기가 끝나려면 다섯 가지 확인(R1–R5: 사용자 말 그대로 · 사례 조사 · 반대 입장 시험 · 해보고 버린 것 · 열린 질문)을 거쳐야 하고, 그것을 `check_brief.py`로 기계가 검사하는 구조 게이트다. 약한 방향(무인용 landscape·un-challenged 의심·빈 시행착오)은 brief 종료를 차단. 종료는 고정 라운드 수가 아니라 커버리지 원장(고정 floor 5 + 주제에서 도출한 차원, status ∈ {open, in-progress, closed})이 정한다.
 - **Law 1 — 승인된 설계 없이는 계획 · 구현이 시작되지 않는다** — team 형식 로드맵에서 시작 묶음(`start_bundle.py`)과 결과 대조(`job_results.py check`)가 사람 줄을 세션 기록과 대조하는 관문을 스크립트로 지킨다(막지 못하는 길은 `references/team-files.md` 에 공시한다).
-- **Law 1 — 진입 skill 의 본문 전 사전 검사(`!`)가 kill switch 를 모델 판단 밖에서 집행한다.** 끄기로 해 둔 기능은 모델이 마음을 바꿔도 돌지 않는다는 뜻이다 — skill 본문을 읽기 전에 정해진 검사가 먼저 돌아 스위치를 확인한다.
+- **Law 1 — 진입 skill 의 사전 검사(`!`)가 켜진 끄기 변수를 모델 판단 밖에서 보인다.**
 - **Law 1 — 허용 문법 판독기(`brief_body`)** — brief · audit 는 `scripts/brief_body.py`, seed 는 `scripts/seed_body.py` 가 각자 허용 문법 하나로 읽고 문법 밖은 해석하지 않고 거부한다. 기계가 쓰는 글이라 꼴을 막는 정규식을 늘어놓지 않고 읽는 쪽을 하나로 둔다.
 - **Law 2 (Writer/Reviewer 분리)** — `tools:` allowlist frontmatter로 doc-critic(`Read, Grep, Glob`) + doc-critic-web(`Read, Grep, Glob, WebSearch, WebFetch`) + doc-recritic(`Read, Grep, Glob`) + coverage-mapper(`Read, Grep, Glob, WebSearch, WebFetch`) + blind-spot-prober(`Read, Grep, Glob, WebSearch, WebFetch`) + repo-researcher(`Read, Grep, Glob`) + open-researcher(`Read, Grep, Glob, WebSearch, WebFetch`) + saturation-judge(`Read, Grep, Glob`) agent의 *물리적* 분리. 프롬프트가 아닌 frontmatter scoping이며, **허용할 도구만 적는 방식이라 적지 않은 쓰기·실행·위임 도구는 자동으로 막힌다**(막을 도구만 적는 방식(denylist)은 내일 생길 도구를 오늘 적을 수 없어 기본값이 열림이 되므로 쓰지 않는다).
 - **Law 2 — 리뷰 진입은 집행이 아니다** — 설계문서 리뷰 진입에 훅 강제가 없다. brainstorming 뒤·writing-plans 앞에 `spec-review` 를 부르는 것은 오케스트레이터이고, 근거는 컨텍스트 쌓기의 핸드오프 문구(`finishing.md` 의 다음 세션 줄이 가리키는 지시 파일 `references/brief-handoff.md`, brief 템플릿 §7)와 이 skill 의 description 이다 — 철학 P13(hook = 집행 / skill = capability 표면) 기준으로 이 자리에는 집행이 없다. `/brainstorming` 직접 경로는 description 하나에 기대므로 건너뛰는 일이 흔할 것이다 — 그때는 `/spec-distill:spec-review <경로>` 로 부른다. 리뷰어의 물리 분리(`tools:` allowlist)는 그대로다.
@@ -94,7 +94,7 @@
   compounding substrate다. 리뷰가 놓친 결함류가 나오면 그 프로필과 페르소나를 편집하는 것이
   compounding 이벤트다 — codex 도 같은 프로필 본문을 받으므로 한 곳을 고치면 두 판정자가 함께 바뀐다(persona = 보안-민감 코드).
 - **Law 2 (seed 자리) — 처분 주체는 사용자 (intent-sync)** — 요청 요약(seed)의 리뷰 지적을 받아들일지는 사용자가 정하고, 저자가 먼저 고치지 않는다. Phase 0 seed 를 `shared/docreview/` 엔진의 셋째 껍데기로 리뷰한다(탐지 `doc-critic` + codex → 재비판 `doc-recritic`). seed 는 헤딩이 없어 엔진의 얼림 · 보호가 꺼지므로 차단은 호스트가 진다: 저자는 사용자가 처분하기 전에 seed 를 편집하지 않고, 엔진이 게이트를 열지 않는 `fix` · `ask` 도 사용자 앞에 올리며, 저자 편집은 기준 사본 diff(`scripts/seed_edit_diff.py`)로 라운드 게이트와 확정 게이트 앞에서 덩어리마다 처분받고(화면은 `scripts/seed_edit_screen.py` 가 바뀐 문장만 보이게 조립하고, 권장은 저자가 댄 지적에 사용자의 고치는 쪽 처분이 리뷰 기록에 있을 때만 붙는다), 문구 없는 `drop` 은 진행을 막는다(`scripts/seed_review_log.py`). 형성 라운드의 풀이는 공시가 아니라 양의 선택 질문으로 확인받고 압축이 고친 문장의 확인 표시는 떨어지며(`scripts/seed_provenance.py`), Phase 1 은 audit 원문과 대조해 출처와 확인을 두 축으로 가른다. **한계**: 차단은 엔진의 기계적 거부가 아니라 호스트의 단계 순서 + 관측이다 — 어긴 편집은 다음 공시에서 반드시 보이고 보이면 멈추지만, 엔진처럼 거부하지는 않는다.
-- **「공시와 차단은 다른 술어」 — 리뷰되지 않은 라운드** — 리뷰가 제대로 돌지 못한 라운드는 «통과» 처럼 보이지 않게 그 사실을 맨 앞에 알리되, 알린다고 해서 모두 진행을 막지는 않는다. 엔진이 critic 사망 두 번 · `finalize` 실패 · 라우팅 보고서가 없는 라운드를 결정론으로 알고 게이트 요약에 싣는다(`unverified` · `approval_label` · `round_reviewed` · `unreviewed_reason`). 「미검증」(critic 사망 · `finalize` 실패)은 승인 게이트를 그 라벨로 연다. 「미검증」이 아닌 `unrouted` 는 공시만 한다: 게이트 첫 줄이 「이상 없음」·「경고 없음」일 수 없고 「다음:」 줄에 꼬리가 붙는다. brief 자리는 같은 값을 Step B 로 싣고, 엔진 밖의 강등(진입 게이트 강등 · 냉독 실패 · brief 리뷰 skip 등)은 state 의 `brief_review_degradations` 원장으로 함께 싣는다 — 돌지 못한 검사가 통과한 검사로 집계되지 않는다.
+- **「공시와 차단은 다른 술어」 — 리뷰되지 않은 라운드** — 리뷰가 제대로 돌지 못한 라운드는 «통과» 처럼 보이지 않게 그 사실을 맨 앞에 알리되, 알린다고 해서 모두 진행을 막지는 않는다. 엔진이 critic 사망 두 번 · `finalize` 실패 · 라우팅 보고서가 없는 라운드를 결정론으로 알고 게이트 요약에 싣는다(`unverified` · `approval_label` · `round_reviewed` · `unreviewed_reason`). 「미검증」(critic 사망 · `finalize` 실패)은 승인 게이트를 그 라벨로 연다. 「미검증」이 아닌 `unrouted` 는 공시만 한다: 게이트 첫 줄이 「이상 없음」·「경고 없음」일 수 없고 「다음:」 줄에 꼬리가 붙는다. brief 자리는 같은 값을 Step B 로 싣고, 엔진 밖의 강등(진입 게이트 강등 · 냉독 실패 등)은 state 의 `brief_review_degradations` 원장으로 함께 싣는다 — 돌지 못한 검사가 통과한 검사로 집계되지 않는다.
 - **Law 3 (Compounding) — 문서 리뷰 엔진** — 문서 리뷰 자리(design doc · brief · seed)가 같은 공용 엔진 `shared/docreview/` 를 쓴다. 처분(decide·ask·fix·defer·drop)이 finding 의 수신자를 정하고, 회귀는 편집 범위·얼림·보호 부류로 막는다. 한 번 보호된 절은 다른 절 밑으로 밀려나도 보호가 이어지고 이후 변경마다 다시 묻는다. 보호된 절의 제목을 바꾸거나 절을 지우면 그 바꿈을 보호 절의 변경으로 묻는다. 엔진 값이 허용 범위를 넘으면 라운드를 시작하지 않고, 불변 절의 「추가만」 면제는 새 목록 항목(`- `)을 더할 때만 받으며, 닫힌 리뷰의 결정 기록 끝에 손으로 쓴 줄은 기록으로 읽고, 원장 쓰기 순서 락은 절차 산문까지 본다. 집행은 `shared/tests/test_docreview_*.sh` + 변이 매트릭스.
 - **「판정기가 항목을 버리면 센다」 + fail-closed** — 엔진은 항목을 조용히 버리지 않고 검사를 열린 채 통과시키지 않는다. 승인 차단은 역방향 스캔이 아니라 **전방 포인터**(`superseded_by`)로 판정하고, 소비되지 못한 재상승 예약·어휘 밖 재비판 verdict·`same_as` 허상 타겟은 버리지 않고 `reraise_unconsumed`/`coerced` 로 **센다**. 영구 차단에는 사용자 탈출구를 주되 「보류」는 거부한다 — 재상승 후속에도 같은 가드가 걸리고(제안하는 선택지와 받아주는 선택지가 한 함수에서 나온다), 후속은 원본의 `kind`·`prev_hash` 를 물려받아 원복 의무가 강등되지 않는다. `escalated` 예약도 재상승 예약과 같은 누적·dedup·계수 규칙을 따르고, 상태 축의 정본 표(`is_open`·`gate_summary`·`render_gate` 를 한 표에서 도출)가 «막는 집합 ⊆ 그리는 집합»을 구조로 보장한다. 집행: 실제 `fin.json`+state 골든 동치(`shared/tests/test_docreview_golden.sh`) · 단언 수까지 대조하는 전수 스위트 · 셀마다 diff 규모를 선언해 앵커 소실을 계측기 고장으로 잡는 변이 매트릭스.
 - **Law 2 (Writer/Reviewer 분리) — design doc 자리** — 설계문서 리뷰는 공용 문서 리뷰 엔진 위에서 돌고, 리뷰어는 문서를 고칠 수 없다. `spec-review` 가 `shared/docreview/` 엔진의 껍데기다. 리뷰어는 `doc-critic`→`doc-recritic`(둘 다 `agents/*.md` 에 `# copy-of:` 마커로 바이트 동일 배포, `tools: Read, Grep, Glob` 뿐 — 심볼릭 링크 agent 는 dispatch 되지 않는다는 실측 때문에 사본이다) 이고, 승인은 verdict 없이 게이트 판정(`approval_gate_open`)의 집계로 도출된다. **능력의 빈자리를 공시한다** — design-doc 리뷰에는 외부 prior-art 대조가 Claude·codex 양쪽 모두 없다(`design-doc.md` 프로필 `web: false`). **집행 없는 kill switch 는 이름조차 남기지 않는다(P21)** — 집행 지점이 없는 옛 handoff 우회 스위치(이름은 `CHANGELOG.md` `[1.0.0]` Removed)는 이 README 에 적지 않고, `test_handoff_kill_switch.sh` 의 부재 판정 코퍼스가 이 README 를 포함해 그 이름이 design 자리 표면에 다시 나타나면 RED 가 난다 — 그래서 이 README 는 그 이름을 리터럴로 쓰지 않는다.
@@ -149,7 +149,7 @@
 - **AP5 (Trivia ceremony)** — `/context-build` first-step trivia escape (한 문장 기준 · 예시 다섯, 정본 `references/trivia-escape.md` — `/intent-sync` 도 가리킨다).
 - **AP9 (Subagent spray)** — `plugins/spec-distill/agents/` 13종(doc-critic·doc-critic-web·doc-recritic·steelman-builder·coverage-mapper·blind-spot-prober·repo-researcher·open-researcher·saturation-judge·brief-readback·seed-readback·integration-reviewer·relay-checker). 지휘자(`epic-conductor`)는 fan-out 앞에 규모(남은 에픽 · agent 약 · 순서 · 리뷰 라운드 상한 · 상한 없는 부분)를 보이고 진행한다 — 지출 승인을 묻지 않는다. 상한이 선언된 것: 조사 subagent 는 조사 호출 상한 하나(기본 60, 사용자 연장) · 문서 리뷰 엔진의 탐지 dispatch 는 라운드당 한 번(critic 사망이면 재dispatch 1회)이고 라운드 수는 재리뷰 상한 2 가 막는다(spec-review · reviewing-brief · intent-sync).
 - **Law 1 (Clarity) — `steelman-builder` 의심 게이트** — 의심 방향에 대해 builder 가 원안·대안 **양쪽**의 최강 케이스를 사용자 goal 기준으로 쓰고 근거가 핵심 전제에 닿는지 판정한다. 재검토를 여는 열쇠는 전제 충돌 하나 — 그 외 근거는 원안 강화·경계 다듬기에 쓴다. 판정 어휘 유지/보완/전환/보류(kept/refined/switched/deferred), 선택은 사용자.
-- **AP16 (Unbounded autonomy)** — 재리뷰 상한 2 (정본은 `shared/docreview/references/reviewing-document.md` 한 줄이고, 라운드 4 이상은 승인 게이트에서 사용자가 연다), 조사 호출 상한(기본 60) · 포화 판정 상한(기본 5) · 본체의 반복 감지(같은 빈 곳이면 사용자에게), kill switch.
+- **AP16 (Unbounded autonomy)** — 재리뷰 상한 2 (정본은 `shared/docreview/references/reviewing-document.md` 한 줄이고, 라운드 4 이상은 승인 게이트에서 사용자가 연다), 조사 호출 상한(기본 60) · 포화 판정 상한(기본 5) · 본체의 반복 감지(같은 빈 곳이면 사용자에게).
 - **Graceful degradation with loud logging (CLAUDE.md 런타임 상태 & 훅)**: `resolve_session_id` 검증 실패 시 None 반환 + stderr advisory. 리뷰 진입의 원장 정리(`scripts/ledger_sweep.py`)는 지우거나 옮긴 수를 한 줄로 내고, 읽지 못한 원장 · 옮기지 않은 옛 인터뷰 기록 · 옛 원장 충돌 · 셀 수 없음(pyyaml 없음 포함) · 다른 세션이 정리 중이라 건너뜀을 각각 따로 낸다. 조용한 것은 할 일이 없을 때와, TTL 안이거나 재는 사이 바뀐 폴더를 건너뛸 때(다음 진입에서 다시 본다)다. 정리 자체가 실패해도 리뷰는 계속하고 그 사실을 한 줄로 낸다. 미커밋 확인·진입 검사 실패는 advisory — 사용자 attention 가용성에 따라 loud 정도 조정. 진입 검사 자신의 실패는 끔으로 친다(fail-closed).
 - **동시 리뷰 표지** — 같은 문서를 두 세션이 함께 리뷰해 원장을 덮어쓰지 않게, 원장 열기가 원장 폴더의 `reviewing-by`(세션 id 한 줄)를 배타 생성으로 잡고 원장에 쓰는 명령마다 그 앞에서 표지를 확인한다(`scripts/ledger_marker.py`). 남의 표지면 멈추고 「그만둠 (권장)」/「이어 씀」을 묻는다 — 이어 씀이면 표지를 이 세션 것으로 바꾼다(임시 파일 + `os.replace`). 표지는 승인 게이트의 답을 원장에 적은 뒤 끝맺음 펜스가 푼다. 다른 세션의 원장을 이어 받을 때는 「이전 리뷰 라운드 <n> 에서 이어 간다」 한 줄이 나온다.
 - **P21 — 저장소가 심은 링크를 따라 쓰지 않는다**: 저장소는 어떤 이름으로든 링크를 커밋할 수 있다. 원장 · 표지 · 컨텍스트 쌓기 상태 파일을 쓰거나 옮기거나 지우는 자리는 경로 성분의 링크 · `..` · 작업 트리 밖을 거부한다(`state_path.py path-inside`). 그래서 `.claude` · `.claude/spec-distill` · `.docreview` 가 링크인 저장소에서는 리뷰 라운드 대신 거부 사유 한 줄이 나오고(원장 열기가 `NO_DIR` 로 끝나 리뷰 없이 끝난 사실이 각 자리의 안내 · degrade 로 보인다), 원장 정리는 링크인 state root · `.docreview` 를 「셀 수 없음」 으로 내고 그 너머를 옮기거나 지우지 않는다 — 링크가 저장소 **안**을 가리켜도 거부다. 컨텍스트 쌓기 상태 파일 경로가 링크이거나 작업 트리 밖이면 진입이 그 파일을 이어 가지 않고(`REJECT`), 끝의 brief · audit · 상태 파일 커밋도 하지 않고 세 경로와 사유를 보인다.
@@ -157,7 +157,7 @@
 - **Law 2 — 통합 리뷰어는 쓰지 못한다** — 에픽 사이 이음매 리뷰는 `tools: Read, Grep, Glob` 인 `integration-reviewer` 가 한다. superpowers 리뷰 요청 skill 의 틀만 빌리고 그 skill 이 부르는 쓰기 가능한 agent 는 쓰지 않는다. 지휘자가 하위의 질문을 옮긴 기록의 대조도 같은 도구만 가진 `relay-checker` 가 한다.
 - **Law 3 · P23 — 다시 불러도 같은 자리** — 지휘자는 무엇이 끝났는지 기억에 기대지 않고 git(설계문서의 승인 줄 · 판정 · 구현 대조 절)과 기계 상태에서 다시 계산한다. 기계 상태를 지워도 잃는 것은 다시 만들 수 있는 것뿐이다(`tests/test_conductor_e2e.sh`) — 예외는 `## 에픽 PR` 에 적은 PR 번호다. 다시 만들 수 없어서, 지우면 그 에픽들은 번호를 다시 적을 때까지(`ledger pr-record`) 브랜치 이름 · 이력 추정으로 돌아간다.
 - **CLAUDE.md 레포 전용 값 금지** — 레포 값은 `scripts/repo_defaults.py` 하나가 출처와 함께 낸다. 로드맵 frontmatter > 레포 설정 파일 `.devbrew.md`(기본 브랜치 판) > 기본값 순이고, 외부 도구 기본 경로는 그 모듈의 상수에만 있다. 지휘자 · 컨텍스트 쌓기 · 로드맵 잡기 · 끝내기 펜스 표면에는 기본 브랜치 이름 · 브랜치 접두 · 레포 구조 경로 · 모델 이름이 없다(`tests/test_repo_literals.sh` · `tests/test_workspace_invariance.sh`).
-- **P22 — 규모 공시** — epic-conductor 는 시작할 때 규모 줄(남은 에픽 · agent 약 · 순서 · 리뷰 라운드 상한 · 상한 없는 부분)을 보이고 진행한다. 멈추는 길은 끼어들기와 kill switch 다.
+- **P22 — 규모 공시** — epic-conductor 는 시작할 때 규모 줄(남은 에픽 · agent 약 · 순서 · 리뷰 라운드 상한 · 상한 없는 부분)을 보이고 진행한다. 멈추는 길은 끼어들기다.
 
 ## 로드맵 · 에픽 묶음
 
@@ -171,7 +171,7 @@
 - `references/epic-handoff.md` — 로드맵 에픽의 설계를 여는 넘김 줄. 지휘 세션이 자리표를 채워 씁니다. brainstorming 이 기본이고 블록에 `흐름:` 이 있으면 그 흐름을 따르며, 나눌 근거가 보이면 재분해로 보고하고, 설계문서에 「있는 것 검토」 · 「상류 · 하류 연계」 절을 두고, 여러 산출물 · 상태가 얽히면 계층 · 온톨로지(객체 · 링크 · 속성 · 주인)를 밝혀 진입점에서 따라 내려가게 합니다.
 - `references/existing-first.md` — 설계문서의 「있는 것 검토」 절을 적는 법(기본 · 대상 · 탐색 증거 · 정보 여섯 칸 · 맞는지 · 렌즈 · 쓰는 꼴 · 견줄 축 · 직접 만들기의 이유 · 승인 · 수용 기준 · 고침). 컨텍스트 쌓기와 설계 세션이 읽습니다. 뒤쪽 영어 절은 MIT 로 가져온 글이고 고지는 `references/existing-first.NOTICE.txt` 에 있습니다.
 - `references/brief-handoff.md` — 컨텍스트 쌓기 끝의 다음 세션 줄이 가리키는 지시 파일. 절이 둘이다 — brainstorming 으로 가는 세션이 읽는 「brainstorming 지시」 와 다른 다음 단계로 가는 세션이 읽는 「공통 지시」.
-- `references/conducting.md` — 지휘 순환 걸음 1~7(지휘자가 따른다)과 끝 절의 손 절차(지휘자를 부르지 않고 진행할 때 — `DEVBREW_SPEC_DISTILL_DISABLE=1` 은 리뷰 · 상태 계산까지 spec-distill 전체를 끄므로 손 절차를 쓰려면 끄지 않는다)입니다. 레포마다 다른 값은 해결자(`scripts/repo_defaults.py` — 로드맵 frontmatter · 레포 설정 파일 · 기본값 순)와 `origin/HEAD` 에서 읽습니다.
+- `references/conducting.md` — 지휘 순환 걸음 1~7(지휘자가 따른다)과 끝 절의 손 절차(지휘자를 부르지 않고 진행할 때)입니다. 레포마다 다른 값은 해결자(`scripts/repo_defaults.py` — 로드맵 frontmatter · 레포 설정 파일 · 기본값 순)와 `origin/HEAD` 에서 읽습니다.
 - `references/conductor-dispatch.md` — 지휘자가 하위 agent 에게 보내는 글(자리 · 미리 받은 답 · 두 부분 반환 · 처분 줄 · 사람 자리에서 질문을 옮기는 규칙 둘).
 - 세션 담당자 — herdr-core 가 있으면 계획 · 구현 담당자를 따로 띄운 세션으로 돌릴 수 있다. 띄우기 · 세션 꼬리 · 거두기는 `references/conductor-dispatch.md` 의 `## 세션 담당자` 와 지휘 절차서 걸음 1 · 4 · 7 에 있고, team 형식은 펜스 뒤에 마지막 보고 절을 붙이지 않는다.
 - `references/walk-table.md` · `scripts/walk_table.py` — team 형식 로드맵의 걸음표. 걸음표는 리더가 담당자를 어느 걸음으로 보낼지 정하는 표로, 걸음마다 누가 · 단계 · 관문 · 작업 방식 · 상한 · 도구 칸이 있습니다. `walk_table.py next --roadmap <로드맵> --job <과제>` 가 git 에서 다시 계산한 단계로 지금 걸음 · 다음 걸음과 그 칸 · 막는 것을 한 화면에 냅니다(읽기만 합니다 — 리더는 늘 다음 걸음의 칸으로 담당자를 보냅니다). 레포는 설정 `walk_table`(기본 브랜치의 파일)로 걸음 · 누가 · 작업 방식 · 상한 · 도구를 바꿀 수 있지만 관문은 이 표로 바뀌지 않습니다 — 시작 묶음 · 결과 대조 · 걸음 보기의 막는 것은 표의 관문 칸을 읽지 않고, 설정한 표가 깨졌으면 기본 표로 넘어가지 않고 멈춥니다. `walk_table.py check` 가 표를 검사합니다. 형식은 `references/team-files.md` 의 「걸음표」 절입니다.
@@ -343,6 +343,7 @@ state_branch: 켬
 1. **통째 끄기.** Claude Code 의 플러그인 끄기를 쓴다 — `/plugin` 화면, `claude plugin disable spec-distill`, 또는 설정의 `enabledPlugins`. 끄면 skill 과 훅이 함께 꺼지고 새 세션부터 먹는다. `claude plugin disable` 로 끈 뒤의 효과는 이 레포에서 재지 않았다 — 잰 것은 설정의 `enabledPlugins` 다. 도는 세션은 `/reload-plugins` 뒤에 먹는다. 한 번 실행에만 끄려면 `claude --settings <파일>` 로 연 파일의 `enabledPlugins` 에 `"spec-distill@<마켓플레이스>": false` 를 적는다. worktree 안에서 연 세션은 본 체크아웃의 `.claude/settings.local.json` 을 쓴다(공식 설정 문서 기준이다 — 이 레포에서 재지 않았다).
 
 2. **끄기 변수를 주는 두 길.** 셸 환경변수로 주거나, Claude Code 설정(`settings.json`)의 `env` 칸에 적는다. `env` 칸의 값이 Bash 로 도는 스크립트에 닿는지는 재지 않았다. 확인하는 법: 적은 뒤 이 플러그인의 진입 skill 을 부르면 첫머리에 `[devbrew-switch] 꺼져 있다 — …` 줄이 보인다. 보이지 않으면 셸 환경변수로 준다. 이 줄은 사전 검사가 값을 본 것이다 — 같은 세션의 Bash 로 도는 스크립트가 같은 환경을 물려받는다는 전제에 선다. 실제로 건너뛰었는지는 그 단계의 건너뜀 알림으로 본다.
+   사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 호출을 끊는다(헤드리스에서는 출력 없이 끝난다).
 
 3. **표.**
 
@@ -352,19 +353,19 @@ state_branch: 켬
 | `DEVBREW_SPEC_DISTILL_DISABLE_CODEX` | codex 리뷰 | 남음 | — |
 | `DEVBREW_SPEC_DISTILL_DISABLE_WEB` | 컨텍스트 쌓기와 brief 리뷰의 웹 조사 | 남음 | — |
 | `DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST` | 지휘자의 스위트 대조가 저장소 테스트를 돌리기 | 남음 | — |
-| `DEVBREW_SPEC_DISTILL_DISABLE` | spec-distill 전체 | 은퇴 예정 | Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다 |
-| `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC` | 문서 리뷰의 재비판 | 은퇴 예정 | 없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
-| `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` | brief 리뷰 | 은퇴 예정 | 없음 — 첫 검토는 늘 돈다. 작은 일에서 재비판 · codex · 읽어 보기를 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
-| `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE` | intent-sync 의 워크트리 질문 | 은퇴 예정 | 질문에 「아니오」 로 답한다 |
-| `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` | 설계문서 리뷰 | 은퇴 예정 | `/spec-distill:spec-review` 를 부르지 않는다 |
-| `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` | 설계문서 리뷰 | 은퇴 예정 | `/spec-distill:spec-review` 를 부르지 않는다 |
-| `DEVBREW_QUALITY_GATES_DISABLE_WEB` | brief 리뷰가 codex 에 여는 웹 검색 | 은퇴 예정 | `DEVBREW_SPEC_DISTILL_DISABLE_WEB` |
-| `DEVBREW_SKIP_HOOKS=spec-distill:statusline` | 상태줄과 로드맵 지도 | 은퇴 예정 | 상태줄 설정을 지운다 |
-| `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` · `DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup` | 리뷰 원장 정리 | 은퇴 예정 | 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다 |
-| `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` | 리뷰 원장 정리 | 은퇴 예정 | 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다 |
+| `DEVBREW_SPEC_DISTILL_DISABLE` | spec-distill 전체 | 은퇴 | Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다 |
+| `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC` | 문서 리뷰의 재비판 | 은퇴 | 없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
+| `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` | brief 리뷰 | 은퇴 | 없음 — 첫 검토는 늘 돈다. 작은 일에서 재비판 · codex · 읽어 보기를 건너뛰는 것은 모델 판단이 이유를 적고 한다 |
+| `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE` | intent-sync 의 워크트리 질문 | 은퇴 | 질문에 「아니오」 로 답한다 |
+| `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` | 설계문서 리뷰 | 은퇴 | `/spec-distill:spec-review` 를 부르지 않는다 |
+| `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` | 설계문서 리뷰 | 은퇴 | `/spec-distill:spec-review` 를 부르지 않는다 |
+| `DEVBREW_QUALITY_GATES_DISABLE_WEB` | brief 리뷰가 codex 에 여는 웹 검색 | 은퇴 | `DEVBREW_SPEC_DISTILL_DISABLE_WEB` |
+| `DEVBREW_SKIP_HOOKS=spec-distill:statusline` | 상태줄과 로드맵 지도 | 은퇴 | 상태줄 설정을 지운다 |
+| `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` · `DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup` | 리뷰 원장 정리 | 은퇴 | 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다 |
+| `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` | 리뷰 원장 정리 | 은퇴 | 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다 |
 <!-- switches:end -->
 
-은퇴 예정 이름은 지금은 그대로 끈다. 곧 은퇴하며, 은퇴 뒤에는 「대신할 길」 칸을 쓴다.
+은퇴 이름은 더 듣지 않는다 — 켜 두면 진입 skill 첫머리에 「더 듣지 않는다」 줄이 보인다. 「대신할 길」 칸을 쓴다. 통째 끄기 변수가 켜져 있으면 진입 skill 이 계속할지 한 번 묻는다.
 
 4. **자세한 동작.** `DEVBREW_SPEC_DISTILL_DISABLE_CODEX` 같은 변수마다 자세한 동작은 아래 「끄는 법」 절에 있다.
 
@@ -372,26 +373,17 @@ state_branch: 켬
 
 ### 먼저 — 설계문서 리뷰를 끄는 법
 
-설계문서 리뷰 진입은 `spec-review` 가 엔진 라운드 전에 도는 진입 검사(`scripts/review_entry.py` + 리터럴 펜스)가 판정한다. 끄는 스위치는 셋이고 셋 다 수동 호출(`/spec-distill:spec-review`)까지 끈다: `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` · `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` · 플러그인 전체 `DEVBREW_SPEC_DISTILL_DISABLE=1`. 진입 검사 자신이 실패하면(모듈 부재 · rc≠0 · 출력 계약 위반) 끔으로 친다 — 그 사실이 advisory 로 나오고 brainstorming 의 문서 승인 자리로 돌아간다. 전부 세션 스코프 env var 라 재시작이 필요하다.
+설계문서 리뷰를 끄려면 `/spec-distill:spec-review` 를 부르지 않는다. 플러그인 전체는 Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`)다. 진입 검사 자신이 실패하면(모듈 부재 · rc≠0 · 출력 계약 위반) 끔으로 친다 — 그 사실이 advisory 로 나오고 brainstorming 의 문서 승인 자리로 돌아간다.
 
 ### 스위치 목록
 
-- `DEVBREW_SPEC_DISTILL_DISABLE=1` — plugin 전체 abort, state 보존. 리뷰 진입의 원장 정리(`scripts/ledger_sweep.py`)도 아무것도 지우지 않는다.
-  진입 skill 여섯(`intent-sync` · `context-build` · `roadmap-draft` · `spec-review` · `roadmap-status` · `epic-conductor`)은 본문 전 사전 검사가 `DEVBREW_SPEC_DISTILL_DISABLE=1` 을 판정한다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다. 사전 검사 스크립트(`scripts/entry_preflight.py`)나 `python3` 가 없으면 플랫폼이 skill 호출을 끊는다 — 헤드리스에서는 출력 없이 끝난다.
-- `DEVBREW_SKIP_HOOKS=spec-distill:statusline` — 컨트롤 플레인(`scripts/control_plane.py`)을 끈다: 상태줄은 빈 줄, `/spec-distill:roadmap-status` 의 지도는 `꺼져 있다 — <스위치>` 한 줄, `show --tasks` 는 표준 출력을 비우고 rc 3. 훅이 아니지만 지목할 이름을 갖는다. `DEVBREW_SPEC_DISTILL_DISABLE=1` 도 같은 효과다.
-- `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` — codex 병렬 co-review만 skip. Claude 리뷰(탐지 · 재비판)는 정상 동작하고, codex 부재는 엔진이 `fin.json` 의 `advisory[]` 와 게이트 첫 줄로 loud 하게 공시한다. 전역 `DEVBREW_SPEC_DISTILL_DISABLE`과 독립. **적용 범위는 문서 리뷰 엔진 자리 셋 전부**: (a) design-doc 리뷰(`spec-review`), (b) brief 리뷰(`reviewing-brief`), (c) seed 리뷰(`intent-sync`) — 세 자리 모두 codex 호출은 SKILL 의 리터럴 게이트 펜스(`codex-gate` 표지) 하나이고 매 라운드 4단계에서 돈다. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`(`skip_reason: kill_switch`)로 옮기고 펜스가 그 값으로 러너 호출을 가르며, 러너(`run_docreview_codex_reviewer.sh`)는 이 변수를 보지 않는다. 펜스 밖에서 러너를 부르면 opt-out이 무시된 채 지출이 나간다.
-- `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` — 문서 리뷰 엔진의 **재비판 단계만** skip (`doc-recritic` dispatch 없음). 탐지·codex 는 정상 동작한다. 기각 경로가 0 이 된 사실은 `fin.json` 의 `advisory[]` 로 공시된다 — 오탐이 걸러지지 않은 라운드라는 뜻이므로 조용히 넘어가지 않는다.
+- `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` — codex 병렬 co-review만 skip. Claude 리뷰(탐지 · 재비판)는 정상 동작하고, codex 부재는 엔진이 `fin.json` 의 `advisory[]` 와 게이트 첫 줄로 loud 하게 공시한다. **적용 범위는 문서 리뷰 엔진 자리 셋 전부**: (a) design-doc 리뷰(`spec-review`), (b) brief 리뷰(`reviewing-brief`), (c) seed 리뷰(`intent-sync`) — 세 자리 모두 codex 호출은 SKILL 의 리터럴 게이트 펜스(`codex-gate` 표지) 하나이고 매 라운드 4단계에서 돈다. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`(`skip_reason: kill_switch`)로 옮기고 펜스가 그 값으로 러너 호출을 가르며, 러너(`run_docreview_codex_reviewer.sh`)는 이 변수를 보지 않는다. 펜스 밖에서 러너를 부르면 opt-out이 무시된 채 지출이 나간다.
 - `DEVBREW_SPEC_DISTILL_RESEARCH_LIMIT=<n>` — context-build 조사 agent 호출 상한의 시작값(기본 60, 양의 정수가 아니면 60 과 한 줄 공시). 띄운 agent 수만 센다 — agent 안의 검색 · 출처 수는 세지 않는다. 닿으면 연장 · 판정 · 종료를 묻는다. 끄는 스위치가 아니다. 이 상한이 사슬 전체의 바깥 조사 중 띄운 agent 몫을 묶고(Phase 0 은 레포를 읽고 웹은 이름 확인에만 쓰며 조사 agent 를 띄우지 않는다), 본체 직접 웹 검색은 라운드 규약(라운드마다 질문 호출 하나 · 질문마다 답 하나)이 묶는다.
 - `DEVBREW_SPEC_DISTILL_SATURATION_LIMIT=<n>` — 포화 판정자 호출 상한의 시작값(기본 5). floor 가 닫힌 뒤 판정 고리가 사용자 턴 없이 도는 것을 묶는다.
-- `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` — `spec-review` 진입 검사가 설계문서 리뷰를 끈다 — **수동 호출 포함** skill 전체다. 파일 분류(content-aware 판별)는 없다 — 이 skill 은 받은 경로를 `design-doc.md` 프로필로 리뷰한다(대안 비교는 기각한 대안도 같은 기준으로 견준다).
-- `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` — 같은 효과의 이름 붙은 스위치. 수신처는 `scripts/review_entry.py` 의 진입 검사다(`spec-distill:review-entry`) — 훅이 아니지만 지목할 이름을 갖는다(`spec-distill-gc` 와 같은 관례).
-- `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` (alias: `spec-distill:session-end-cleanup`) — 리뷰 진입 때의 원장 정리(`scripts/ledger_sweep.py`)를 끈다 — 문서 없는 원장 삭제 · 옛 세션 폴더 정리 · 옛 원장 옮기기가 모두 멈춘다. 설치되는 훅은 없다.
-- `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` — 같은 원장 정리를 끈다. 이 셋은 모두 옛 시간 기준 정리를 멈추던 이름이라, 훅이 없어진 뒤에도 정리를 꺼 둔 사용자에게 삭제가 다시 켜지지 않게 그대로 읽는다.
 - `DEVBREW_SPEC_DISTILL_TTL_HOURS=<int>` — 리뷰 진입의 원장 정리가 두 자리에 쓰는 시간(기본 24, 0 이하이거나 정수가 아니면 24): ① 기록된 문서가 사라진 원장의 삭제 유예 — 원장 폴더에 이 시간 동안 쓰기가 없어야 지운다(다른 브랜치로 옮겨 문서가 잠시 없는 동안 원장이 남는 창이다), ② 옛 버전 세션 폴더의 정리 판정 — 이 시간을 넘은 폴더만 지운다. `state.local.md` 가 있는 옛 폴더는 이 값과 무관하게 지우지 않는다. 짧게 잡으면 다른 브랜치에 오래 있다 돌아온 문서의 원장이 사라져 리뷰가 라운드 1 부터 다시 센다(사용자 결정은 문서의 결정 절에 남는다).
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` — 이 kill switch 가
   **두 자리**의 웹 접근을 끈다: context-build 웹 리서치(landscape · 웹 agent dispatch · 만들어 보낸 조사 `open-researcher`), 그리고
-  brief 리뷰 자리의 웹 둘 — codex 웹 검색(공유 러너 `run_docreview_codex_reviewer.sh` 가 이 스위치와
-  `DEVBREW_QUALITY_GATES_DISABLE_WEB` 을 함께 본다)과 Claude 쪽 탐지(선택 펜스가 웹 사본
+  brief 리뷰 자리의 웹 둘 — codex 웹 검색과 Claude 쪽 탐지(선택 펜스가 웹 사본
   `doc-critic-web` 대신 웹 도구 없는 `doc-critic` 을 **지명**한다 — dispatch 는 지명된 블록을 따르고,
   그 선택을 강제하는 훅은 없다). 구조 게이트 `check_brief.py` 도 §4 sentinel 하나를 완화하며 자기
   advisory 로 공시한다. 어느 쪽이든 loud log(brief 자리는 degrade record 도)와 함께 생략, crash
@@ -400,21 +392,15 @@ state_branch: 켬
   고정해서 켜고 끌 것이 없다. 이 스위치는 `intent-sync` 의 이름 조회(웹을 이름 확인에만 쓰는
   자리)도 끈다 — 조회 직전마다 정확히 `1` 인지 보고, 켜져 있으면 조회를 건너뛴다.
   설계 세션이 `references/existing-first.md` 를 따라 바깥을 찾는 일도 이 스위치를 보게 적혀 있다 — 그 글의 문장이 전부이고, 막는 펜스나 훅은 없다.
-- `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE=1` — `intent-sync` 진입 직후의 워크트리
-  질문을 **묻지 않고** 현재 디렉토리에서 진행한다. `EnterWorktree` 도구 부재와 같은 경로다.
-  audit §5 에 «워크트리 없음 —» 강등 기록이 남고, 어느 경우도 seed 작성을 막지 않는다.
-- `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1` — brief 리뷰 전체 skip(엔진 라운드 · 냉독).
-  `component: pipeline` degradation record + loud advisory를 남기고 Step B로 직행한다(조용한
-  생략이 아니다). 엔진 라운드(방향성 · 충실도)와 냉독이 전부 미검증이라는 사실이 다음 단계 게이트 앞 글에 표시된다.
 
 ### 은퇴한 스위치 (v0.36.0 · 3.0.0 · 6.0.0)
 
 `PostToolUse` validator 와 `UserPromptSubmit` reminder(v0.36.0), 설계문서 리뷰 훅(3.0.0)이 삭제되면서 다음 훅 토큰 · 변수가 아무것도 끄지 않게 됐다. `spec-review` 의 진입 검사가 리뷰를 부를 때마다 advisory 로 알린다. 6.0.0 에서 은퇴한 이름은 끄는 스위치가 아니라 진단 출력 변수 하나다(맨 아래).
 
-- `DEVBREW_SKIP_HOOKS=spec-distill:Stop` / `:review-dispatch` (3.0.0) — 가리키던 훅이 삭제됐다. **리뷰를 막지 않는다** — 이 토큰으로 자동 리뷰를 꺼 두었다면 이제 리뷰가 돈다. 끄려면 위 `spec-distill:review-entry` 또는 `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1`. 이 토큰은 리뷰 진입의 원장 정리(옛 TTL-GC)도 멈추지 않는다.
+- `DEVBREW_SKIP_HOOKS=spec-distill:Stop` / `:review-dispatch` (3.0.0) — 가리키던 훅이 삭제됐다. **리뷰를 막지 않는다** — 이 토큰으로 자동 리뷰를 꺼 두었다면 이제 리뷰가 돈다. 끄려면 `/spec-distill:spec-review` 를 부르지 않는다. 이 토큰은 리뷰 진입의 원장 정리(옛 TTL-GC)도 멈추지 않는다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:PostToolUse` / `:validator` (v0.36.0) — 끄던 구조 검사가 삭제돼 아무것도 끄지 않는다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` / `:reminder` (v0.36.0) — 재-nag 층 자체가 없다.
-- `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (v0.36.0) — 읽는 곳이 없다. 설계문서 리뷰를 끄려면 위 `spec-distill:review-entry` 또는 `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1`.
+- `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (v0.36.0) — 읽는 곳이 없다. 설계문서 리뷰를 끄려면 `/spec-distill:spec-review` 를 부르지 않는다.
 - `DEVBREW_SPEC_DISTILL_GC_VERBOSE=1` (6.0.0) — TTL-GC 의 진단 출력 변수였다(끄는 스위치가 아니다). 읽던 TTL-GC 스크립트가 지워져 읽는 곳이 없다. 진입 검사는 이 이름을 알리지 않는다. 원장 정리는 한 일을 늘 한 줄로 낸다.
 
 ## 한계

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# R7 AC9 (§3-3) — 파일을 지우는 장치(리뷰 진입 때의 원장 정리 `scripts/ledger_sweep.py`)의 kill switch 행렬.
-# 스위치 넷(전역 하나 + 옛 토큰 셋)이 각각 아무것도 지우지 않고, 스위치 없이 돌리면 지운다(양성 대조).
+# 파일을 지우는 장치(리뷰 진입 때의 원장 정리 `scripts/ledger_sweep.py`)의 끄기 행렬.
+# 은퇴한 스위치(전역 하나 + 옛 토큰 셋)는 정리를 막지 못하고, 스위치 없이 돌려도 지운다(양성 대조).
 set -uo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,7 +26,7 @@ plant_old() {
 for p in (os.path.join(sys.argv[1], "f"), sys.argv[1]): os.utime(p, (t, t))' "$OLD" "$1"
 }
 
-# 스위치 넷 — 각각 30시간 묵은 폴더를 남긴다.
+# 은퇴한 스위치 — 통째 끄기 · 옛 토큰 셋은 더 듣지 않는다. 30시간 묵은 폴더가 지워진다.
 n=0
 for sw in "DEVBREW_SPEC_DISTILL_DISABLE=1" \
           "DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd" \
@@ -35,10 +35,11 @@ for sw in "DEVBREW_SPEC_DISTILL_DISABLE=1" \
           "DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd,quality-gates:Stop"; do
   n=$((n+1))
   plant_old 30
+  [[ -d "$OLD" ]] || no "case ${n}: 돌리기 전에 옛 세션 폴더가 없다 — 아래 단언이 공허하다"
   env "$sw" python3 "$SWEEP" --root "$ROOT" >/dev/null
-  [[ -d "$OLD" ]] \
-    && ok "case ${n}: ${sw} — 원장 정리가 아무것도 지우지 않는다" \
-    || no "case ${n}: ${sw} 인데 옛 세션 폴더가 지워졌다"
+  [[ ! -d "$OLD" ]] \
+    && ok "case ${n}: ${sw} — 은퇴한 스위치라 원장 정리가 그대로 돈다" \
+    || no "case ${n}: ${sw} 가 아직 원장 정리를 끈다"
 done
 
 # 다른 플러그인의 토큰은 이 정리를 끄지 않는다.

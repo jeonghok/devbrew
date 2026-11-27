@@ -36,19 +36,16 @@ allowed-tools:
 
 ## 진입 단계
 
-이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽고 아래 순서대로 간다. 감시줄 아래에 `[devbrew-switch]` 로 시작하는 줄이 있으면 감시줄이 무엇이든 그 줄들을 고치지 않고 사용자에게 보인다.
+이 절이 다른 모든 절보다 먼저 돈다. 이 제목 바로 위, 사전 검사 줄이 남긴 자리를 읽고 아래 순서대로 간다. 감시줄 아래에 `[devbrew-switch]` 로 시작하는 줄이 있으면 감시줄이 무엇이든 그 줄들을 고치지 않고 사용자에게 보인다. 감시줄 아래에 `[devbrew-switch] 더 듣지 않는다 — spec-distill 전체(` 로 시작하는 줄이나 `[devbrew-switch] 끄기 변수 표를 읽지 못했다` 로 시작하는 줄이 있으면 그 줄을 보인 뒤 `AskUserQuestion` 으로 계속할지 한 번 묻고, 「계속한다」 를 고를 때만 간다 — 물을 수 없거나 답이 없으면 멈춘다. 질문 `끄던 변수가 켜져 있지만 더 듣지 않는다 — 계속하면 이 skill 이 그대로 돈다(codex · 웹 조사로 내용을 보내거나, 남의 코드를 돌리거나, PR 에 글을 올릴 수 있다). 계속할까?` · 선택지 `계속한다`(얻음: 이 skill 을 지금 쓴다 · 내줌: 꺼 두었다고 믿던 일이 돈다) · `멈춘다`(얻음: 아무것도 돌지 않는다 · 내줌: 변수를 풀거나 플러그인 끄기를 쓴 뒤 다시 불러야 한다). (추천을 달지 않는다 — 꺼 두었다고 믿던 일을 다시 돌릴지는 사용자가 고른다)
 
 ### 1. 감시줄 판독
 
 | 그 자리의 내용 | 동작 |
 |---|---|
 | `[devbrew-entry] ok …` | 1.5 로 간다. 그 줄의 `root=` 값을 2 에서 쓴다 |
-| `[devbrew-entry] disabled …` | 그 줄을 그대로 보이고 멈춘다(no-op). 상태를 만들지 않는다 |
 | `[devbrew-entry] error …` | `[spec-distill] intent-sync 사전 검사 실패 — <reason= 값>. 회의를 시작하지 않는다.` 를 내고 멈춘다 |
 | `[shell command execution disabled by policy]` | `[spec-distill] intent-sync 사전 검사 불가(정책) — disableSkillShellExecution 이 사전 검사를 막았다. 회의를 시작하지 않는다.` 를 내고 멈춘다 |
 | 감시줄 없음 · 그 밖 | `[spec-distill] intent-sync 사전 검사 결과 없음 — 그 자리에 감시줄이 없다(치환 실패 · 출력 소실). 정책 설정과는 무관하다. 회의를 시작하지 않는다.` 를 내고 멈춘다 |
-
-이 표가 보는 kill switch 는 `DEVBREW_SPEC_DISTILL_DISABLE=1` 하나다. `DEVBREW_SKIP_HOOKS` 는 진입 skill 에 걸리지 않는다.
 
 ### 1.5 의존 확인
 
@@ -123,7 +120,7 @@ seed 는 태그를 쓰지 않습니다. 대신 산문 규약 셋으로 Phase 1 �
 워크트리 질문을 건너뛰는 경우도 같다 — audit 이름에 주제가 필요하다. 그 답들은 audit 보다 먼저 온
 원문이므로 `## 확산` 1번에서 `## 1. 원문` 의 **첫 항목**부터 요약 없이 옮긴다.
 
-`DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE=1` 이거나 `EnterWorktree` 도구가 없으면 **묻지 않고** 현재
+`EnterWorktree` 도구가 없으면 **묻지 않고** 현재
 디렉토리에서 진행한다. 그 밖에는 **질문을 띄우기 전에** 로컬 전용 커밋 여부부터 확인한다 —
 사용자가 실제로 읽는 것은 질문·옵션 텍스트뿐이다:
 
@@ -192,8 +189,7 @@ AskUserQuestion({ questions: [{
 5. 게이트 앞 글의 «다음 세션 첫 턴» 안내에 워크트리 **절대경로**를 함께 낸다 — 다른 터미널에서 새 세션을
    열 때 그 디렉토리에서 열어야 `/spec-distill:context-build @<seed 경로>` 가 그 파일을 찾는다.
 
-거절·도구 부재·스위치 → 현재 디렉토리에서 진행하고, audit §5 에 «워크트리 없음 — <거절|EnterWorktree 부재|
-DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE>» 한 줄을 남기며, 어느 경우도 seed 작성을 막지 않는다.
+거절·도구 부재 → 현재 디렉토리에서 진행하고, audit §5 에 «워크트리 없음 — <거절|EnterWorktree 부재>» 한 줄을 남기며, 어느 경우도 seed 작성을 막지 않는다.
 
 `worktree.baseRef` 를 자동으로 `head` 로 바꾸지 않는다 — 로컬에만 있는 커밋이 필요한지는 사용자가 정한다. 필요하면 사용자 설정 `worktree.baseRef=head` 로 로컬 HEAD 기준으로 바꾼다.
 
@@ -728,7 +724,6 @@ Agent({
 이 자리(문서 경로)는 `diff` 를 싣지 않습니다. 싣는 것은 코드 경로뿐이고, 재비판자는 `diff` 를
 못 받으면 「이 변경이 도입했는가」 축을 쓰지 않습니다. dispatch 사유도 이전 대화도 어느 리뷰어가
 냈는지도 넣지 않습니다.
-`DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` 이면 dispatch 하지 않고 7단계를 `--recritic-skipped` 로 돕니다.
 
 ```
 Agent({
@@ -1453,7 +1448,7 @@ check 0 은 seed 본문 **전체**가 비어 있지 않은지만 보고, audit �
 
 - **polite stop 금지 (AP2)** — ①/② 는 둘 다 핸드오프입니다. 이 옵션에서 polite stop 은 두 줄 명령을
   노출하지 않고 설명만 하고 끝내는 것입니다 — 명령을 노출하고 턴을 끝내는 것이 이 옵션의 완료입니다.
-  게이트를 거치지 않는 예외 경로(kill switch · 경로 부재)면 명시적 advisory 단락을 동반해야 합니다 —
+  게이트를 거치지 않는 예외 경로(경로 부재)면 명시적 advisory 단락을 동반해야 합니다 —
   게이트-less silent 종료 금지.
 - **cross-compact 조기 진행 금지** — ①/② 어느 쪽이든 두 줄 명령을 노출하면 **거기서 턴 종료(STOP)**
   합니다. 같은 턴에서 컨텍스트 쌓기를 시작하지 않습니다. 다음 단계는 사용자가 그 명령을 실제로 친 **다음 턴**의
@@ -1468,8 +1463,5 @@ check 0 은 seed 본문 **전체**가 비어 있지 않은지만 보고, audit �
 
 ## kill switch
 
-- `DEVBREW_SPEC_DISTILL_DISABLE=1` — `## 진입 단계` 1 이 멈춘다(no-op), state 보존.
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` — 리뷰 엔진의 codex 축만 skip(탐지 · 재비판은 그대로). `### codex` 펜스가 집행하고 엔진이 게이트 첫 줄로 공시한다.
-- `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` — 재비판만 skip(`doc-recritic` dispatch 없음 · 7단계 `--recritic-skipped`). 엔진이 `advisory[]` 로 공시한다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` — 이름 조회를 하지 않는다(`### 탐색 경계` 펜스가 집행).
-- `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE=1` — 워크트리 질문·생성을 건너뛰고 현재 디렉토리에서 진행(audit §5 에 사유).

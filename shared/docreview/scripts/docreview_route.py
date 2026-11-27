@@ -539,13 +539,13 @@ def _rk(fid):  # id → (round, k) 정렬 키
 def _read_recritic(a, degrade, L):
     """재비판 산출물에서 (verdicts, added) 를 꺼낸다.
 
-    죽었으면(kill switch · 블록 부재/파손) 사유를 `degrade["recritic_dead"]` 에 남기고
+    죽었으면(모델 판단 · 블록 부재/파손) 사유를 `degrade["recritic_dead"]` 에 남기고
     빈 쌍을 낸다 — 호출부는 그 뒤로도 같은 경로를 그대로 걷는다(기각 0건이 될 뿐이고,
     그 사실 자체는 `_build_report` 의 advisory 가 공시한다).
     """
     if a.recritic_skipped:
         degrade["recritic_dead"] = "skipped"
-        L.source_failed("doc-recritic", "kill switch", primary=False)
+        L.source_failed("doc-recritic", "모델 판단", primary=False)
         return [], []
     text = Path(a.recritic).read_text(encoding="utf-8") if a.recritic and Path(a.recritic).is_file() else ""
     n_blocks = len(re.findall(BLOCK_RE % re.escape("docreview-recritic"), text, re.S))

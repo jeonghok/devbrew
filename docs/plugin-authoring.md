@@ -10,7 +10,7 @@ plugins/<your-plugin>/
 │   └── plugin.json           # 필수 키는 name 하나 — version · description · author 를 빼면 claude plugin validate 가 경고. version 을 적으면 0.1.0 에서 시작
 ├── README.md                 # 필수 — "Principles Instantiated" 섹션 포함
 ├── dependencies.md           # 기대는 도구 · 다른 플러그인의 표(이름 · 최소 판 · 강도 · 없을 때) — 판 칸은 check_deps.py measure 가 잰다
-├── switches.md             # 진입 skill 이 있으면 필수 — 끄기 변수 표(이름 · 끄는 것 · 상태 · 대신할 길). 진입 사전 검사가 읽고 README 「끄는 길」 이 같다. 끄기 변수가 없으면 머리줄 둘만
+├── switches.md             # 진입 skill 이 있으면 필수 — 끄기 변수 표(이름 · 끄는 것 · 상태 · 대신할 길). 진입 사전 검사가 읽고 README 「끄는 길」 이 같다. 끄기 변수가 없으면 머리줄 둘만. 끄기 변수는 보안 컨트롤이다 — 이름마다 읽는 코드가 있어야 한다
 ├── CHANGELOG.md              # version ≥ v1.0.0이면 필수
 ├── skills/<name>/            # 진입 skill 은 짧은 kebab(spec-review), 내부 skill(user-invocable: false)은 동명사(reviewing-brief)
 │   └── SKILL.md              # frontmatter metadata 아래 cost_class 선언 · trigger. 진입 skill 의 꼴(allowed-tools 한 줄 · ! 사전 검사 줄 · ## 진입 단계)은 있는 진입 skill(plugins/spec-distill/skills/spec-review/SKILL.md)을 본보기로

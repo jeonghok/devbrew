@@ -103,12 +103,12 @@ case_V8_missing_after_fingerprint_is_not_same() {
   [ "$(printf '%s\n' "$out" | tail -n 1)" != "same" ] && ok "M7: 걷기 뒤 지문 파일이 없으면 same 이 아니다" || no "M7: 없는 지문 파일을 same 으로 읽었다"
 }
 
-# ── X5 · AC20 — kill switch 둘(+전역) 중 하나라도 켜지면 측정·실행 전에 exit 3 ─────────
+# ── X5 · AC20 — kill switch 가 켜지면 측정·실행 전에 exit 3 ─────────
 case_X5_AC20_kill_switch_refuses_fingerprint_compare() {
   local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
   fp "$d" "$s/b"
   local v rc
-  for v in DEVBREW_QUALITY_GATES_DISABLE_E2E DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST DEVBREW_QUALITY_GATES_DISABLE; do
+  for v in DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST; do
     rm -f "$s/x"
     rc=0; (cd "$d" && env "$v=1" bash "$ES" fingerprint --out "$s/x" >/dev/null 2>&1) || rc=$?
     assert_eq "$rc" "3" "X5: $v=1 이면 fingerprint 가 exit 3"
@@ -118,11 +118,31 @@ case_X5_AC20_kill_switch_refuses_fingerprint_compare() {
   done
 }
 
+case_X5_retired_names_do_not_disable() {
+  # 은퇴한 이름(e2e 끄기 · 통째 끄기)은 더 듣지 않는다 — 켜도 지문 · 비교 · 부팅이 막히지 않는다.
+  # 짝: 남는 차등 테스트 끄기는 같은 호출을 exit 3 으로 막는다(위 · 아래 케이스).
+  local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
+  fp "$d" "$s/b"
+  local v rc
+  for v in DEVBREW_QUALITY_GATES_DISABLE_E2E DEVBREW_QUALITY_GATES_DISABLE; do
+    rm -f "$s/x" "$d/booted"
+    rc=0; (cd "$d" && env "$v=1" bash "$ES" fingerprint --out "$s/x" >/dev/null 2>&1) || rc=$?
+    assert_eq "$rc" "0" "X5: 은퇴한 $v=1 은 fingerprint 를 막지 않는다"
+    [ -s "$s/x" ] && ok "X5: 은퇴한 $v=1 이어도 지문 파일이 생긴다" || no "X5: 은퇴한 $v=1 이 지문을 막았다"
+    rc=0; (cd "$d" && env "$v=1" bash "$ES" compare "$s/b" "$s/b" >/dev/null 2>&1) || rc=$?
+    assert_eq "$rc" "0" "X5: 은퇴한 $v=1 은 compare 를 막지 않는다"
+    rc=0; (cd "$d" && env "$v=1" bash "$ES" boot --dir "$s" --cmd "touch '$d/booted'" --ready-port 1 --timeout 1 >/dev/null 2>&1) || rc=$?
+    [ "$rc" -ne 3 ] && ok "X5: 은퇴한 $v=1 은 boot 를 exit 3 으로 막지 않는다 (rc=$rc)" || no "X5: 은퇴한 $v=1 이 boot 를 exit 3 으로 막았다"
+    [ -e "$d/booted" ] && ok "X5: 은퇴한 $v=1 이어도 부팅 명령이 실행된다" || no "X5: 은퇴한 $v=1 인데 부팅 명령이 실행되지 않았다"
+    bash "$ES" stop --dir "$s" >/dev/null 2>&1 || true
+  done
+}
+
 case_X5_only_exact_one_disables() {
   # 양의 짝 — 전체 토큰 일치(E5). `1` 이 아닌 값은 끄지 않는다.
   local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
-  local rc=0; (cd "$d" && DEVBREW_QUALITY_GATES_DISABLE_E2E=true bash "$ES" fingerprint --out "$s/x" >/dev/null 2>&1) || rc=$?
-  assert_eq "$rc" "0" "X5: DISABLE_E2E=true 는 끄지 않는다(1 만 끈다)"
+  local rc=0; (cd "$d" && DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=true bash "$ES" fingerprint --out "$s/x" >/dev/null 2>&1) || rc=$?
+  assert_eq "$rc" "0" "X5: DISABLE_DIFFERENTIAL_TEST=true 는 끄지 않는다(1 만 끈다)"
 }
 
 case_RF3_odd_path_names_are_reported() {
@@ -176,8 +196,8 @@ case_X5_near_miss_values_do_not_disable() {
   local v rc
   for v in "1 " "01" "yes"; do
     rm -f "$s/x"
-    rc=0; (cd "$d" && env "DEVBREW_QUALITY_GATES_DISABLE_E2E=$v" bash "$ES" fingerprint --out "$s/x" >/dev/null 2>&1) || rc=$?
-    assert_eq "$rc" "0" "X5: DISABLE_E2E='$v' 는 끄지 않는다"
+    rc=0; (cd "$d" && env "DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=$v" bash "$ES" fingerprint --out "$s/x" >/dev/null 2>&1) || rc=$?
+    assert_eq "$rc" "0" "X5: DISABLE_DIFFERENTIAL_TEST='$v' 는 끄지 않는다"
   done
 }
 
@@ -370,7 +390,7 @@ case_I1_m4_bad_timeout_and_port_refused_before_launch() {
 case_X5_AC20_kill_switch_refuses_boot() {
   local d; d=$(new_repo); local s="$d/.claude/quality-gates/sid12345"
   local v rc
-  for v in DEVBREW_QUALITY_GATES_DISABLE_E2E DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST DEVBREW_QUALITY_GATES_DISABLE; do
+  for v in DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST; do
     rm -f "$d/booted"
     rc=0; (cd "$d" && env "$v=1" bash "$ES" boot --dir "$s" --cmd "touch '$d/booted'" --ready-port 1 >/dev/null 2>&1) || rc=$?
     assert_eq "$rc" "3" "X5: $v=1 이면 boot 가 exit 3"

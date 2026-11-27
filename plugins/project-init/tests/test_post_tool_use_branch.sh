@@ -288,7 +288,7 @@ for pair in "qg-base-sess1234|bash /x/scripts/qg-worktree.sh create-baseline abc
   if [ -z "$(field ac)" ] && [ -z "$(field systemMessage)" ]; then ok "$name(detached) 사본 만들기 → 알림 · 명령 없음"; else no "$name(detached): 알림이 났다 — $OUT"; fi
 done
 
-echo "kill switch — git 을 부르기 전에 끝난다"
+echo "은퇴한 끄기 변수 — 훅은 그대로 돌고 알림 끝에 「더 듣지 않는다」 한 줄을 덧붙인다"
 mkdir -p "$T/fakebin"
 printf '#!/bin/sh\necho "$*" >> "%s/git.log"\nexec "%s" "$@"\n' "$T" "$REAL_GIT" > "$T/fakebin/git"
 chmod +x "$T/fakebin/git"
@@ -299,10 +299,17 @@ run_ks() { # $1 env assignment or "", $2 label
   OUT=$(env $1 PATH="$T/fakebin:$PATH" CLAUDE_PROJECT_DIR="$W" python3 "$HOOK" < "$T/payload.json")
 }
 run_ks "DEVBREW_NOOP=1" "양성 짝"
-if [ -s "$T/git.log" ] && [ "$OUT" != "{}" ]; then ok "kill switch 없이는 가짜 git 이 불리고 알림이 난다(양성 짝)"; else no "가짜 git 계측이 죽었다 — $OUT"; fi
+if [ -s "$T/git.log" ] && [ "$OUT" != "{}" ]; then ok "변수 없이도 가짜 git 이 불리고 알림이 난다(양성 짝)"; else no "가짜 git 계측이 죽었다 — $OUT"; fi
 for ks in DEVBREW_PROJECT_INIT_DISABLE=1 DEVBREW_SKIP_HOOKS=project-init:post-tool-use DEVBREW_SKIP_HOOKS=project-init:PostToolUse; do
   run_ks "$ks" "$ks"
-  if [ "$OUT" = "{}" ] && [ ! -e "$T/git.log" ]; then ok "$ks → {} · git 호출 없음"; else no "$ks → $OUT · git.log=$(cat "$T/git.log" 2>/dev/null)"; fi
+  sm=$(field systemMessage)
+  last=$(printf '%s\n' "$sm" | tail -n 1)
+  want="[devbrew-switch] 더 듣지 않는다 — 플러그인 끄기를 쓴다(${ks})"
+  if [ -s "$T/git.log" ] && case "$sm" in *'이름 규칙에 맞지 않는다 — "Bad13"'*) true ;; *) false ;; esac && [ "$last" = "$want" ]; then
+    ok "$ks → 훅이 돈다 · git 호출이 있다 · 마지막 줄이 「더 듣지 않는다」"
+  else
+    no "$ks → $OUT · git.log=$(cat "$T/git.log" 2>/dev/null)"
+  fi
 done
 
 exit $FAIL

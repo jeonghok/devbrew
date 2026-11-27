@@ -1,5 +1,29 @@
 # Changelog
 
+## [10.0.0] — 2026-11-26
+
+### Changed
+- 통째 끄기 변수가 켜져 있으면 진입 skill 이 계속할지 한 번 묻는다. 「계속한다」 를 고를 때만 간다. 물을 수 없거나 답이 없으면 멈춘다.
+- `spec-review` 진입 검사의 옛 토큰 알림이 설계문서 리뷰를 끄는 길로 `/spec-distill:spec-review` 를 부르지 않는 것과 Claude Code 의 플러그인 끄기를 권한다.
+- 문서 리뷰 엔진이 모델 판단으로 건너뛴 재비판의 사유를 「모델 판단」 으로 적는다 — 경고 줄은 `(doc-recritic: 모델 판단, skipped)` 가 된다.
+
+### Removed
+- 끄기 변수 은퇴 — 더 듣지 않는다.
+- `DEVBREW_SPEC_DISTILL_DISABLE` — 대신: Claude Code 의 플러그인 끄기(`/plugin` · `claude plugin disable` · 설정의 `enabledPlugins`) — 새 세션부터 먹는다
+- `DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC` — 대신: 없음 — 작은 일에서 건너뛰는 것은 모델 판단이 이유를 적고 한다
+- `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` — 대신: 없음 — 첫 검토는 늘 돈다. 작은 일에서 재비판 · codex · 읽어 보기를 건너뛰는 것은 모델 판단이 이유를 적고 한다
+- `DEVBREW_SPEC_DISTILL_DISABLE_WORKTREE` — 대신: 질문에 「아니오」 로 답한다
+- `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` — 대신: `/spec-distill:spec-review` 를 부르지 않는다
+- `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` — 대신: `/spec-distill:spec-review` 를 부르지 않는다
+- `DEVBREW_QUALITY_GATES_DISABLE_WEB` — 대신: `DEVBREW_SPEC_DISTILL_DISABLE_WEB`
+- `DEVBREW_SKIP_HOOKS=spec-distill:statusline` — 대신: 상태줄 설정을 지운다
+- `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` · `DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup` — 대신: 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다
+- `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` — 대신: 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다
+- 위 두 줄의 정리 끄기를 켜 둔 사용자는 정리가 다시 돈다 — 지워지는 것은 문서가 사라진 리뷰 원장과, `state.local.md` 가 없고 유예 시간이 지난 옛 세션 폴더다. 미루려면 유예 시간 `DEVBREW_SPEC_DISTILL_TTL_HOURS` 를 크게 준다.
+- 진입 사전 검사(`scripts/entry_preflight.py`)의 통째 끄기 판정 — `disabled` 감시줄과 `switch_name` 갈래. 끄기 변수가 켜져 있어도 사전 검사는 `ok` 감시줄을 낸다.
+- 진입 skill 의 통째 끄기 판독 표 행.
+- 끄기 판정 정본 `kill_switch_active.py` 의 사본(`scripts/kill_switch_active.py`)과 지도 · 원장 정리, `spec-review` 진입 검사(`review_entry.py`)의 스위치 갈래.
+
 ## [9.3.5] — 2026-11-27
 
 ### Fixed

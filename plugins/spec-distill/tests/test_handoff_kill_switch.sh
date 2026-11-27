@@ -56,7 +56,7 @@ fi
 
 # 양의 짝 ② — 그 코퍼스를 실제로 **읽었다**. 집행되는 스위치 둘이 거기 있어야 한다.
 # 이것이 없으면 코퍼스를 통째로 빈 파일로 바꿔도 아래 부재 판정이 통과한다.
-for live in 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX' 'DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC'; do
+for live in 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX' 'DEVBREW_SPEC_DISTILL_DISABLE_WEB'; do
   if grep -qlF "$live" "${CORPUS[@]}" >/dev/null 2>&1; then
     ok "AC6: 집행되는 스위치 '$live' 가 코퍼스에서 읽힌다 (양의 짝)"
   else

@@ -245,11 +245,12 @@ const CONTRACT = [
   '- 구조/shape 관측 (사실 — 직접 확인하라):',
   // 실제 producer는 OBJECT를 낸다: check-plugin-structure.sh → structure_facts[{validator,
   // target, fact, verifier_ok}], check-shape-completeness.py → shape_gaps[{requirement, present,
-  // source_doc}]. bare 문자열 concat은 `[object Object]`를 낳는다 — 필드를 포맷한다 (WB1).
+  // source_doc, missing?}]. bare 문자열 concat은 `[object Object]`를 낳는다 — 필드를 포맷한다 (WB1).
   ...((pack.structure_facts || []).length || (pack.shape_gaps || []).length
     ? [
       ...(pack.structure_facts || []).map((f) => '  - [' + f.validator + '] ' + f.target + ': ' + f.fact + (f.verifier_ok ? '' : ' (verifier_ok=false)')),
-      ...(pack.shape_gaps || []).map((g) => '  - [shape] ' + g.requirement + ': present=' + g.present + ' (' + g.source_doc + ')'),
+      ...(pack.shape_gaps || []).map((g) => '  - [shape] ' + g.requirement + ': present=' + g.present + ' (' + g.source_doc + ')'
+        + (Array.isArray(g.missing) && g.missing.length ? ' missing=' + g.missing.join(',') : '')),
     ]
     : ['  - (구조/shape 관측 미제공 — 파일 트리를 직접 열거해 판정하라)']),
   '',

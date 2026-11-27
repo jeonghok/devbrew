@@ -31,8 +31,8 @@ done
 skip() { echo "skipped: $1"; exit 0; }
 fail() { echo "failed: $1"; exit 1; }
 
-# 1. kill switch — 어떤 gh 호출보다 먼저(P3 · AC14). 전체 토큰 일치(E5).
-if [ "${DEVBREW_QUALITY_GATES_DISABLE_PUBLISH:-}" = "1" ] || [ "${DEVBREW_QUALITY_GATES_DISABLE:-}" = "1" ]; then
+# 1. kill switch — 어떤 gh 호출보다 먼저(P3 · AC14).
+if [ "${DEVBREW_QUALITY_GATES_DISABLE_PUBLISH:-}" = "1" ]; then
   skip kill-switch
 fi
 

@@ -25,8 +25,7 @@ for f in "$TPL" "$RMAP"; do
   assert_contains "$C" "$SHARED" "AC37: ${f##*/} 지휘 절차 4 의 뜻이 공유 문장과 같다"
   assert_contains "$C" '손으로 따르는 절차' "AC37: ${f##*/} 지휘자를 끈 경우의 손 절차를 가리킨다"
   assert_eq "$(printf '%s\n' "$C" | grep -cE '^[0-9]+\. ' || true)" "0" "AC37: ${f##*/} 지휘 절차에 옛 번호 걸음이 없다"
-  assert_contains "$C" 'spec-distill 전체(리뷰 · 상태 계산 포함)가 꺼진다' "Ruling R35: ${f##*/} 끄는 스위치가 플러그인 전체를 끈다고 말한다"
-  assert_contains "$C" '끄지 말고 지휘자를 부르지 않은 채' "Ruling R35: ${f##*/} 손 절차는 끄지 않고 지휘자 없이 따른다"
+  assert_contains "$C" '지휘자를 부르지 않은 채' "Ruling R35: ${f##*/} 손 절차는 지휘자를 부르지 않고 따른다"
   assert_not_contains "$C" '지휘자를 껐으면' "Ruling R35: ${f##*/} 「지휘자를 끄면 손 절차」 옛 문장이 없다"
 done
 TPL_LINE="$(cond "$TPL" | grep -F '이 로드맵은 지휘자가 이끈다')"
@@ -34,7 +33,14 @@ RM_LINE="$(cond "$RMAP" | grep -F '이 로드맵은 지휘자가 이끈다')"
 RM_REL="${RMAP#"$ROOT"/}"
 TOK='{{ROADMAP}}'
 [ -n "$TPL_LINE" ] && [ "$RM_REL" != "$RMAP" ] && ok "안내 줄과 로드맵 상대경로를 읽었다" || no "안내 줄이나 로드맵 상대경로를 못 읽었다 — 아래 비교가 공허하다"
-assert_eq "${RM_LINE//"$RM_REL"/$TOK}" "$TPL_LINE" "템플릿과 이 로드맵의 지휘자 안내 줄은 경로만 다르다"
+# 옛 로드맵의 줄에는 은퇴한 끄기 구절 둘이 남아 있다 — 걷어 낸 뒤 템플릿 줄과 견준다(옛 로드맵 문서는 고치지 않는다).
+RETIRED_A=' `DEVBREW_SPEC_DISTILL_DISABLE=1` 로 꺼 두면 spec-distill 전체(리뷰 · 상태 계산 포함)가 꺼진다 —'
+RETIRED_B='끄지 말고 '
+assert_contains "$RM_LINE" "$RETIRED_A" "옛 로드맵 줄에 은퇴한 끄기 구절(통째 끄기 문장)이 있다(양성 짝 — 걷어 낼 것이 실제로 있다)"
+assert_contains "$RM_LINE" "$RETIRED_B" "옛 로드맵 줄에 은퇴한 끄기 구절(끄지 말고)이 있다(양성 짝)"
+RM_LINE_TRIM="${RM_LINE//"$RETIRED_A"/}"
+RM_LINE_TRIM="${RM_LINE_TRIM//"$RETIRED_B"/}"
+assert_eq "${RM_LINE_TRIM//"$RM_REL"/$TOK}" "$TPL_LINE" "템플릿과 이 로드맵의 지휘자 안내 줄은 은퇴한 끄기 구절과 경로만 다르다"
 assert_eq "$(grep -cF -- "$SHARED" "$CD")" "1" "AC37: conducting.md 에 같은 문장이 한 번"
 assert_contains "$(sed -n '1,5p' "$EH")" '지휘자를 껐거나' "AC31: 넘김 줄은 지휘자를 끈 경우(또는 사용자가 따로 진행할 때)에만"
 assert_contains "$(sed -n '1,5p' "$EH")" '자기 brainstorming 입력으로 쓴다' "AC31: 지휘자는 넘김 줄을 사용자에게 주지 않는다"

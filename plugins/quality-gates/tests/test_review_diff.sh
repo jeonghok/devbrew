@@ -832,28 +832,49 @@ case_other_session_worktree_degraded() {
   assert_line "$ROOT/err" "$(stale_line "$R" worktrees/qg-base-sessAAAA)" "8자 미만 세션 폴더: 이 세션 트리도 이유 줄로 알린다"
 }
 
-# J14 · AC14 — 옛 자리(.claude/quality-gates/worktrees/)의 등록된 사본은 어느 세션 것이든 이전 실행이 남긴 트리로
-# 알린다(건너뛰지 않는다). 새 자리의 사용자 worktree(feat-x)는 지금처럼 중첩 레포로 알린다 — 새로 빠지지 않는다.
-case_old_location_and_user_worktree_still_disclosed() {
-  echo "[옛 자리의 등록된 사본 · 사용자 worktree — 건너뛰지 않고 알린다]"
+# AC14 — 새 자리의 사용자 worktree(feat-x)는 지금처럼 중첩 레포로 알린다 — 새로 빠지지 않는다.
+case_user_worktree_still_disclosed() {
+  echo "[사용자 worktree — 건너뛰지 않고 알린다]"
   mkfix
   [ -n "${R:-}" ] && [ -d "$R" ] || { no "mkfix 실패"; return; }
   local S="$R/.claude/quality-gates/sessAAAA0000"; mkdir -p "$S"
-  git -C "$R" worktree add -q --detach "$R/.claude/quality-gates/worktrees/base-sessAAAA" "$C0" \
-    && ok "옛 자리에 이 세션 접미의 사본을 등록했다" || no "옛 자리 사본을 만들지 못했다"
   git -C "$R" worktree add -q --detach "$R/.claude/worktrees/feat-x" "$C0" \
     && ok "사용자 worktree 를 등록했다" || no "사용자 worktree 를 만들지 못했다"
   rdd "$S" --mode session
   assert_eq "$RC" 0 "rc 0"
-  assert_line "$ROOT/err" "$(stale_line "$R" quality-gates/worktrees/base-sessAAAA)" \
-    "J14: 옛 자리의 등록된 사본은 이 세션 접미여도 이전 실행이 남긴 트리로 알린다"
-  assert_file_absent "$S/review-i1.self-state" 'base-sessAAAA' "J14: 옛 자리 사본은 self_state 에 없다"
-  assert_file_grep "$S/review-i1.names" '^\.claude/quality-gates/worktrees/base-sessAAAA/$' "J14: names 에 옛 자리 사본"
   assert_file_grep "$S/review-i1.names" '^\.claude/worktrees/feat-x/$' "AC14: 사용자 worktree 는 names 에 있다(빠지지 않는다)"
   assert_file_grep "$ROOT/err" "중첩 레포 \.claude/worktrees/feat-x/ ${NESTED_TAIL}\$" "AC14: 사용자 worktree 는 중첩 레포로 알린다"
   assert_file_absent "$S/review-i1.self-state" 'feat-x' "AC14: 사용자 worktree 는 self_state 에 없다"
   assert_eq "$(field self_state "$OUT")" 0 "self_state: 0"
   assert_eq "$(field degraded "$OUT")" yes "degraded: yes"
+}
+
+# J14 — 브랜치를 쥔 같은 이름(qg-base-<세션 8자>) worktree 는 사용자 것이다: 이 세션 사본으로 건너뛰지 않고,
+# 이전 실행이 남긴 트리로 알려 worktree remove 를 권하지도 않는다. 짝 — 같은 이름의 detached 등록 사본은 건너뛴다.
+case_branch_holding_same_name_worktree() {
+  echo "[브랜치를 쥔 같은 이름 worktree — 이 세션 사본으로 빼지 않고 remove 를 권하지 않는다]"
+  mkfix
+  [ -n "${R:-}" ] && [ -d "$R" ] || { no "mkfix 실패"; return; }
+  local S="$R/.claude/quality-gates/sessAAAA0000"; mkdir -p "$S"
+  git -C "$R" worktree add -q -b userbr-j14 "$R/.claude/worktrees/qg-base-sessAAAA" "$C0" \
+    && ok "브랜치를 쥔 같은 이름 worktree 를 등록했다" || no "브랜치를 쥔 worktree 를 만들지 못했다"
+  rdd "$S" --mode session
+  assert_eq "$RC" 0 "rc 0"
+  assert_file_absent "$S/review-i1.self-state" 'qg-base-sessAAAA' "J14: 브랜치를 쥔 같은 이름은 self_state 에 없다"
+  assert_eq "$(field self_state "$OUT")" 0 "J14: self_state: 0"
+  assert_file_absent "$ROOT/err" 'worktree remove' "J14: git worktree remove 를 권하지 않는다"
+  assert_file_absent "$ROOT/err" '이전 qg 실행이 남긴' "J14: 이전 실행이 남긴 트리로 알리지 않는다"
+  assert_file_grep "$S/review-i1.names" '^\.claude/worktrees/qg-base-sessAAAA/$' "J14: names 에는 있다(사용자 worktree 처럼 다룬다)"
+  assert_file_grep "$ROOT/err" "중첩 레포 \.claude/worktrees/qg-base-sessAAAA/ ${NESTED_TAIL}\$" "J14: 사용자 worktree 처럼 중첩 레포로 알린다"
+  # 양성 짝 — 같은 이름의 detached 등록 사본은 이 세션 사본으로 건너뛴다.
+  rm -rf -- "$S"/review-i1.*
+  git -C "$R" worktree remove --force --force "$R/.claude/worktrees/qg-base-sessAAAA"
+  git -C "$R" worktree add -q --detach "$R/.claude/worktrees/qg-base-sessAAAA" "$C0" \
+    && ok "양성 짝: detached 같은 이름을 등록했다" || no "양성 짝: detached 를 만들지 못했다"
+  rdd "$S" --mode session
+  assert_eq "$(field self_state "$OUT")" 1 "양성 짝: self_state: 1"
+  assert_file_grep "$S/review-i1.self-state" '^\.claude/worktrees/qg-base-sessAAAA/$' "양성 짝: detached 사본은 건너뛴다"
+  assert_file_absent "$ROOT/err" 'worktree' "양성 짝: 알리는 줄 없음"
 }
 
 # 걸러진 diff 는 남길 경로를 묶음으로 나눠 부른다(인자 길이 상한). 묶음을 이어도 빠지거나 겹치는 경로가 없다.
@@ -1389,7 +1410,8 @@ case_excluded_prefix_not_swallowed
 case_name_reconcile_catches_missing
 case_all_excluded_no_pathspec
 case_other_session_worktree_degraded
-case_old_location_and_user_worktree_still_disclosed
+case_user_worktree_still_disclosed
+case_branch_holding_same_name_worktree
 case_keep_batches
 case_mdx_reviewed_as_code
 case_nested_repo_disclosed

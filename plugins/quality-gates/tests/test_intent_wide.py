@@ -472,32 +472,6 @@ class TestWidePrepare(unittest.TestCase):
         self.assertIn(cap[0], p.stdout.splitlines())
         self.assertIn(cap[0], self._f(ic.PREPARE_NOTICES, rd).splitlines())
 
-    def test_kill_switch_stops_prepare(self):
-        """gate 를 거치지 않고 불려도 스위치가 켜져 있으면 prepare 는 넓이 판정 · 다른 팀 읽기를 하지 않고
-        앞 실행의 두 파일을 지우며, gate 가 꺼짐에서 내는 것과 같은 출력 · 돌려주는 꼴을 낸다."""
-        _other_branch(self.R)
-        kill = tic._env(**{tic.KILL: "1"})
-        tic._write("stale\n", self.rd, ot.FILE)
-        tic._write("stale\n", self.rd, ic.SCOPE)
-        tic._write("src/a.py\n", self.rd, "review-i1.names")
-        sp = os.path.join(self.rd, "intent-specs.json")
-        tic._write(json.dumps({"intent_source": "spec-trailer", "specs": []}), sp)
-        p = tic._cli("prepare", "--rd", self.rd, "--repo", self.R, "--tree-root", self.R,
-                     "--mode", "range", "--head", "HEAD", "--review-commit", "HEAD",
-                     "--specs-json", sp, env=kill)
-        self.assertEqual((p.returncode, p.stdout, p.stderr), (0, ic.KILL_LINE + "\n", ""))
-        for name in (ot.FILE, ic.SCOPE, "intent-plan.txt", "intent-evidence.txt"):
-            self.assertFalse(os.path.lexists(os.path.join(self.rd, name)), name)
-        gate_rd = self._new_rd()
-        g = tic._cli("gate", "--rd", gate_rd, "--path", "final", "--mode", "range", env=kill)
-        self.assertEqual((g.returncode, g.stdout), (p.returncode, p.stdout))
-        # 세션 폴더 경로만 다르다 — 그 밖의 칸은 한 글자도 같다.
-        own, other = tic._return_block(self.rd), tic._return_block(gate_rd)
-        self.assertEqual(own[0].replace(self.rd, "<rd>"), other[0].replace(gate_rd, "<rd>"))
-        self.assertEqual(own[1]["session_dir"], os.path.abspath(self.rd))
-        block = tic._return_block(self.rd)[1]
-        self.assertEqual((block["status"], block["reason"]), ("skipped", "kill-switch"))
-
     def test_teams_failure_still_shown_when_not_called(self):
         """부르지 않는 좁은 실행에서도 다른 팀 읽기 실패는 공시한다(상한 줄만 뺀다)."""
         def boom(*_a, **_k):

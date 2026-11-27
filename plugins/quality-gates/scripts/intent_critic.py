@@ -41,7 +41,6 @@ import intent_answers as ia  # noqa: E402
 import intent_origin as io_  # noqa: E402
 import other_teams as ot  # noqa: E402
 
-KILL_ENV = "DEVBREW_QUALITY_GATES_DISABLE_INTENT_CRITIC"
 DIR_ENV = "DEVBREW_QUALITY_GATES_INTENT_ANSWERS_DIR"
 MAX_ENV = "DEVBREW_QUALITY_GATES_INTENT_CRITIC_MAX_BYTES"
 DEFAULT_DIR = "docs/qg-intent-answers"
@@ -111,8 +110,6 @@ MISMATCH_FAILURE = "정체가 맞지 않는 답 머리"
 DUPLICATE_HEADERS = "같은 질문 번호의 답 머리를 한 번만 받았다 — 더 나온 머리 %d개"
 NO_HEADER = "답 입력에서 묻는 질문의 머리를 찾지 못함 — 묻는 질문 %d개"
 ORPHAN = "머리 앞의 답 글을 읽지 못함 %d줄"
-KILL_RECORD = "%s — 답 파일을 쓰지 않고 커밋하지 않았다"
-KILL_FAILURE = "kill switch(%s)가 켜져 있어 기록하지 않음"
 # 기록되지 않은 답의 질문마다 한 줄 — 공시로 사람에게 보이는 글이다. 돌려주는 꼴도 그 답을 싣는다(질문의 `answer` · `failure`).
 RECORD_FAILED_ITEM = "답 기록 실패 질문 — %s · 고른 답: %s · 질문: %s"
 PICK_UNREAD = "답을 읽지 못함"
@@ -138,8 +135,6 @@ GATE_SKIPS = {
     "tree-failed": ("intent-critic — 리뷰 트리를 만들지 못함", "리뷰 트리를 만들지 못함",
                     "failed", "tree-failed"),
 }
-KILL_LINE = "intent-critic 꺼짐(kill switch)"
-GLOBAL_KILL_ENV = "DEVBREW_QUALITY_GATES_DISABLE"
 
 # 돌려주는 꼴 3판 — 닫힌 어휘와 칸 차례.
 CONTRACT = 3
@@ -393,47 +388,7 @@ def _write_return(rd: str, head: dict, rows: List[dict]) -> None:
 
 # ---------------------------------------------------------------- gate
 
-def _switches_on() -> List[str]:
-    """켜진(`== "1"`) 끄기 스위치 변수 이름 — 전역이 앞이다."""
-    on: List[str] = []
-    for name in (GLOBAL_KILL_ENV, KILL_ENV):
-        if os.environ.get(name) == "1":
-            on.append(name)
-    return on
-
-
-def _kill_names(names: List[str]) -> str:
-    """`<변수>=1` 을 ` · ` 로 이은 글 — 전역이 앞이다."""
-    parts = []
-    for name in names:
-        parts.append(name + "=1")
-    return " · ".join(parts)
-
-
-def _kill_text(names: List[str]) -> str:
-    return "intent-critic 꺼짐(kill switch — %s)" % _kill_names(names)
-
-
-def _killed(rd: str, mode: str, stale=()) -> bool:
-    """kill switch 가 켜졌으면 꺼짐 처리(`stale` 세션 파일 지우기 · 돌려주는 꼴 · 꺼짐 줄)를 하고 참.
-
-    `gate` 와 `prepare` 가 함께 쓴다 — 두 자리의 꺼짐 출력이 갈라지지 않게.
-    """
-    names = _switches_on()
-    if not names:
-        return False
-    for name in stale:
-        _remove(_path(rd, name))
-    _write_return(rd, {"status": "skipped", "reason": "kill-switch",
-                       "reason_text": _kill_text(names), "outcome": "-",
-                       "result_line": KILL_LINE, "mode": mode}, [])
-    print(KILL_LINE)
-    return True
-
-
 def cmd_gate(args) -> int:
-    if _killed(args.rd, args.mode):
-        return 0
     if args.path == "final":
         print("intent-gate: run")
         return 0
@@ -816,9 +771,6 @@ def _prepare_notices(rd: str) -> List[str]:
 
 
 def cmd_prepare(args) -> int:
-    # gate 를 거치지 않고 불려도 스위치가 넓이 판정 · 다른 팀 읽기 · gh 조회를 끈다 — 앞 실행의 두 파일도 지운다.
-    if _killed(args.rd, args.mode, stale=(OTHER_TEAMS, SCOPE, HANDED)):
-        return 0
     notices: List[str] = []
     try:
         call = _prepare(args, notices)
@@ -1627,11 +1579,8 @@ def _input_notices(parsed: dict, known: dict, asked: List[dict], text: Optional[
 
 def _record(args) -> tuple:
     """(공시 줄들, 기록한 답 파일 수)."""
-    switches = _switches_on()
     plan = _read_plan(args.rd)
     if plan is not None and plan["mode"] == "range":
-        if switches:
-            return [KILL_RECORD % _kill_text(switches)], 0
         return [], 0
     data = _read_questions(args.rd)
     if data is not None:
@@ -1656,11 +1605,7 @@ def _record(args) -> tuple:
     # 기록하지 않는 갈래 — 입력에 답이 있던 질문에만 그 갈래의 사유로 실패 표지를 단다. 답 입력 파일 자체를
     # 읽지 못하면 답이 있었는지 알 수 없어 묻는 질문 모두에 단다.
     blocked = None
-    lead = None
-    if switches:
-        blocked = KILL_FAILURE % _kill_names(switches)
-        lead = KILL_RECORD % _kill_text(switches)
-    elif plan is None:
+    if plan is None:
         blocked = "준비 파일(%s)을 읽지 못함" % PLAN
     elif data is None or cfg is None or text is None:
         blocked = "거르기 결과 · 설정 · 답 입력 중 읽지 못한 것이 있다"
@@ -1673,7 +1618,7 @@ def _record(args) -> tuple:
             failed.append((record, _read_pick(entry)[0], blocked))
         for record, picked, _why in own:
             failed.append((record, picked, blocked))
-        notices = [lead or "답을 기록하지 못했다 — " + blocked] + notices + _failed_notices(failed)
+        notices = ["답을 기록하지 못했다 — " + blocked] + notices + _failed_notices(failed)
         _save_record(args.rd, data, notices)
         return notices, 0
 
@@ -1986,7 +1931,7 @@ def _parser() -> argparse.ArgumentParser:
     sub.required = True
 
     p = sub.add_parser("gate", help="돌지 건너뛸지 정한다",
-                       description="kill switch 를 먼저 본다. final 이면 「intent-gate: run」, "
+                       description="final 이면 「intent-gate: run」, "
                                    "건너뛰면 공시 한 줄과 intent-return.md 를 쓴다. rc 0 · 잘못된 호출 2.")
     p.add_argument("--rd", required=True, help="qg 세션 폴더")
     p.add_argument("--path", required=True, choices=("final",) + tuple(GATE_SKIPS),
@@ -2011,9 +1956,7 @@ def _parser() -> argparse.ArgumentParser:
     p = sub.add_parser("prepare", help="근거 · 원문 · 로드맵 · 의도 · 의심 · 답을 조립한다",
                        description="intent-config.txt 가 먼저 있어야 한다. 리뷰의 넓이를 정하고 다른 "
                                    "팀 기록(%s) · scope 칸(%s)을 쓴다. 공시 줄들 뒤 "
-                                   "「intent-call: <none|first-only|split|single>」. rc 0 · 입력 못 읽음 4. "
-                                   "kill switch 가 켜져 있으면 아무것도 조립하지 않고 gate 와 같은 꺼짐 "
-                                   "줄 · 돌려주는 꼴만 낸다(rc 0)."
+                                   "「intent-call: <none|first-only|split|single>」. rc 0 · 입력 못 읽음 4."
                                    % (OTHER_TEAMS, SCOPE))
     p.add_argument("--rd", required=True, help="qg 세션 폴더(e2e-record.md · differential.yaml · "
                                                "intent.md 를 읽는다)")
@@ -2061,8 +2004,7 @@ def _parser() -> argparse.ArgumentParser:
                        description="입력 꼴: 「%s<번호>%s<정체>%s<의도다|잘못 골랐다|지금은 모르겠다|typed>」 "
                                    "머리 줄 뒤 다음 머리 전까지가 답 원문. 번호 · 정체가 묻는 질문과 맞지 "
                                    "않는 머리 · 같은 번호로 더 나온 머리와 그 아래 글은 어디에도 싣지 "
-                                   "않는다. 범위 모드면 아무것도 쓰지 않는다. kill switch 가 켜져 있으면 "
-                                   "답 파일을 쓰지 않고 커밋하지 않는다. 마지막 줄 「record: <n>」. rc 0."
+                                   "않는다. 범위 모드면 아무것도 쓰지 않는다. 마지막 줄 「record: <n>」. rc 0."
                                    % (HEADER, ID_SEP, PICK_SEP))
     p.add_argument("--rd", required=True, help="qg 세션 폴더")
     p.add_argument("--repo", required=True, help="리포 루트(답 파일을 쓰고 커밋할 곳)")
