@@ -29,6 +29,8 @@
 | 6 머지 뒤 | 에픽 PR 이 머지된 뒤 걸음 6 이 치우는 그 에픽의 줄(자원 가운데 종류가 worktree 인 줄 · 살아 있는 agent 줄 · 끝나지 않은 작업 줄)이 기계 상태에 남아 있는 동안 — 단계: 머지됨 · 끝남 | `<SD>/references/conducting-step-6.md` | — |
 | 7 끝 | 끝나지 않은 에픽이 없을 때 | `<SD>/references/conducting-step-7.md` | `<SD>/skills/epic-conductor/references/qg-review.md`(로드맵 끝) · `<SD>/references/conductor-state-branch.md`(상태 브랜치를 지울 때) |
 
+일부만 머지된 에픽은 지금 브랜치가 있으면 그 브랜치의 단계 행을 따르고, 다음 브랜치가 없을 때만 위 표의 「일부 머지」 행(걸음 3)을 따른다.
+
 ### 걸음에 달리지 않은 지시서
 
 - 승인 뒤 계획 담당자를 보낸 직후 · 담당자를 보낸 뒤처럼 끊기 좋은 자리에서 맥락이 무거울 때 — `<SD>/references/conducting-resume.md`
