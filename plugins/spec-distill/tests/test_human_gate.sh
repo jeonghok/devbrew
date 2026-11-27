@@ -20,10 +20,14 @@ assert_eq "$(git -C "$T0/c0a/repo" remote get-url origin)" "$T0/c0a/origin.git" 
 assert_eq "$(grep -rlF --exclude-dir=objects -- "$TEAM_TPL" "$T0/c0a/repo" "$T0/c0a/origin.git" "$T0/c0a/claude" 2>/dev/null)" "" "0: 사본의 레포 · 원격 · 세션 기록에 견본 경로가 남지 않는다"
 use_repo "$T0/c0a" && g checkout -q -b c0/only-a main && g push -q origin c0/only-a
 assert_eq "$(git -C "$T0/c0a/origin.git" for-each-ref --format='%(refname)' refs/heads/c0/only-a)" "refs/heads/c0/only-a" "0: 양성 대조 — 그 사본의 원격에는 올라갔다"
-assert_eq "$(git -C "$T0/c0b/origin.git" for-each-ref --format='%(refname)' refs/heads/c0/only-a)" "" "0: 한 사본의 push 가 다른 사본의 원격에 보이지 않는다"
-assert_eq "$(git -C "$TEAM_TPL/new/origin.git" for-each-ref --format='%(refname)' refs/heads/c0/only-a)" "" "0: 견본의 원격에도 보이지 않는다"
-repo_copy "$T0/c0a" new 2>/dev/null; assert_eq "$?" "1" "0: 레포가 이미 선 폴더에는 뜨지 않는다"
-repo_copy "$T0/c0c" "$T0/no-such-template" 2>/dev/null; assert_eq "$?" "1" "0: 없는 견본은 1"
+assert_eq "$(git -C "$T0/c0b/repo" ls-remote origin refs/heads/c0/only-a; echo "rc=$?")" "rc=0" "0: 한 사본의 push 가 다른 사본의 원격에 보이지 않는다"
+assert_eq "$(git -C "$TEAM_TPL/new/repo" ls-remote origin refs/heads/c0/only-a; echo "rc=$?")" "rc=0" "0: 견본의 원격에도 보이지 않는다"
+repo_copy "$T0/c0a" new 2>"$T0/c0-err.txt"; assert_eq "$?" "1" "0: 레포가 이미 선 폴더에는 뜨지 않는다"
+assert_contains "$(cat "$T0/c0-err.txt")" "새 폴더에 레포가 이미 있다" "0: 까닭을 표준 오류에 낸다(이미 선 폴더)"
+assert_eq "$(git -C "$T0/c0a/repo" symbolic-ref --short HEAD) $(git -C "$T0/c0a/repo" remote get-url origin)" "c0/only-a $T0/c0a/origin.git" "0: 이미 선 사본을 덮어쓰지 않는다(가지 · 원격 그대로)"
+repo_copy "$T0/c0c" "$T0/no-such-template" 2>"$T0/c0-err.txt"; assert_eq "$?" "1" "0: 없는 견본은 1"
+assert_contains "$(cat "$T0/c0-err.txt")" "견본에 팀 레포가 없다" "0: 까닭을 표준 오류에 낸다(없는 견본)"
+assert_eq "$([ -e "$T0/c0c" ] && echo 있음 || echo 없음) ${T}" "없음 $T0/c0a" "0: 없는 견본이면 새 폴더를 만들지 않고 T 를 옮기지 않는다"
 
 # ── 묶음 A — 설계 흐름(E1)과 설계 없는 흐름(E2) ──
 repo_copy "$T0/a" new && ok "A: 팀 레포를 세웠다(${TM})" || { no "A: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }

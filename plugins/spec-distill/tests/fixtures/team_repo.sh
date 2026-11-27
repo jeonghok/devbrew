@@ -239,11 +239,12 @@ PY
 TEAM_TPL="$T/.team-tpl"
 # repo_copy <새 폴더> <견본> — 견본 폴더의 팀 레포를 새 폴더로 복사하고 원격을 그 사본의 bare 레포로 돌린다. use_repo 도 한다.
 # 견본: team(team_repo 를 막 부른 레포) · new(new_repo 를 막 부른 레포) · 팀 레포가 선 폴더 경로. team · new 는 처음 부를 때 TEAM_TPL 아래에 한 번 짓는다.
-# rc 0 = 섰다 · 1 = 견본을 짓지 못함 · 없는 견본 · 새 폴더에 레포가 이미 있음(까닭은 표준 오류 한 줄 · T · W · CLAUDE_CONFIG_DIR 는 그대로)
+# rc 0 = 섰다 · 1 = 서지 못했다(까닭은 표준 오류 한 줄). 견본을 짓지 못함 · 없는 견본 · 새 폴더에 레포가 이미 있음이면 T · W · CLAUDE_CONFIG_DIR 를 옮기지 않는다
 repo_copy() {
   local dst="$1" src="$2" oT oW oC rc=0
   case "$2" in
     team|new)
+      if [ -z "${TEAM_TPL:-}" ] || [ -z "${TEAM_TPL%/*}" ]; then echo "repo_copy: 견본 자리 TEAM_TPL 이 비었거나 루트 바로 아래다: ${TEAM_TPL:-}" >&2; return 1; fi
       src="$TEAM_TPL/$2"
       if [ ! -e "$src.ok" ]; then
         oT="$T"; oW="$W"; oC="$CLAUDE_CONFIG_DIR"
@@ -263,6 +264,6 @@ repo_copy() {
   if [ -e "$dst/repo" ] || [ -e "$dst/origin.git" ]; then echo "repo_copy: 새 폴더에 레포가 이미 있다: ${dst}" >&2; return 1; fi
   mkdir -p "$dst" && cp -R "$src/." "$dst/" || { echo "repo_copy: 견본을 복사하지 못했다: ${src} → ${dst}" >&2; return 1; }
   use_repo "$dst"
-  g remote set-url origin "$dst/origin.git" || return 1
-  g fetch -q origin
+  g remote set-url origin "$dst/origin.git" || { echo "repo_copy: 원격을 사본의 bare 레포로 돌리지 못했다: ${dst}" >&2; return 1; }
+  g fetch -q origin || { echo "repo_copy: 사본의 원격에서 받지 못했다: ${dst}" >&2; return 1; }
 }
