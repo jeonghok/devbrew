@@ -359,7 +359,8 @@ python3 "$QG/scripts/synthesize_artifact_findings.py" --phase synth --findings "
 출력에서 `converged` / `degraded` / `degraded_reason` / `unadjudicated` / `kept_*` /
 `stagnation_keys` / `kept:` / `adversarial_slot` 을 읽는다. 응답에 칸 사본의 끝 값이 없으면 합성기가 그 판정을 쓰지 않고
 `degraded: true` · `degraded_reason: adversarial` · `adversarial_slot: 끝 값 없음`(응답에 `QG_INPUT_UNREADABLE:` 로
-시작하는 줄이 있으면 `읽지 못함`)을 낸다 — 끝 값이 맞으면 `adversarial_slot: ok` 다.
+시작하는 줄이 있으면 `읽지 못함`)을 낸다 — 끝 값이 맞으면 `adversarial_slot: ok` 다. 응답이 비었으면(반박자가 죽어 빈 줄을
+쓴 경우) `adversarial_slot: 응답 없음` 이다 — 판정 실패 길은 같고 사유 괄호는 붙지 않는다.
 - `unadjudicated > 0` → loud log(모드마다 다르다):
   - 「고치며 돌기」: `> [quality-gates] adversarial 미판정 <N>건 — 이번 라운드 편집 제외(fail-closed).`
   - 「지적만 받기」: `> [quality-gates] 반박자가 판정 못 한 지적 <N>건 — 고친 것도 버린 것도 아니다, 보고에 「판정 못 함」으로 따로 싣는다.`

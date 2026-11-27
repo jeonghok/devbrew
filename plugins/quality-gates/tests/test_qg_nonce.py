@@ -278,6 +278,15 @@ class QgNonceTest(unittest.TestCase):
         r = run("check", "--response", self.tmp / "none.txt", "--slot", s1)
         self.assertEqual((r.returncode, r.stdout), (1, "fail: 응답 없음\n"))
 
+    def test_check_empty_response_is_no_response(self):
+        # 펜스는 리뷰어가 죽으면 몸을 빈 줄로 둔다 — 끝 값 대조의 실패가 아니라 응답 없음이다.
+        s1, _ = self._slot("intent.txt")
+        for body in ("", "\n", "  \n\t\n"):
+            with self.subTest(body=body):
+                resp = self._response(body)
+                r = run("check", "--response", resp, "--slot", s1)
+                self.assertEqual((r.returncode, r.stdout), (1, "fail: 응답 없음\n"))
+
     def test_check_without_slot_is_usage(self):
         resp = self._response("ok\n")
         r = run("check", "--response", resp)
@@ -336,12 +345,32 @@ class QgNonceTest(unittest.TestCase):
         r = self._check_reviewer(rd, rv, "security")
         self.assertEqual((r.returncode, r.stdout), (0, "b1: ok\nsecurity: ok\n"))
 
-    def test_check_reviewer_ok_then_failed_retry_stays_ok(self):
+    def test_check_reviewer_ok_then_failed_retry_is_fail(self):
+        # 끝 값은 맞았지만 출력을 읽지 못해 다시 부른 시도가 끝 값 없이 「지적 0건」 을 냈다 — 마지막 시도가 정한다.
         rd, rv = self._dirs()
         self._try(rd, rv, "security", 1, 1)
         self._try(rd, rv, "security", 1, 2, answer=False)
         r = self._check_reviewer(rd, rv, "security")
+        self.assertEqual(
+            (r.returncode, r.stdout),
+            (1, "b1: fail: 끝 값 없음\nsecurity: fail: 끝 값 없음\n"))
+
+    def test_check_reviewer_last_try_decides_by_number(self):
+        # 시도 번호가 두 자리여도 글자 차례가 아니라 수 차례로 마지막을 고른다(t2 < t10).
+        rd, rv = self._dirs()
+        self._try(rd, rv, "security", 1, 2, answer=False)
+        self._try(rd, rv, "security", 1, 10)
+        r = self._check_reviewer(rd, rv, "security")
         self.assertEqual((r.returncode, r.stdout), (0, "b1: ok\nsecurity: ok\n"))
+
+    def test_check_reviewer_empty_response_is_no_response(self):
+        rd, rv = self._dirs()
+        self._try(rd, rv, "security", 1, 1, respond=False)
+        (rv / "resp-security-b1-t1.txt").write_text("\n", encoding="utf-8")
+        r = self._check_reviewer(rd, rv, "security")
+        self.assertEqual(
+            (r.returncode, r.stdout),
+            (1, "b1: fail: 응답 없음\nsecurity: fail: 응답 없음\n"))
 
     def test_check_reviewer_reason_is_last_try(self):
         rd, rv = self._dirs()
@@ -416,7 +445,9 @@ class QgNonceTest(unittest.TestCase):
         value = qg_nonce.attach(str(src), str(out))
         self.assertEqual(qg_nonce.slot_value(str(out)), value)
         self.assertIsNone(qg_nonce.check("qg-slot-end: " + value, [str(out)]))
-        self.assertEqual(qg_nonce.check("", []), "끝 값 없음")
+        self.assertEqual(qg_nonce.check("findings: []", []), "끝 값 없음")
+        self.assertEqual(qg_nonce.check("", [str(out)]), "응답 없음")
+        self.assertEqual(qg_nonce.NO_RESPONSE, "응답 없음")
         rd, rv = self._dirs()
         self._try(rd, rv, "security", 1, 1)
         self._try(rd, rv, "security", 2, 1, answer=False)

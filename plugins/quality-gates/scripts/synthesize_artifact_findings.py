@@ -25,7 +25,8 @@ Two phases (the same dedup_key/stagnation_key algorithm lives once here):
       full response is first checked against each slot copy's end value
       (`qg_nonce.check`). On failure the verdicts are NOT used, degraded_reason
       is `adversarial`, and the extra last key `adversarial_slot` is
-      `끝 값 없음` | `읽지 못함` (`ok` when the check passes; absent without --slot).
+      `끝 값 없음` | `읽지 못함` | `응답 없음` (empty or missing response — a dead
+      adversary; `ok` when the check passes; absent without --slot).
 
 Schema: see plan Global Constraints "데이터 계약".
 """
@@ -171,13 +172,13 @@ def _held_items(held):
 
 
 def _slot_check(response_path, slots):
-    """반박자 응답 전체를 칸 사본의 끝 값과 견준다 — None(ok) · `끝 값 없음` · `읽지 못함`.
-    응답 파일을 읽지 못하면 `끝 값 없음`(fail-closed)."""
+    """반박자 응답 전체를 칸 사본의 끝 값과 견준다 — None(ok) · `끝 값 없음` · `읽지 못함` · `응답 없음`.
+    응답 파일을 읽지 못하거나 응답이 비었으면(죽은 반박자) `응답 없음` — 판정은 쓰지 않는다(fail-closed)."""
     try:
         with open(response_path, encoding="utf-8", errors="replace") as fh:
             text = fh.read()
     except OSError:
-        return qg_nonce.NO_VALUE
+        return qg_nonce.NO_RESPONSE
     return qg_nonce.check(text, list(slots))
 
 

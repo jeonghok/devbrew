@@ -1764,6 +1764,24 @@ class TestSlots(unittest.TestCase):
         self.assertIn("intent-critic 처분 — 입력 실패(주): intent-critic — 첫째 호출 — "
                       "qg-intent-critic 펜스가 없음", p.stdout.splitlines())
 
+    def test_candidates_empty_response_keeps_dash_form(self):
+        # 응답 쓰기 펜스는 리뷰어가 죽으면 몸을 빈 줄로 둔다 — 끝 값 괄호가 아니라 지금의 죽은 리뷰어 사유다.
+        for body in ("\n", "  \n\t\n"):
+            with self.subTest(body=body):
+                self.tmp.cleanup()
+                self.tmp = tempfile.TemporaryDirectory()
+                self.rd = self.tmp.name
+                p = self._filter(body)
+                lines = p.stdout.splitlines()
+                self.assertIn("intent-critic 처분 — 입력 실패(주): intent-critic — 첫째 호출 — "
+                              "qg-intent-critic 펜스가 없음", lines)
+                self.assertNotIn(FIRST_DEAD % "끝 값 없음", lines)
+                self.assertEqual(self._render_last(), UNREAD_LINE)
+                _slot_copies(self.rd)
+                c = _cli("check-output", os.path.join(self.rd, "intent-critic-1.txt"), "--call", "1")
+                self.assertEqual((c.returncode, c.stdout.strip()),
+                                 (3, "unreadable: qg-intent-critic 펜스가 없음"))
+
     def test_check_output_call_flag(self):
         _slot_copies(self.rd)
         path = os.path.join(self.rd, "intent-critic-1.txt")

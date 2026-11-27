@@ -208,7 +208,10 @@ def slot_value(path) -> str | None:
 
 
 def check(response_text: str, slot_paths: list) -> str | None:
-    """칸마다 끝 값이 응답 글 안에 있으면 None. 아니면 `끝 값 없음` · `읽지 못함`."""
+    """칸마다 끝 값이 응답 글 안에 있으면 None. 아니면 `끝 값 없음` · `읽지 못함`.
+    빈 응답(공백만 — 리뷰어가 죽으면 응답 쓰기 펜스가 몸을 빈 줄로 둔다)은 `응답 없음`."""
+    if not response_text.strip():
+        return NO_RESPONSE
     values = [slot_value(p) for p in slot_paths]
     if values and all(v is not None and v in response_text for v in values):
         return None
@@ -268,7 +271,8 @@ def _tries(rd, reviewer: str) -> dict:
 
 
 def check_reviewer(rd, rv, reviewer) -> tuple:
-    """(리뷰어 사유 또는 None, [(묶음, 사유 또는 None), …]). 응답 사본은 읽기만 한다."""
+    """(리뷰어 사유 또는 None, [(묶음, 사유 또는 None), …]). 응답 사본은 읽기만 한다.
+    묶음마다 시도 번호가 가장 큰 시도의 대조가 그 묶음을 정한다 — 다시 부른 시도가 실패면 앞 시도가 ok 여도 실패다."""
     if not REVIEWER_RE.fullmatch(reviewer):
         raise BadReviewer(reviewer)
     tries = _tries(rd, reviewer)
@@ -278,9 +282,7 @@ def check_reviewer(rd, rv, reviewer) -> tuple:
     for (b, t) in sorted(tries):
         resp = os.path.join(rv, "resp-%s-b%d-t%d.txt" % (reviewer, b, t))
         text = _read_response(resp)
-        reason = NO_RESPONSE if text is None else check(text, tries[(b, t)])
-        prev = bundles.get(b, NO_VALUE)
-        bundles[b] = None if prev is None else reason
+        bundles[b] = NO_RESPONSE if text is None else check(text, tries[(b, t)])
     rows = sorted(bundles.items())
     failed = [reason for _, reason in rows if reason is not None]
     return (failed[0] if failed else None), rows

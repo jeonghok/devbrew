@@ -896,12 +896,13 @@ def _slot_paths(rd: str, k: int) -> List[str]:
 
 def _checked_output(path: str, rd: str, k: int) -> tuple:
     """(dict | None, 사유, 끝 값 대조의 실패인가). 대조가 먼저다 — 칸 사본이 하나라도 없거나 그 끝 값이
-    응답에 없으면 `끝 값 없음` · `읽지 못함`(qg_nonce.check)."""
+    응답에 없으면 `끝 값 없음` · `읽지 못함`(qg_nonce.check). 빈 응답(죽은 리뷰어)은 대조의 실패가 아니다 —
+    지금의 읽기 사유(펜스가 없음)로 간다."""
     text = _read(path)
     if text is None:
         return None, "파일을 읽지 못함", False
     reason = qg_nonce.check(text, _slot_paths(rd, k))
-    if reason is not None:
+    if reason is not None and reason != qg_nonce.NO_RESPONSE:
         return None, reason, True
     data, why = _parse_output(text)
     return data, why, False

@@ -197,7 +197,15 @@ assert_eq "$?" 2 "--adversarial-response 없는 --slot 은 사용법 오류"
 python3 "$SYN" --phase synth --findings "$D/merged.yaml" --adversarial "$D/verdicts.yaml" --adversarial-response "$D/resp.txt" --slot "" >/dev/null 2>&1
 assert_eq "$?" 2 "빈 --slot 은 사용법 오류"
 o="$(python3 "$SYN" --phase synth --findings "$D/merged.yaml" --adversarial "$D/verdicts.yaml" --adversarial-response "$D/none.txt" --slot "$D/slot1.txt" 2>/dev/null)"
-assert_contains "$o" "adversarial_slot: 끝 값 없음" "응답 파일이 없으면 끝 값 없음(fail-closed)"
+assert_contains "$o" "adversarial_slot: 응답 없음" "응답 파일이 없으면 응답 없음 — 끝 값 괄호가 아니다"
+assert_contains "$o" "degraded_reason: adversarial" "응답 파일이 없어도 판정 실패 길(fail-closed)"
+for body in "" "  	"; do
+  o="$(syn "$body" --slot "$D/slot1.txt")"
+  assert_contains "$o" "adversarial_slot: 응답 없음" "빈 응답(펜스의 빈 줄) — 응답 없음 [${#body}]"
+  assert_not_contains "$o" "adversarial_slot: 끝 값 없음" "빈 응답 — 끝 값 없음이 아니다 [${#body}]"
+  assert_contains "$o" "degraded_reason: adversarial" "빈 응답 — 판정 실패 길 [${#body}]"
+  assert_contains "$o" "unadjudicated: 2" "빈 응답 — 판정이 쓰이지 않는다 [${#body}]"
+done
 
 note "── QG_NAMES"
 assert_eq "$(grep -c -F -- "artifact-critique/(merged-t[0-9]+-r[0-9]+(\\.yaml|-slot\\.txt)|adversarial-t[0-9]+-r[0-9]+\\.txt)" "$PLUGIN_ROOT/scripts/review-diff.sh")" 1 "QG_NAMES: artifact-critique 몫 폴더 꼴"
