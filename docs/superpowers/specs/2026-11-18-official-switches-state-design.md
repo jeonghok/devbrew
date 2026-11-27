@@ -571,6 +571,14 @@ CLAUDE.md `### 런타임 상태 & 훅` 의 두 글머리를 아래로 바꾼다.
 - 머지 전 확인 · 2026-11-18 22:27 · AC17 은 구현 담당자가 미룸으로 보고했고 지휘자의 스위트 대조가 닫았다 — 고친 뒤의 끝 08752259 대 기본 브랜치 09f35df3, 전체 스위트: 새 실패 없음(이 브랜치에만 있는 실패 0개, 기본 브랜치에만 있는 실패 1개, 양쪽 다 있는 실패 10개). 판정과 구현 대조 절을 이 커밋에 싣는다. 이 커밋 뒤에는 대조를 다시 돌지 않는다(설계문서만 바뀐다)
 - 통합 리뷰 · 2026-11-18 22:47 · 통합 리뷰가 머지를 막을 결함 없이 지적 넷을 냈다(이 PR 이 고침 셋 — brief 리뷰 끄기 변수의 대신할 길 칸이 F4 의 결정과 어긋남, 규칙 인용 락이 무시되는 경로를 통째로 건너뜀, 진입 사전 검사 테스트의 지키는 파일 선언에 끄기 변수 표가 없음. 뒤 에픽이 고침 하나 — 진입 skill 수 아홉과 표의 skill 이름은 F5). 지휘 세션이 셋 다 파일을 읽어 확인했다. 칸의 글자와 재지 않은 것의 단서 둘은 승인된 설계의 표 글자를 바꾸는 일이라 사용자에게 물었고(결정 기록의 두 줄, 원문은 relay-1), 락 둘은 원래 세기로 되돌리는 수리라 묻지 않았다. 구현 담당자를 이어 불러 한 번에 고치게 했다. 좁은 재리뷰는 두 번까지이고 남는 지적은 둘째 판으로 넘긴다고 PR 본문에 먼저 적었다
 - 리뷰 뒤 반영 · 2026-11-18 23:02 · 구현 담당자가 통합 리뷰의 다섯 자리를 고쳤다(커밋 b3691702 — brief 리뷰 끄기 변수의 대신할 길 칸과 재지 않은 것의 단서 둘, 693af544 — 규칙 인용 락이 건너뛰는 인용을 이름 목록 하나(.claude/worktrees)로 못 박고 집합이 정확히 같을 때만 통과, 00b122bb — 진입 사전 검사 테스트의 지키는 파일 선언에 끄기 변수 표 넷과 quality-gates 의 사전 검사 링크). 판정 표의 Task 5 줄(규칙 인용 락이 git 이 무시하는 경로를 건너뛴다)은 이 고침으로 낡았다 — 이제 git 의 무시 판정에 기대지 않는다. 담당자의 판정 넷: 이름 목록은 경로 단위로 묶는다(문서마다 따로가 아니다), 무시 판정은 남기지 않는다, quality-gates 링크는 선언만이 아니라 테스트가 실제로 읽게 한다(단언 셋 늘어 133), 판은 다시 올리지 않는다. 락과 보이는 글자를 바꾼 수정이라 같은 리뷰어의 좁은 재리뷰를 받고 전체 스위트 대조를 다시 돈다
+- 2026-11-26 19:04 계획 검토(둘째 판) — 계획 담당자가 돌려보낸 설계에 없이 정한 것 열여섯(J1–J16)과 계획이 정한 글자 일곱(G1–G7)을 지휘자가 읽고 모두 설계 안의 일로 갈랐다(가른 이유는 지휘 자원의 relay-2). 사용자에게 물은 것 하나 — 지휘자가 만든 질문 「은퇴한 끄기 변수를 재던 테스트 40행을 계획의 표대로 지우거나 줄여도 될까요?」 에 「표대로 지운다 (권장)」. 판정 사유 「설계가 동작을 없앰」 도 함께 받아들였다. 실행 방식은 계획이 권한 Subagent-driven
+- 2026-11-26 19:07 지휘자가 만든 질문 「은퇴한 끄기 변수가 켜져 있을 때 띄우는 계속할까 질문에 추천을 둘까요?」 에 사용자가 「추천을 달지 않는다 (권장)」 로 답했다. 계획이 정한 글자 G2 의 두 선택지에는 추천 표시가 없다
+- 2026-11-26 19:27 구현 담당자가 과제 3 에서 돌려보낸 물음 — 추천 없는 질문 자리에 레포 검사가 요구하는 이유 구절과, 끄기 변수가 모두 은퇴해 틀리게 된 project-init README 끄는 길 2번 문장. 둘 다 지휘자가 글자를 정해 돌려보냈다(사용자에게 묻지 않음 — 이유 구절은 사용자 창에 나가지 않고 뜻은 사용자 답이 정했다, README 문장은 설계가 정한 사실을 적는 것이다). 글자는 PR 본문에 밝힌다
+- 2026-11-26 19:37 지휘자가 만든 질문 「승인한 표에서 빠진 확인 한 줄을 지워도 될까요, 같은 꼴이 또 나오면 어떻게 할까요?」 에 사용자가 「지우고, 같은 꼴은 PR 에서 모아 본다 (권장)」 로 답했다. 설계가 없앤 동작만 재던 확인은 표 밖이어도 지우고 PR 본문의 표에 모아 머지 승인 때 본다. 남는 일곱 변수의 확인과 다른 동작을 함께 재는 확인은 멈춰 묻는다
+- 2026-11-26 19:41 하위 구현자의 권한 장치가 표 밖 확인 한 줄 지우기를 막았다(과제 구현자의 거부와 자동 분류기의 거절). 지휘자가 만든 질문 「막힌 지우기를 누가 할까요?」 에 사용자가 「지휘 세션이 지운다 (권장)」 로 답해 지휘 세션이 그 한 줄을 지웠다. 같은 꼴이 또 막히면 지휘 세션이 범위(설계가 없앤 동작만 재던 확인)를 확인하고 지운다
+- 2026-11-26 20:00 지휘자가 만든 질문 「은퇴한 것과 남는 것을 함께 재는 확인을 남는 쪽은 그대로 재고 은퇴한 부분만 걷게 줄이는 일을 어떻게 할까요?」 에 사용자가 「줄이고 PR 에서 모아 본다 (권장)」 로 답했다. 줄인 줄은 PR 본문의 표에 앞뒤 글자와 함께 싣는다. 로드맵 템플릿의 지휘자 안내 줄은 은퇴한 두 구절만 걷고 손 절차 안내는 남긴다(지휘자가 정한 글자)
+- 2026-11-27 스위트 대조 첫 판이 새 실패 하나를 냈다 — test_roadmap_write.sh 의 로드맵 나무 지문 단언. 계획 2 가 로드맵 템플릿에서 통째 끄기 안내 한 문장을 뺐는데 계획의 테스트 목록에 이 단언이 없어 기준 값이 옛 값으로 남았다. 지휘자가 기준과 브랜치에서 만든 나무를 견줘 그 한 문장만 다른 것을 확인하고 기준 값을 고쳤다(081e5e61, 단언의 세기는 그대로). 사용자에게 묻지 않고 정했고 머지 승인 때 보인다.
+- 2026-11-27 23:23 스위트 대조 둘째 판(끝 e9ec5c2e, 기본 브랜치 12a74390 기준, 그사이 머지된 PR 344 를 합친 끝)이 새 실패 없음으로 끝났다(합친 사본 종료 코드 0, 기준 사본은 돌리지 않음). 대조가 도는 동안 다른 로드맵의 문서 PR 342(문서 셋)가 기본 브랜치에 머지돼 그것도 합쳤다(c9d7b734). 판정과 구현 대조 절을 싣고 PR 을 연 뒤 그 끝으로 전체 대조를 한 번 더 돈다. 머지 직전 기본 브랜치가 대조 때와 다르면 다시 돈다는 절차의 기본대로다
 
 ## 판정
 
@@ -599,7 +607,44 @@ CLAUDE.md `### 런타임 상태 & 훅` 의 두 글머리를 아래로 바꾼다.
 - 11. Ruling: `check_bundle_coverage --impl` 이 새 미룸 행의 `\|` 때문에 rc 3(검사 불가)을 냈다. PR 전 필수 검사라 그 한 행만 고쳤다(97ebb3ae — 세로줄을 빼고 봉인 · 지문 설명을 바로잡음).
 - 12. Ruling: `check_bundle_coverage` 의 남은 경고 17 은 고치지 않고 원문으로 싣는다(아래).
 
+### docs/superpowers/plans/2026-11-18-official-switches-state-plan2.md
+
+- | T3↔T4/T5/T6 | spec-review · roadmap-status · epic-conductor · roadmap-draft SKILL | T3 removes disabled row + 「이 표가 보는 kill switch」 (incl. trailing branches spec-review/roadmap-status); T4/T5/T6 handle remaining prose | Ruling: T3 owns sentinel row + that paragraph; later tasks only touch what remains |
+- | T5↔T12 | test_ledger_sweep.py test_old_gc (J15) | both list it | Ruling: J15 done in T12 (module deletion is what forces it); T5 leaves test_old_gc untouched unless it breaks — cost if wrong: T5 failing test, caught at T5 boundary |
+- | T6↔T7 | finishing.md (T6 l.239 · T7 l.495-496) · test_end_gates.sh | T6 runs, T7 edits l.207 | Ruling: T7 owns test_end_gates.sh 207 edit (AC23) |
+- | T6↔T10 | test_web_kill_switch.sh 107-120 · 253-286 | — | Ruling: T6 trims qg-docreview branch; T10 audit-runner branch |
+- | T6/T8/T9 | test_cost_disclosure.sh 119 · 121 · 123-125 | — | Ruling: each task removes the literal it retires (119 T6, 121 whichever skill it cites, 123-125 T9) |
+- | T8↔T9 | test_entry_safety_e1_e6.sh 138-146 (setup/critique arg rejection) · test_qg_critique_routing.sh | — | Ruling: T8 owns setup-qg global-disable rows incl. entry_safety; T9 owns artifact_commit + critique routing |
+- Ruling: T2 Minor (test derives var names by tr instead of 4 literals) accepted — B2 pins names literally, derivation error goes RED — cost if wrong: cosmetic brief drift
+- Ruling: README 「끄는 길」 step-2 confirm sentence (「꺼져 있다」 줄) is moot for project-init (no 남음 rows) — needs text outside G1–G7 → defer to design 미룸 table (#337) at Task 16; not fixed now — cost if wrong: one stale README sentence in project-init
+- Ruling: 설명 수 cell for the nine rows left blank (lock allows it only for 꼬리/지시/출처꼬리; 얻음/내줌 still in G2 text) — fixture-only, not user-visible — cost if wrong: one tsv cell
+- Task 3: minor (deferred): G1 stop branch in spec-review has no return sentence (old disabled row appended it) — plan-mandated G1; Ruling: not changing G1 text (outside G1–G8) → design ## 미룸 row (#337) at T16 + final review triage — cost if wrong: headless spec-review stop may let brainstorming proceed without review request
+- Ruling: test_cost_disclosure.sh l.119 (approved 줄임 row) handled in T3 fix round now (T3 removed the literal) — overrides preflight assignment to T6 — cost if wrong: none
+- Ruling: T4 rows (test_review_entry.py 52-53/101/108 expectation shape · 131-141 · 152-169; entry_fence stub matrix rewrite to {"advisories"} · DISABLED rows delete) = forced by J5 / design-3 removal → implementer handles under scope rule; deletions logged to removed-tests + PR material table — cost if wrong: extra rows for user at merge
+- Ruling: T8 (나) rows (test_intent_handed back half · test_intent_critic.py:3321 sentence drops 「kill switch · 」 · test_intent_critic_wiring 97-100 filter to 건너뜀) = shrink per scope rule; (가) rows delete
+- Ruling: T9 — keep artifact-critique `## kill switch` section (carries remaining DISABLE_CODEX line; AC20 binds over brief 「절을 지운다」); delete only retired lines
+- Ruling: T13 design-4 old-location removals — asked conductor to confirm scope (SendMessage main, non-blocking); stop at T13 if no answer
+- Ruling: Imp1 — keep plan's 3-name assertNotIn AND restore derivation (spec 318/364: output must not recommend any retired name) — plan-mandated narrowing overridden by spec — cost if wrong: one extra assertion
+- Ruling: delete that parenthesis (AC18/J2 bind over my dispatch phrase 「남는 변수 항목은 글자 그대로」) — cost if wrong: none (no new words)
+- Ruling: fold 3 minors into fix round 1 (state-file-format:97 prepare(건너뜀) false · revert removed clean-env lines (plan: B 갈래 not deleted this release) · stale comments) — deletion/revert only, accuracy — cost if wrong: small extra diff
+- Ruling: Imp2 — delete README l.20 whole (siblings spec-distill/qg already dropped the same sentence group in T4/T8; no new words) — cost if wrong: plugin-audit README loses the 「script/python3 missing → platform cuts call」 note (siblings lost it too) → final review / PR note
+- Ruling: fold minors (removed-tests:65 wording · test_web_kill_switch header comment) into fix round 1; Minor FIXED_P22_2 one-char drift (step 3→2) accepted as renumber consequence → PR note
+- Ruling: collect names = J12 form AND prefix DEVBREW_<TOKEN>_ (TOKEN from plugin.json name) from skills+README, plus non-retired switches.md row names (incl. aliases); minus 은퇴 rows — design 5 counts 「플러그인의 끄기 변수」, CLAUDE.md naming rule gives the prefix; (a) table-only rejected (misses skill-only switches = the target), (c) rejected (user-visible text) — cost if wrong: a plugin whose switch uses a foreign prefix not in its table escapes the check
+- Ruling: README audit criterion line uses design-5 sentence verbatim + anchor CLAUDE.md §런타임 상태 & 훅, following the list's existing pattern — cost if wrong: one README line wording
+- Ruling: Imp3 fix (G7 text says 「감사 리포트에 실리는」 — spec-side glyph binds over plan Files omission) — cost if wrong: one extra file touched (audit-workflow.js + test)
+- Ruling: Imp4 → CLAUDE.md wording 「끄기 변수마다 읽는 코드」 (existing repo text, no new words) — cost if wrong: none
+- Ruling: sd README:78 → replace with plan-given philosophy sentence 「진입 skill 의 사전 검사가 켜진 끄기 변수를 모델 판단 밖에서 보인다」 and drop the false rest of that bullet; qg README:519 quote → CLAUDE.md current text 「끄기 변수는 보안 컨트롤이다」 — existing repo text, no new words — cost if wrong: wording of one Principles bullet
+- Ruling: fix wave folds Minors 1-6 (existing text or deletion) + lock: section F corpus adds README prose outside the switches table markers (Law 3 — the leak path); Minor 7 (project-init Installed Hook needs new words) → 미룸 #337; 미룸 rows also for T11 prefix narrowing and T11 filter leaks — cost if wrong: wider lock may RED on legit README mentions (fixer stops and reports)
+- Ruling: accept ② narrowing — J1 defined the equality over code corpus; README was outside it before item 9 — cost if wrong: bare SKIP_HOOKS in README prose unguarded by ② (retired-name check ① still covers README)
+- Ruling: two branch-caused failures found by fixer (test_plain_language_block.sh — T11 fixtures; test_skill_orchestration_behavior.sh — qg SKILL title v17 vs 18.0.0 from T16) folded into the same fix wave by resuming the same fixer (not a second wave) — AC27 needs 0 branch-only failures — cost if wrong: none
+- Ruling: the wave's own regression is fixed inside the same wave by the same fixer (one-line alltext to code corpus + subn==1) with mutation proof; no further review round — residual risk named in final report — cost if wrong: an unreviewed one-line test change (mutation evidence stands in)
+
 ## 구현 대조 — docs/superpowers/plans/2026-11-18-official-switches-state-plan1.md
 
 - 구현 대조: 경고 6개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 0개 · 받는 곳 없는 미룸 6개 · 받는 곳 검사 불가 0개 · 빠짐 0개 (--acs 로 고른 것 · 뺀 AC 10개)
 - 보고: 이 계획 몫 AC 17개 중 구현됨 17 · 미룸 0 · 빠짐 0
+
+## 구현 대조 — docs/superpowers/plans/2026-11-18-official-switches-state-plan2.md
+
+- 구현 대조: 구현 대조: 경고 6개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 0개 · 받는 곳 없는 미룸 6개 · 받는 곳 검사 불가 0개 · 빠짐 0개 (--acs 로 고른 것 · 뺀 AC 17개)
+- 보고: 이 계획 몫 AC 10개 중 구현됨 10 · 미룸 0 · 빠짐 0
