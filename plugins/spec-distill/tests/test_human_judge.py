@@ -452,6 +452,11 @@ class Gates(SeededRepo):
         hand = "- spec 승인 · 2026-11-18 · 「승인 — 계획 담당자에게」"
         self.assertIn("근거 없음", self.miss([hand], "plan", 1)[0])
         self.assertIn("record --human", self.miss([hand], "plan", 1)[0])
+        hand_plan = "- 계획 검토 · 2026-11-18 · 「계획대로 구현한다」"        # 근거 칸 없는 계획 검토 줄도 「줄이 없다」 로 감추지 않는다
+        got = self.miss([spec, hand_plan], "implement", 1)
+        self.assertEqual(len(got), 1, got)
+        self.assertIn("`계획 검토` 줄이 지나지 못했다", got[0])
+        self.assertIn("근거 없음", got[0])
 
     def test_skip_line_opens_only_its_gate(self):
         spec, plan1 = self.approve(self.tip), self.approve(self.tip, H.KIND_PLAN, 1)
