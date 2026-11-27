@@ -1,7 +1,7 @@
 # STATUS — qg 에픽 · 로드맵 리뷰와 쓴소리 리뷰어 — 로드맵
 
 - 로드맵: docs/superpowers/roadmaps/2026-11-14-qg-epic-roadmap-intent-review-brief/roadmap.md
-- 계산: 2026-11-27 21:15 +0900 · 기준 커밋 12a74390 · 지휘 세션 08e8e848
+- 계산: 2026-11-27 21:18 +0900 · 기준 커밋 12a74390 · 지휘 세션 08e8e848
 
 ## 에픽
 - R7 qg 경계 굳히기 — 심은 글 · 공유 스위트 잠금 · 구현 끝 · 구현 대조 절 있음: docs/superpowers/plans/2026-11-26-qg-planted-text-suite-lock.md
@@ -12,7 +12,7 @@
 - R7 · #346 · feature/qg-planted-text-suite-lock
 
 ## 기다리는 질문
-- R7 · 옮긴 질문 · 2026-11-27 21:15 +0900
+- 없음
 
 ## 작업
 - 에픽 · R8 qg 답 기록 뒤처리 · 담당자 1 · -
