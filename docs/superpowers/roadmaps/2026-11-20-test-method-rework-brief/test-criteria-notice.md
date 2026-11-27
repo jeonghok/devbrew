@@ -9,6 +9,7 @@
 | 지휘 로드맵(`2026-11-14-conductor-context-economy-brief`) R5(`feature/conductor-migration`) | F7 의 둘째 계획과 같다 — `CLAUDE.md` 에 항목 하나가 늘고 `docs/plugin-authoring.md` 의 한 줄이 바뀌었다. 같은 문서를 고칠 때 합치기에서 본다 |
 | 이 로드맵 E3 | `docs/testing.md` 「글을 무는 확인」 절의 「행동을 정하는 문장」 규칙 — 문구 확인을 걷은 자리를 지킬 장치는 이 규칙이 남긴 확인의 바깥을 맡는다 |
 | 이 로드맵 E4 | 글자 확인 기준 — 「글을 무는 확인」 절의 「행동을 정하는 문장」 규칙은 E2 설계(`docs/superpowers/specs/2026-11-24-test-criteria-rules-design.md`)가 정했다(E4 묶음이 열린 채 든 물음 OQ18 가운데 규칙은 닫혔고, 테스트마다 대어 보는 일이 E4 몫이다) · 가르는 차례(「값 대비 비용」 절) · 승인과 기록(「지우기 · 합치기 · 줄이기의 승인과 기록」 절 · `docs/removed-tests.md`) · 보안 갈래는 확인 단위로 가른다(「보안 갈래」 절) · 지운 것 기록의 자리와 꼴은 이 설계가 정했다(`docs/removed-tests.md` — E4 묶음이 열린 채 든 물음 OQ20 은 닫혔다) · 앞단 F5 계획 3 의 문구 테스트는 아래 「문구 테스트의 예외」 대로다 |
+| 테스트를 쓰는 모든 세션(이 로드맵 E3 머지 뒤 · #338 · 2026-11-26) | `docs/testing.md` 에 새 절 「글자 대조 말고 쓰는 확인」 과 목차가 생겼다 — 있던 절 이름과 앵커는 그대로다 · `docs/plugin-authoring.md` 에 구절 하나가 늘었다 · spec-distill 의 skill 글을 고칠 때는 `plugins/spec-distill/tests/evals` 에서 그 경로를 찾아본다(그 글을 지키는 평가 케이스가 있을 수 있다) |
 
 ## 문구 테스트의 예외
 

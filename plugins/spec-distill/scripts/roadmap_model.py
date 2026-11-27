@@ -585,6 +585,17 @@ def brief_risk_numbers(s5: str):
     return sorted(rows, key=lambda row: int(row[0][1:])), False
 
 
+def section5_lines(s5: str) -> dict:
+    """§5 의 RC · ST 번호 → 그 번호가 나오는 줄들(brief 에 나온 차례, 줄마다 한 번). 번호를 읽는 식은 `RC_RE` ·
+    `ST_RE` 하나이고, 세는 일(`brief_universe`)과 줄을 찾는 일(`index_brief`)이 이 함수를 함께 쓴다 — 줄 꼴(괄호 ·
+    줄 끝 연결 · 본문 인용)을 가리지 않는다. 줄은 `brief_body.split_lines` 로 가른다."""
+    out = {}
+    for line in brief_body.split_lines(s5):
+        for n in dict.fromkeys(RC_RE.findall(line) + ST_RE.findall(line)):
+            out.setdefault(n, []).append(line)
+    return out
+
+
 def brief_universe(brief: str, audit: str):
     """(non_s, s_ids, k_expected). 셀 수 없으면 FormatError."""
     fm_lines = brief.split("\n---", 1)[0].splitlines()
@@ -597,7 +608,7 @@ def brief_universe(brief: str, audit: str):
         raise FormatError("brief §0 에 결정 줄 문법 밖 줄이 있어 번호를 셀 수 없다(%s)"
                           % ", ".join("%d번째 줄 %s" % t for t in oq_rejects[:5]))
     non_s |= {oq for oq, _line in oq_entries if oq}
-    non_s |= set(RC_RE.findall(s5)) | set(ST_RE.findall(s5)) | {k for head, body in section4_items(s4) for k in KEY_RE.findall("\n".join([head] + body))} | {rc for head, _body in section4_items(s4) for rc in RC_RE.findall(head)}
+    non_s |= set(section5_lines(s5)) | {k for head, body in section4_items(s4) for k in KEY_RE.findall("\n".join([head] + body))} | {rc for head, _body in section4_items(s4) for rc in RC_RE.findall(head)}
     k_expected = brief_risk_numbers(s5)[0]
     non_s |= {k for k, _ in k_expected}
     s_ids = set()
