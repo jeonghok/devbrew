@@ -52,6 +52,9 @@ OBS_INDENT = "  "
 HEADING = "## 질문"
 SEP = " · "
 TIME_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}|-")
+# 「전에 한 답」 둘째 칸만 더 받는 꼴 — qg 가 자기 답 폴더의 답에 쓰는 시각.
+# 기록의 `- 답한 때:` 줄은 TIME_RE 만 받는다.
+PRIOR_QG_TIME_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
 NAME_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}-(?P<target>[A-Z][0-9]+[a-z]?|roadmap)-"
                      r"(?:spec|(?:premerge|recheck)-(?:pr[0-9]+|" + TEAM_TARGET + r")|end|asked)"
                      r"(?:-[0-9]+)?\.md")
@@ -155,8 +158,9 @@ def _parse_sections(body):
 
 def _prior_key(value):
     """`<답> · <답한 때> · <열쇠 또는 정체> · <까닭>` 의 셋째 칸. 칸마다 제 꼴로 읽는다 — 첫 칸은 ANSWERS
-    가운데 하나, 둘째 칸은 TIME_RE, 끝 칸(오른쪽에서 뗀 것)은 까닭이고 그 사이가 열쇠 또는 정체다
-    (정체에는 ` · ` 가 들어도 된다). 꼴이 아니면 열쇠를 짐작하지 않고 Unreadable.
+    가운데 하나, 둘째 칸은 TIME_RE 이거나 PRIOR_QG_TIME_RE(qg 답 폴더의 시각), 끝 칸(오른쪽에서 뗀 것)은
+    까닭이고 그 사이가 열쇠 또는 정체다(정체에는 ` · ` 가 들어도 된다). 꼴이 아니면 열쇠를 짐작하지 않고
+    Unreadable.
     「없음」 · `-` · 빈 값은 앞 답이 없다."""
     if value in NO_PRIOR:
         return None
@@ -167,7 +171,7 @@ def _prior_key(value):
     else:
         raise Unreadable("전에 한 답의 칸이 꼴 밖이다")
     at, sep, rest = rest.partition(SEP)
-    if not sep or not TIME_RE.fullmatch(at):
+    if not sep or not (TIME_RE.fullmatch(at) or PRIOR_QG_TIME_RE.fullmatch(at)):
         raise Unreadable("전에 한 답의 칸이 꼴 밖이다")
     key, sep, why = rest.rpartition(SEP)
     if not sep or not key or not why:

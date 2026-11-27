@@ -597,7 +597,6 @@ class TestQgAnsweredEdges(unittest.TestCase):
         later = rname("R4", "recheck-pr12")
         variants = {
             "prior-time-sep": section(1, prior=prior_to(NAME + "#1", at="2026-11-22 · 21:25")),
-            "prior-time-iso": section(1, prior=prior_to(NAME + "#1", at="2026-11-22T21:25:00Z")),
             "prior-time-empty": section(1, prior=prior_to(NAME + "#1", at="")),
             "prior-first-cell": section(1, prior=prior_to(NAME + "#1", ans="지금은 모르겠다")),
             "prior-no-key": section(1, prior="의도다 · 2026-11-22 21:25 ·  · 근거가 달라짐"),
@@ -623,6 +622,35 @@ class TestQgAnsweredEdges(unittest.TestCase):
             self.assertEqual(p.returncode, 0, p.stderr)
             self.assertEqual(self.keys(e), [NAME + "#2", later + "#1"], at)
             self.assertEqual(e.notice_text(), "", at)
+
+    def test_prior_time_iso_reads(self):
+        # 「전에 한 답」 둘째 칸이 qg 답 폴더의 시각 꼴(`YYYY-MM-DDTHH:MM:SSZ`)이면 그 기록은 읽혀 앞 답이
+        # 넘어간다. 닮았지만 틀린 꼴(끝 `Z` 없음 · 초 없음 · 앞머리만 맞음)은 읽지 못한 기록이고, 기록 자신의
+        # `- 답한 때:` 가 그 꼴이어도 읽지 못한 기록이다(AC30 · D79)
+        later = rname("R4", "recheck-pr12")
+        e = Env(self)
+        commit_files(e.repo, {rpath(NAME): good_record(2), rpath(later): record(3, [
+            section(1, prior=prior_to(NAME + "#1", at="2026-11-22T21:25:00Z"))])})
+        p = e.run(["main"])
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(self.keys(e), [NAME + "#2", later + "#1"])
+        self.assertEqual(e.notice_text(), "")
+        variants = {
+            "prior-iso-no-z": section(1, prior=prior_to(NAME + "#1", at="2026-11-22T21:25:00")),
+            "prior-iso-no-seconds": section(1, prior=prior_to(NAME + "#1", at="2026-11-22T21:25Z")),
+            "prior-iso-tail": section(1, prior=prior_to(NAME + "#1",
+                                                        at="2026-11-22T21:25:00Z 무렵")),
+            "at-iso": section(1, at="2026-11-22T21:25:00Z"),
+        }
+        for label, sec in variants.items():
+            e = Env(self)
+            commit_files(e.repo, {rpath(NAME): good_record(2), rpath(NAME2): good_record(),
+                                  rpath(later): record(3, [sec])})
+            p = e.run(["main"])
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(self.keys(e), [NAME2 + "#1"], label)
+            self.assertEqual(e.notice_text().splitlines(),
+                             ["읽지 못한 기록 1개: main:%s" % rpath(later)], label)
 
     def test_prior_identity_with_separator_reads(self):
         # 셋째 칸(정체)에 ` · ` 가 든 「전에 한 답」 은 읽힌다 — 같은 기록의 열쇠 칸이 가리킨 앞 답을 뺀다(AC30)
