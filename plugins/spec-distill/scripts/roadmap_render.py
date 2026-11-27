@@ -19,7 +19,7 @@ import team_files  # noqa: E402
 import team_layout  # noqa: E402
 from brief_body import section4_items  # noqa: E402
 from roadmap_model import (  # noqa: E402
-    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, RC_RE, FormatError, brief_risk_numbers, brief_section, brief_universe, bundle_ids,
+    BLOCK_ID_RE, EXTRA_FIELDS, KEY_RE, RC_RE, FormatError, brief_risk_numbers, brief_section, brief_universe, bundle_ids, section5_lines,
     field_text, id_sort_key, is_quote, is_team, parse_ids, parse_roadmap, section_body)
 
 TABLE_HEADING = "## 분해안"
@@ -30,8 +30,6 @@ SCOPE_RE = team_files.SCOPE_RE
 KIND_BUNDLE, KIND_BRANCH, KIND_DECISION = "bundle", "branch", "decision"
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "roadmap-template.md"
 C_LINE_RE = re.compile(r"- \S+ (?:confirmed|provisional) \*\*([CD]\d+)\*\* — ")
-RC_LINE_RE = re.compile(r"(RC\d+) \(")
-ST_LINE_RE = re.compile(r" — (ST\d+) — ")
 PLACEHOLDER_RE = re.compile(r"\{\{([A-Z_]+)\}\}")
 
 
@@ -264,11 +262,12 @@ def extract_rows(roadmap_text: str, read_bundle) -> list:
 
 @dataclass
 class BriefIndex:
-    lines: dict      # 번호 → brief 줄(§2 C · D · §0 OQ · §4 «key» · §5 RC · ST)
+    lines: dict      # 번호 → brief 줄(§2 C · D · §0 OQ · §4 «key» · RC) — RC · ST 의 §5 줄들은 `s5`
     k_lines: dict    # K<n> → "- K<n> — <brief §5 위험 줄 원문>"
     goal: str        # brief §1 본문
     s6: str          # brief §6 본문 + 빈 줄 + audit §6 중 brief §6 에 없는 S<n> 항목
     k_by_order: bool = False   # brief §5 위험 줄에 K 번호가 없어 줄 순서로 매겼다
+    s5: dict = field(default_factory=dict)   # RC · ST 번호 → 그 번호가 나오는 brief §5 줄들(`roadmap_model.section5_lines`)
 
 
 def _body(text: str, heading: str) -> str:
@@ -330,13 +329,6 @@ def index_brief(brief: str, audit: str) -> BriefIndex:
         if oq:
             lines[oq] = line
     lines.update(_section4_index(brief))
-    for line in brief_body.split_lines(_body(brief, "## 5.")):
-        m = RC_LINE_RE.search(line)
-        if m:
-            lines[m.group(1)] = line
-        m = ST_LINE_RE.search(line)
-        if m:
-            lines[m.group(1)] = line
     found = brief_body.audit_subset_problems(audit)   # 방어층 — brief_universe 가 먼저 같은 검사를 하지만 이 함수가 따로 불려도 막는다
     if found:
         raise FormatError("audit 에 읽는 쪽마다 다르게 읽히는 글이 있어 합칠 수 없다(%s)" % found[0][1])
@@ -344,7 +336,8 @@ def index_brief(brief: str, audit: str) -> BriefIndex:
     if b6 is None or a6 is None:
         raise FormatError("brief 또는 audit 의 §6 을 하나로 읽을 수 없다")
     return BriefIndex(lines, {k: "- %s — %s" % (k, text) for k, text in k_expected},
-                      _body(brief, "## 1."), _merge_s6(b6, a6), k_by_order=brief_risk_numbers(_body(brief, "## 5."))[1])
+                      _body(brief, "## 1."), _merge_s6(b6, a6), k_by_order=brief_risk_numbers(_body(brief, "## 5."))[1],
+                      s5=section5_lines(_body(brief, "## 5.")))
 
 
 # ── 블록 · 묶음 · 로드맵 ─────────────────────────────────────────────────────
@@ -406,7 +399,7 @@ def bundle_parts(r: Row, idx: BriefIndex) -> tuple:
     (`team_files.SOURCE_PARTS` — 제약 · 열린 질문 · 웹 근거 · 기각 · 위험)이다. brief 에서 줄을 찾지 못한 번호가 있으면 TableError,
     칸 이름 수가 고른 줄 묶음 수와 다르면 ValueError."""
     ids = sorted(set(r.ids), key=id_sort_key)
-    missing = [t for t in ids if not _is_s(t) and t not in idx.lines and t not in idx.k_lines]
+    missing = [t for t in ids if not _is_s(t) and t not in idx.lines and t not in idx.k_lines and t not in idx.s5]
     if missing:
         raise TableError("%s: brief 에서 줄을 찾지 못한 번호 — %s" % (r.id, " · ".join(missing)))
 
@@ -419,9 +412,10 @@ def bundle_parts(r: Row, idx: BriefIndex) -> tuple:
             keys.append(idx.lines[t])
     c_d = pick(lambda t: t[:1] in ("C", "D") and t[1:].isdigit())
     oq = pick(lambda t: t.startswith("OQ"))
-    rest = (pick(lambda t: t.startswith("RC")) + pick(lambda t: t.startswith("ST"))
-            + [idx.k_lines[t] for t in ids if t.startswith("K")])
-    groups = (c_d, oq, keys, rest)
+    def cited(prefix):   # §4 머리의 항목 · §5 의 줄들 — brief 에 나온 차례(§4 가 §5 앞)
+        return [line for t in ids if t.startswith(prefix) for line in ([idx.lines[t]] if t in idx.lines else []) + idx.s5.get(t, [])]
+    rest = cited("RC") + cited("ST") + [idx.k_lines[t] for t in ids if t.startswith("K")]
+    groups = tuple(list(dict.fromkeys(g)) for g in (c_d, oq, keys, rest))   # 한 줄에 번호 둘이어도 그 줄은 한 번만
     if len(team_files.SOURCE_PARTS) != len(groups):
         raise ValueError("번호 파일 칸 이름 %d개와 고른 줄 묶음 %d개가 다르다" % (len(team_files.SOURCE_PARTS), len(groups)))
     return ids, dict(zip(team_files.SOURCE_PARTS, groups))

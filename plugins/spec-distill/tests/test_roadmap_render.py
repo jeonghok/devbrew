@@ -248,9 +248,15 @@ class Section4RcIndex(unittest.TestCase):
         got = self.lines("- 레포 주장 «repo-k» — [중립] — 이유 [RC7 → OQ3]\n  이어지는 본문 줄 (a/b.py)\n")
         self.assertEqual(got["RC7"], "- 레포 주장 «repo-k» — [중립] — 이유 [RC7 → OQ3]\n  이어지는 본문 줄 (a/b.py)")
 
-    def test_section5_line_wins_over_section4_head(self):
-        got = self.lines("- 레포 주장 «repo-k» — [중립] — 이유 [RC9 → OQ3]\n")
-        self.assertEqual(got["RC9"], "- 위험 — 사실 | 고칠 자리 — RC9 (p/q.py) [RC9 → OQ3]")
+    def test_section5_line_is_added_to_the_section4_head_item(self):
+        head = "- 레포 주장 «repo-k» — [중립] — 이유 [RC9 → OQ3]"
+        idx = R.index_brief(MINI_BRIEF.replace(self.HOOK, self.HOOK + head + "\n"), MINI_AUDIT)
+        self.assertEqual(idx.lines["RC9"], head)
+        self.assertEqual(idx.s5["RC9"], ["- 위험 — 사실 | 고칠 자리 — RC9 (p/q.py) [RC9 → OQ3]"])
+        row = R.parse_table(TABLE)[1]
+        row.ids = ["RC9"]
+        rest = R.bundle_parts(row, idx)[1][R.team_files.SOURCE_PARTS[3]]
+        self.assertEqual(rest, [head, idx.s5["RC9"][0]])   # 전에는 §5 줄만 실렸다 — 같은 번호가 실린 줄이 더 실린다
 
     def test_body_line_rc_not_indexed(self):
         got = self.lines("- 둘째 «body-k» — [중립] — 이유 [→ 없음]\n  본문 줄 RC8 (a/b.py)\n")
