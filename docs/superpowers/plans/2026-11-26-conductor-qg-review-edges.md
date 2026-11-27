@@ -327,6 +327,7 @@
   - `test_quiet_answer_keeps_prior` — 뒤 기록의 새 답이 `지금은 모르겠다` · `답하지 않음` · `묻지 않음(상한 넘어 남김)` 이면 앞 답이 넘어가고, `의도다` · `잘못 골랐다` 면 빠진다(AC14).
   - `test_multiline_answer_with_heading` — 답 원문 둘째 줄부터 두 칸 들여 쓰고 그 가운데 `## 다른 것` 줄이 있어도 절이 끊기지 않고 답이 넘어간다(AC15).
   - `test_prior_time_with_separator_unreadable` — 「전에 한 답」 의 둘째 칸에 ` · ` 가 들어 꼴 밖이면 그 기록은 읽지 못한 기록, 같은 대상의 답이 넘어가지 않고 알림이 남는다. `- 답한 때:` 가 꼴 밖인 기록도 같다(AC30).
+  - `test_prior_time_iso_reads` — 「전에 한 답」 의 둘째 칸이 qg 답 폴더의 시각 꼴 `YYYY-MM-DDTHH:MM:SSZ` 면 그 기록은 읽혀 앞 답이 넘어간다. 닮았지만 틀린 꼴(끝의 `Z` 없음 · 초 없음 · 앞머리만 맞고 뒤에 글이 더 붙음)은 읽지 못한 기록이다. 기록 자신의 `- 답한 때:` 가 그 꼴이면 여전히 읽지 못한 기록이다(AC30 · D79).
   - `test_prior_identity_with_separator_reads` — 셋째 칸(정체)에 ` · ` 가 든 「전에 한 답」 은 읽혀 앞 답을 뺀다(AC30).
   - `test_prior_cell_identity_with_separator` 를 고쳐 쓴다 — 이름에 ` · ` 가 든 기록 파일(`a · b.md`)은 이름 틀 밖으로 세어 그 열쇠가 넘어가지 않는다(정상 열쇠로 기대하는 단언을 지운다 · AC30 · 제안 31).
   - `test_notice_file_fail_keeps_stderr` — 알림 파일 자리를 쓰지 못하게 하면 rc 4, 표준 오류에 알림 줄과 끝 줄, 답 파일은 있다. 답 파일을 쓰지 못하면 rc 3(AC16).
@@ -335,7 +336,7 @@
   - `test_record_branch_answer_carries_epic_only_does_not` — 첫 머지 앞 리뷰의 기록을 기록 브랜치에만 두고 같은 대상의 다른 기록을 에픽 브랜치에만 둔 리포에서, 지휘 절차의 호출 꼴대로 `--ref <기본 브랜치> --ref <기록 브랜치>` 로 부르면 기록 브랜치의 답은 넘어가고 에픽 브랜치에만 있는 답은 넘어가지 않는다(AC11 — 설계 Verification Plan).
   - `test_no_yaml_guard` — `yaml` import 를 막은(`sys.modules` 에 None) 하위 프로세스에서 rc 5 와 그 줄(제안 23).
 - [ ] **Step 2:** `cd plugins/spec-distill/tests && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_qg_answered -v` — 새 것 FAIL.
-- [ ] **Step 3: 고친다.** `_prior_key(value) -> str | None` 은 첫 칸이 `ANSWERS` 가운데 하나 · 둘째 칸이 `fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}|-")` · 끝 칸(오른쪽에서 뗀 것)이 까닭이고 그 사이가 열쇠다 — 꼴이 아니면 `Unreadable("전에 한 답의 칸이 꼴 밖이다")`(제안 24 — 예외에 사유를 싣되 알림 글은 바꾸지 않는다). 「전에 한 답」 은 그 절의 `답` 이 `ANSWERS` 일 때만 superseded 에 더한다. `_name_ok` 에 ` · ` 를 막는 조건. `collect` 는 읽지 못한 파일의 대상(이름의 에픽 번호 · `roadmap`)을 모아 그 대상의 항목을 버리고, 이름조차 틀 밖이면 전부 버린다. `_esc` docstring 을 실제 범위(C0 · DEL · 줄 나눔 글자)로 고친다(제안 27). 쓰기 차례 — 알림 줄을 stderr 에 먼저 → 답 파일 → 알림 파일.
+- [ ] **Step 3: 고친다.** `_prior_key(value) -> str | None` 은 첫 칸이 `ANSWERS` 가운데 하나 · 둘째 칸이 `fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}|-")` 이거나 `fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")`(qg 답 폴더의 시각 꼴 · D79 — 기록의 `- 답한 때:` 줄은 앞 꼴만 받는다) · 끝 칸(오른쪽에서 뗀 것)이 까닭이고 그 사이가 열쇠다 — 꼴이 아니면 `Unreadable("전에 한 답의 칸이 꼴 밖이다")`(제안 24 — 예외에 사유를 싣되 알림 글은 바꾸지 않는다). 「전에 한 답」 은 그 절의 `답` 이 `ANSWERS` 일 때만 superseded 에 더한다. `_name_ok` 에 ` · ` 를 막는 조건. `collect` 는 읽지 못한 파일의 대상(이름의 에픽 번호 · `roadmap`)을 모아 그 대상의 항목을 버리고, 이름조차 틀 밖이면 전부 버린다. `_esc` docstring 을 실제 범위(C0 · DEL · 줄 나눔 글자)로 고친다(제안 27). 쓰기 차례 — 알림 줄을 stderr 에 먼저 → 답 파일 → 알림 파일.
 - [ ] **Step 4:** PASS(옛 테스트 포함).
 - [ ] **Step 5: 커밋.** `git commit -m "fix(conductor): 답 넘기기 — 읽지 못한 기록 · 앞 답 칸 · 알림 잃지 않기" -- plugins/spec-distill/scripts/qg_answered.py plugins/spec-distill/tests/test_qg_answered.py`
 
