@@ -9,3 +9,5 @@
 ```
 
 ## 항목
+
+- 2026-11-27 · plugins/spec-distill/tests/test_human_gate.sh · 15 · 16 · 지키던 것: 설계 없는 흐름의 시작 묶음은 흐름 승인 줄이 없으면 멈추고 있으면 나간다 · 판정: 둘째 줄(같은 것을 다른 테스트가 지킨다) · 지금 지키는 것: plugins/spec-distill/tests/test_human_gate_e2e.sh(15 · 16) · PR #<번호>

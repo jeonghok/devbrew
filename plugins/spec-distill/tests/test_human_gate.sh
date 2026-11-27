@@ -29,7 +29,7 @@ repo_copy "$T0/c0c" "$T0/no-such-template" 2>"$T0/c0-err.txt"; assert_eq "$?" "1
 assert_contains "$(cat "$T0/c0-err.txt")" "견본에 팀 레포가 없다" "0: 까닭을 표준 오류에 낸다(없는 견본)"
 assert_eq "$([ -e "$T0/c0c" ] && echo 있음 || echo 없음) ${T}" "없음 $T0/c0a" "0: 없는 견본이면 새 폴더를 만들지 않고 T 를 옮기지 않는다"
 
-# ── 묶음 A — 설계 흐름(E1)과 설계 없는 흐름(E2) ──
+# ── 묶음 A — 설계 흐름(E1) ──
 repo_copy "$T0/a" new && ok "A: 팀 레포를 세웠다(${TM})" || { no "A: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 E1="$TM/jobs/E1"
 E2="$TM/jobs/E2"
@@ -114,11 +114,6 @@ check 0 "14b: 같은 줄이 여러 끝에 있어도 plan 2 가 나간다" --job 
 check 0 "14b: implement 2 가 나간다" --job E1 --stage implement --plan 2
 check 0 "14b: implement 1 이 나간다" --job E1 --stage implement --plan 1
 
-g checkout -q -b feature/tm-e2 main && push_br feature/tm-e2
-check 1 "15: 설계 없는 흐름은 흐름 승인이 없으면 멈춘다" --job E2 --stage implement
-assert_contains "$(err)" '`흐름 승인` 줄이 없다' "15: 사유"
-approved "흐름 승인" E2 - - 2026-11-22 && push_br feature/tm-e2
-check 0 "16: 흐름 승인 줄이 있으면 나간다" --job E2 --stage implement
 g checkout -q main
 
 # ── 묶음 B — 관문을 끄는 길(E3 는 이 레포에서 처음 브랜치를 갖는다) ──
