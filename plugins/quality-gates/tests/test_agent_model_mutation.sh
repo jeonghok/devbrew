@@ -34,18 +34,19 @@ pairs=(
 )
 variants=("model: inherit" "model: opus" "model:inherit" "\"model\": inherit" "model : inherit")
 
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+unset $(git rev-parse --local-env-vars)
 COPY="$(mktemp -d)" || COPY=""
 if [ -z "$COPY" ] || [ ! -d "$COPY" ]; then no "0 — 사본 폴더를 만들지 못했다"; finish; exit; fi
 trap 'rm -rf "$COPY"' EXIT
 if cp -R plugins shared "$COPY/" \
    && git -C "$COPY" init -q && git -C "$COPY" config user.email t@t && git -C "$COPY" config user.name t \
-   && git -C "$COPY" add -- plugins shared && git -C "$COPY" commit -qm copy; then
-  ok "0 — 사본 레포 준비 (plugins/ · shared/)"
+   && git -C "$COPY" add -- plugins shared && git -C "$COPY" commit -qm copy \
+   && cd "$COPY" \
+   && [ "$(git rev-parse --show-toplevel)" = "$(cd "$COPY" && pwd -P)" ]; then
+  ok "0 — 사본 레포 준비 (plugins/ · shared/ · 락의 레포 꼭대기 = 사본)"
 else
-  no "0 — 사본 레포를 뜨지 못했다"; finish; exit
+  no "0 — 사본 레포를 뜨지 못했거나 레포 꼭대기가 사본이 아니다"; finish; exit
 fi
-cd "$COPY" || exit 1
 
 inject() {  # inject <file> <line>  — name: 줄 바로 뒤에 넣는다
   awk -v L="$2" 'BEGIN{d=0} {print} !d && /^name:/{print L; d=1}' "$1" > "$1.tmp" && mv "$1.tmp" "$1"
