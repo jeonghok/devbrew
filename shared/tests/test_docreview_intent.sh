@@ -11,6 +11,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 . "$HERE/fixtures/docreview/cases.sh"
+r1_templates_on
 case_AC6_fix_contract
 case_AC6_insert_after
 case_AC6_R13_insert_after_protection
