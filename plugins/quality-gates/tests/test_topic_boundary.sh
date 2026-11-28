@@ -793,8 +793,7 @@ case_base_unresolved_in_base_is_dash() {
   rm -rf "$nogit"
 }
 
-for c in case_new_repo_copies_are_isolated \
-         case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
+for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_all_declared_in_base case_orphan_tag_only case_f3_merged_ref_deleted \
          case_f4_undeclared_ancestor_included case_f5_fragment_discriminates \
          case_f5b_prefix_fragment_collision \
@@ -816,7 +815,8 @@ for c in case_new_repo_copies_are_isolated \
          case_detect_empty_spec_value_excluded \
          case_unrelated_after_merge_not_member case_n1_main_history_not_absorbed \
          case_n2_nested_merge_not_expanded case_squash_front_still_member \
-         case_no_merged_member_machinery case_base_unresolved_in_base_is_dash; do
+         case_no_merged_member_machinery case_base_unresolved_in_base_is_dash \
+         case_new_repo_copies_are_isolated; do
   echo "== $c"; $c
 done
 finish
