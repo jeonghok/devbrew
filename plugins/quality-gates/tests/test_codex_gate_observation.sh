@@ -15,42 +15,35 @@ OBS_REPO="$ROOT"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 SCRATCH="$(mktemp -d -t qg-gate-XXXXXX)" || exit 1
-# F5(Task 15 fix round 1)의 "감지기 부재" 시나리오가 실제 배포 지점의 detect_codex.sh
-# 심볼릭 링크를 잠깐 지웠다 되살린다. **`mv`로 다른 디렉토리에 옮기지 않는다** — 이
-# 심볼릭 링크는 **상대** 링크(`../../../shared/codex/detect_codex.sh`)라, mv로
-# 옮기면 새 위치 기준으로 재해석되어 dangling이 되고, 그 dangling 링크를 백업으로
-# 쓰면 `-e` 검사가 항상 거짓이라 원복 분기를 못 타 원본이 통째로 유실된다(실측:
-# 이 라운드에서 실제로 겪음 — SCRATCH가 지워지며 두 배포 지점이 사라졌다가 `ln -s`로
-# 즉시 재생성해 복구했다). 그래서 target 문자열만 `readlink`로 뽑아 두고 `rm -f` +
-# `ln -sf`로 복원한다 — 파일 이동이 아니라 지우고-다시-만들기라 상대 경로 문제가
-# 없다. 정상 종료든 조기 종료든 원복이 보장돼야 하므로, EXIT trap이 "지워진 채로
-# 남았으면"(_ACTIVE_DETECTOR_TARGET이 비지 않았으면) 되살리고 나서 SCRATCH를 지운다.
-# 정상 경로에서는 루프 안에서 이미 되살려 이 trap은 no-op이다.
-# **단, 이 "보장"은 SIGKILL 앞에서는 깨진다** — EXIT trap 자체가 SIGKILL을 못 받으므로
-# 그 시점에는 배포 지점 심볼릭 링크가 지워진 채로 남는다. 이것이 이 라운드가 다루는
-# 두 SIGKILL 잔여(round 2 findings) 중 **더 나쁜 쪽**이다 — 형제 conf 헬퍼들의
-# 잔여(malformed 값으로 덮인 conf, `test_detect_codex.sh`·`test_detect_codex.py` 주석
-# 참조)는 conf 를 읽는 코드가 fail-closed 로 죽지만, 이쪽은 배포 지점 자체가
-# 사라진다(그래도 `git checkout --`로 복구 가능하고 데이터 손실은 없다 — 심볼릭
-# 링크는 target 문자열만 알면 완전히 재구성되는 무상태 포인터다, round 1 사고 복구
-# 참조).
+# 감지기 부재는 사본의 링크를 지워 재고, 실제 배포 지점은 건드리지 않는다.
+# 사본 트리는 `plugins/<플러그인>/` 과 `shared/` 를 레포와 같은 깊이로 둔다 — 감지기 링크는
+# 상대 링크(`../../../shared/codex/detect_codex.sh`)라 그 깊이여야 사본 안을 가리킨다.
+COPY_TREE="$SCRATCH/tree"
+copy_plugin_tree() {   # $1=플러그인 이름 → 사본의 플러그인 루트를 낸다
+  local p="$1"
+  if [ ! -d "$COPY_TREE/shared" ]; then
+    mkdir -p "$COPY_TREE/plugins" && cp -R "$ROOT/shared" "$COPY_TREE/shared" || return 1
+  fi
+  if [ ! -d "$COPY_TREE/plugins/$p" ]; then
+    cp -R "$ROOT/plugins/$p" "$COPY_TREE/plugins/$p" || return 1
+  fi
+  printf '%s\n' "$COPY_TREE/plugins/$p"
+}
 _ACTIVE_DETECTOR_ORIG=""
 _ACTIVE_DETECTOR_TARGET=""
 restore_active_detector() {
-  # N5(round 2): 파괴는 무조건, 복원은 조건부였던 결함의 짝 — `ln -sf` 실패를
-  # 조용히 삼키면 복원 시도가 있었다는 사실만으로 안전하다고 오판하게 된다.
-  # 실패하면 `no()` 로 소리 낸다(이 함수는 EXIT trap 에서도 불리므로 실패 시점의
-  # `$label` 을 그대로 참조 — bash 함수는 호출부의 전역 변수를 그대로 본다).
+  # 같은 플러그인의 다음 label 이 같은 사본에서 감지기 부재를 잰다 — `ln -sf` 실패를
+  # 삼키지 않고 `no()` 로 센다.
   if [ -n "$_ACTIVE_DETECTOR_TARGET" ]; then
     if ln -sf "$_ACTIVE_DETECTOR_TARGET" "$_ACTIVE_DETECTOR_ORIG"; then
       _ACTIVE_DETECTOR_TARGET=""
     else
-      no "${label:-detector}: 배포 지점 복원 실패 — $_ACTIVE_DETECTOR_ORIG 를 $_ACTIVE_DETECTOR_TARGET 로 못 되살렸다"
+      no "${label:-detector}: 사본의 감지기 복원 실패 — $_ACTIVE_DETECTOR_ORIG 를 $_ACTIVE_DETECTOR_TARGET 로 못 되살렸다"
       _ACTIVE_DETECTOR_TARGET=""
     fi
   fi
 }
-trap 'restore_active_detector; rm -rf "$SCRATCH"' EXIT
+trap 'rm -rf "$SCRATCH"' EXIT
 obs_setup "$SCRATCH"
 
 # ── 양방향 ratchet: 게이트가 **없는** 러너의 원장 ────────────────────────────
@@ -269,33 +262,29 @@ for i in "${!GATED_RUNNER[@]}"; do
   # 문서 리뷰 엔진 전환 뒤 SKIPPED 공시로 사유를 내므로 이 계열이다). mutation 증명: 그
   # fence 들의 `skip_reason="detector_not_runnable"` 줄을 지우면 stderr 가
   # `${skip_reason:-unknown}` 의 fallback 인 "unknown" 을 내 grep 이 실패해 RED 다.
-  _ACTIVE_DETECTOR_ORIG="$plugin_root_dir/scripts/detect_codex.sh"
-  # N5(round 2): 파괴(`rm -f`) 앞에 링크 여부를 확인한다. `readlink` 는 대상이
-  # 심볼릭 링크가 아니면 빈 출력 + rc=1을 내는데, 이 스크립트는 `-e` 없이
-  # `set -u -o pipefail` 뿐이라 그 실패를 무시하고 진행한다 — 확인 없이 진행하면
-  # `_ACTIVE_DETECTOR_TARGET` 이 빈 문자열로 잡히고, 그 뒤 `rm -f` 는 **실파일**을
-  # 지운다. 복원 가드(`[ -n "$_ACTIVE_DETECTOR_TARGET" ]`)는 빈 문자열에 대해
-  # 거짓이라 복원 분기를 안 타 원본이 통째로 유실된다 — 이번 라운드가 만든
-  # 사고(round 1 의 mv-dangling 사고)의 방향만 바꾼 재현이다. 그래서 파괴를
-  # **아예 시작하지 않는다**: 심볼릭 링크가 아니면 이 플러그인의 감지기-부재
-  # 시나리오만 건너뛴다(다른 시나리오들은 이 블록 앞에서 이미 돌았다 — 순서상
-  # 영향 없음).
+  # 게이트 블록은 사본의 SKILL 에서 잘라 `CLAUDE_PLUGIN_ROOT` 가 사본을 가리키게 돈다.
+  # 펜스가 그 변수가 아닌 고정 경로로 실제 감지기를 부르면 여기서 codex 1회가 나와 RED 다.
+  if ! copy_root="$(copy_plugin_tree "$plugin")"; then
+    no "$label: 사본 트리를 못 만들었다 — 감지기 부재 시나리오를 건너뛴다"
+    continue
+  fi
+  copy_sk="$copy_root/${sk#"$plugin_root_dir/"}"
+  _ACTIVE_DETECTOR_ORIG="$copy_root/scripts/detect_codex.sh"
+  # 지우는 자리는 SCRATCH 안의 사본뿐이다. 링크가 아니면 `readlink` 가 빈 값을 내 아래
+  # `rm -f` 가 실파일을 지우고 복원도 건너뛰므로, 지우기를 시작하지 않는다.
+  case "$_ACTIVE_DETECTOR_ORIG" in
+    "$SCRATCH"/*) ;;
+    *) no "$label: 지울 감지기가 사본 밖이다($_ACTIVE_DETECTOR_ORIG) — 감지기 부재 시나리오를 건너뛴다"; continue ;;
+  esac
   if [ ! -L "$_ACTIVE_DETECTOR_ORIG" ]; then
-    no "$label: 배포 지점이 심볼릭 링크가 아니다 — 파괴적 시나리오를 건너뛴다"
+    no "$label: 사본의 감지기가 심볼릭 링크가 아니다 — 감지기 부재 시나리오를 건너뛴다"
     continue
   fi
   _ACTIVE_DETECTOR_TARGET="$(readlink "$_ACTIVE_DETECTOR_ORIG")"
   rm -f "$_ACTIVE_DETECTOR_ORIG"
   NODETECT_CAP="$SCRATCH/g-$label-nodetect"
-  n="$(run_scenario "$sk" "$r" "$NODETECT_CAP" "$OBS_MOCKBIN:$BASE_SUFFIX" "$OBS_MOCKBIN" "IGNORE=1")"
-  # 이 in-loop 호출이 `restore_active_detector`의 `ln -sf` 실패 검사(N5, round 2)가
-  # **실제로 관측 가능한** 유일한 경로다: `finish`(shared/tests/assert.sh:111-114)는
-  # 이 스크립트 끝에서 한 번만 불려 Total 을 찍고 종료 상태를 확정하는데, `no()`가
-  # EXIT trap 경로(:53)에서만 불리면 `finish` 가 이미 지나간 뒤라 `✗` 줄만 찍히고
-  # 아무것도 안 바뀐다(round 3 재리뷰가 확인한 잠재 사실 — 지금은 도달 불가능하다:
-  # 이 호출이 `rm -f`와 모든 `case` 분기(`PREMISE_FAIL:*` 포함) 사이에 **무조건**
-  # 있고, `run_scenario`는 `$( )` 안에서 도니 부모를 종료시킬 수 없다). **이 호출을
-  # 나중에 옮기면 그 이빨을 조용히 잃는다** — 옮길 일이 있으면 이 사실부터 다시 확인할 것.
+  n="$(run_scenario "$copy_sk" "$r" "$NODETECT_CAP" "$OBS_MOCKBIN:$BASE_SUFFIX" "$OBS_MOCKBIN" "IGNORE=1")"
+  # 복원은 `finish` 앞이어야 그 실패가 Total 에 든다 — 이 호출을 루프 밖으로 옮기지 않는다.
   restore_active_detector
   case "$n" in
     0)
