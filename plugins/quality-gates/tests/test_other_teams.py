@@ -1,4 +1,6 @@
 """R2 다른 팀 읽기 — 다른 작업 찾기와 파일 겹침(scripts/other_teams.py)."""
+import copy
+import inspect
 import os
 import shutil
 import subprocess
@@ -182,6 +184,15 @@ def _copy_teams_repo(dest):
     return dict(_TEMPLATE["shas"])
 
 
+def _frozen(value):
+    """메모 키 — 집합 · 목록을 해시되는 꼴로."""
+    if isinstance(value, (set, frozenset)):
+        return frozenset(value)
+    if isinstance(value, (list, tuple)):
+        return tuple(_frozen(v) for v in value)
+    return value
+
+
 def tearDownModule():
     if _TEMPLATE:
         _TEMPLATE["tmp"].cleanup()
@@ -195,6 +206,7 @@ class _Fixture(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.repo = os.path.join(cls.tmp.name, "repo")
         cls.shas = _copy_teams_repo(cls.repo)
+        cls._memo = {}
 
     @classmethod
     def tearDownClass(cls):
@@ -208,6 +220,25 @@ class _Fixture(unittest.TestCase):
 
     def _work(self, end="HEAD", repo=None):
         return ot.other_work(repo or self.repo, DEFAULT_REF, end)
+
+    def _once(self, key, compute):
+        """같은 키의 결과는 이 클래스에서 한 번만 계산하고 깊은 복사로 내준다(고친 시험이 다음에 새지 않게)."""
+        memo = type(self)._memo
+        if key not in memo:
+            memo[key] = compute()
+        return copy.deepcopy(memo[key])
+
+    def _work_once(self, end="HEAD"):
+        """공유 리포의 other_work — mock 안에서는 부르지 않는다(메모가 mock 밖 값을 낸다)."""
+        args = (self.repo, DEFAULT_REF, end)
+        return self._once(("other_work",) + args, lambda: ot.other_work(*args))
+
+    def _collect_once(self, **kwargs):
+        """공유 리포의 _collect — mock 안에서는 부르지 않는다(메모가 mock 밖 값을 낸다)."""
+        bound = inspect.signature(_collect).bind(self.repo, **kwargs)
+        bound.apply_defaults()
+        key = ("collect",) + tuple(_frozen(v) for v in bound.arguments.values())
+        return self._once(key, lambda: _collect(*bound.args, **bound.kwargs))
 
 
 class TestDefaultBranch(_Fixture):
@@ -228,19 +259,19 @@ class TestDefaultBranch(_Fixture):
 
 class TestOtherWork(_Fixture):
     def test_unmerged_branches_listed(self):
-        self.assertEqual(_names(self._work()[0]),
+        self.assertEqual(_names(self._work_once()[0]),
                          ["feature/far", "feature/mine-next", "feature/other"])
 
     def test_merged_squashed_rebased_excluded(self):
-        names = _names(self._work()[0])
+        names = _names(self._work_once()[0])
         for gone in ("feature/merged", "feature/squashed", "feature/rebased"):
             self.assertNotIn(gone, names)
 
     def test_review_branch_excluded(self):
-        self.assertNotIn("feature/mine", _names(self._work()[0]))
+        self.assertNotIn("feature/mine", _names(self._work_once()[0]))
 
     def test_same_tip_is_one_entry(self):
-        names = _names(self._work()[0])
+        names = _names(self._work_once()[0])
         self.assertNotIn("origin/feature/other", names)
         self.assertEqual(names.count("feature/other"), 1)
 
@@ -251,23 +282,23 @@ class TestOtherWork(_Fixture):
         self.assertIn("origin/feature/far", _names(self._work(repo=repo)[0]))
 
     def test_entry_fields(self):
-        other = _by_name(self._work()[0], "feature/other")
+        other = _by_name(self._work_once()[0], "feature/other")
         self.assertEqual(other["sha"], self.shas["o1"])
         self.assertEqual(other["time"], DAY0 + 6 * 86400)
         self.assertEqual(set(other), {"name", "sha", "time", "paths", "base"})
 
     def test_paths_from_unreachable_commits(self):
-        entries = self._work()[0]
+        entries = self._work_once()[0]
         self.assertEqual(_by_name(entries, "feature/other")["paths"],
                          {"a.txt", "team/other-design.md"})
         self.assertEqual(_by_name(entries, "feature/mine-next")["paths"], {"b.txt"})
 
     def test_range_end_before_tip(self):
-        entries = self._work(end=self.shas["k1"])[0]
+        entries = self._work_once(end=self.shas["k1"])[0]
         self.assertEqual(_by_name(entries, "feature/mine")["paths"], {"CHANGELOG.md"})
 
     def test_unreadable_count_is_zero_on_clean_repo(self):
-        self.assertEqual(self._work()[1], 0)
+        self.assertEqual(self._work_once()[1], 0)
 
     def test_checkout_elsewhere_same(self):
         repo, shas = self._fresh()
@@ -302,7 +333,7 @@ class TestOtherWork(_Fixture):
                                  ["feature/far", "feature/mine-next", "feature/other"])
 
     def test_base_is_later_merge_base(self):
-        entries = self._work()[0]
+        entries = self._work_once()[0]
         self.assertEqual(_by_name(entries, "feature/mine-next")["base"], self.shas["k2"])
         self.assertEqual(_by_name(entries, "feature/other")["base"], self.shas["c0"])
 
@@ -354,6 +385,18 @@ class TestOtherWork(_Fixture):
     def test_option_like_rev_refused(self):
         self.assertEqual(ot.other_work(self.repo, "--all", "HEAD"), ([], None))
         self.assertEqual(ot.other_work(self.repo, DEFAULT_REF, "-n1"), ([], None))
+
+    def test_shared_result_is_not_mutated_across_tests(self):
+        """같은 인자로 다시 받은 결과에 앞에서 고친 값이 없다."""
+        first = self._collect_once(names={"a.txt"})
+        first["notices"].append("planted-notice")
+        self.assertNotIn("planted-notice", self._collect_once(names={"a.txt"})["notices"])
+        entries = self._work_once()[0]
+        entries.append({"name": "planted"})
+        entries[0]["paths"].add("planted.txt")
+        again = self._work_once()[0]
+        self.assertNotIn("planted", _names(again))
+        self.assertNotIn("planted.txt", again[0]["paths"])
 
 
 class TestOverlaps(_Fixture):
@@ -693,7 +736,7 @@ class TestNoEpicRoadmap(_Fixture):
 
 class TestOtherWorkRecord(_Fixture):
     def test_intent_doc_in_any_folder(self):
-        text = _collect(self.repo)["text"]
+        text = self._collect_once()["text"]
         block = _block(text, "### feature/other ")
         self.assertIn("#### 의도 문서 team/other-design.md\n", block)
         self.assertIn("# 다른 팀 설계", block)
@@ -711,7 +754,7 @@ class TestOtherWorkRecord(_Fixture):
         self.assertNotIn("skill-token", block)
 
     def test_branch_heading_shape(self):
-        text = _collect(self.repo, names={"a.txt"})["text"]
+        text = self._collect_once(names={"a.txt"})["text"]
         head = _block(text, "### feature/other ").split("\n")[0]
         self.assertEqual(head, "### feature/other · %s · 2026-01-07 · 열린 PR 없음"
                          % self.shas["o1"][:7])
@@ -729,27 +772,27 @@ class TestOtherWorkRecord(_Fixture):
         self.assertIn(INTERVIEW, _unverified(plain))
 
     def test_overlap_listed_with_diff(self):
-        text = _collect(self.repo, names={"a.txt"})["text"]
+        text = self._collect_once(names={"a.txt"})["text"]
         self.assertEqual(ot.summary(text)[0], ["- feature/other — a.txt"])
         diff = _block(text, "#### 겹치는 파일 a.txt")
         self.assertIn("+other", diff)
         self.assertIn("diff --git", diff)
 
     def test_no_overlap(self):
-        text = _collect(self.repo, names={"q.txt"})["text"]
+        text = self._collect_once(names={"q.txt"})["text"]
         self.assertEqual(ot.summary(text)[0], ["- 겹침 없음"])
         self.assertEqual(ot.NO_OVERLAP, "- 겹침 없음")
         self.assertEqual(ot.OVERLAP_UNKNOWN, "- 겹침 확인 못 함")
 
     def test_names_unknown(self):
-        text = _collect(self.repo, names=None)["text"]
+        text = self._collect_once(names=None)["text"]
         self.assertEqual(ot.summary(text)[0], ["- 겹침 확인 못 함"])
         self.assertIn("- 바뀐 파일 목록을 몰라 파일 겹침을 확인 못 함", _unverified(text))
         self.assertNotIn("- 바뀐 파일 목록을 몰라 파일 겹침을 확인 못 함",
-                         _unverified(_collect(self.repo, names={"q.txt"})["text"]))
+                         _unverified(self._collect_once(names={"q.txt"})["text"]))
 
     def test_rest_counted(self):
-        text = _collect(self.repo, names={"a.txt"})["text"]
+        text = self._collect_once(names={"a.txt"})["text"]
         work = _block(text, ot.HEAD_WORK)
         self.assertIn("\n그 밖의 브랜치 2개 — 겹침 · 의도 문서 없음", work)
         self.assertNotIn("### feature/far", work)
@@ -852,7 +895,7 @@ class TestOtherWorkRecord(_Fixture):
         with mock.patch.object(ot, "_git", failing):
             none_found = _collect(self.repo, names={"q.txt"})["text"]
         self.assertEqual(ot.summary(none_found)[0], ["- 겹침 없음"])
-        self.assertNotIn("- 읽지 못한 브랜치", "\n".join(_unverified(_collect(self.repo)["text"])))
+        self.assertNotIn("- 읽지 못한 브랜치", "\n".join(_unverified(self._collect_once()["text"])))
 
     def test_branch_list_unreadable(self):
         with mock.patch.object(ot, "other_work", lambda repo, ref, end, notes=None: ([], None)):
@@ -914,7 +957,7 @@ class TestOtherWorkRecord(_Fixture):
     def test_always_lines(self):
         for kwargs in ({}, {"roadmaps": []}, {"names": {"a.txt"}}):
             with self.subTest(kwargs):
-                unverified = _unverified(_collect(self.repo, **kwargs)["text"])
+                unverified = _unverified(self._collect_once(**kwargs)["text"])
                 for line in ALWAYS:
                     self.assertIn(line, unverified)
 
