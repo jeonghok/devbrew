@@ -470,7 +470,7 @@ $body
 **Files:** `docs/removed-tests.md`(합침 충돌만)
 
 - [ ] **Step 1: 머지 확인** — `gh pr view 347 --json state,mergeCommit` → `MERGED`. `git fetch -q origin && git merge-base --is-ancestor <mergeCommit> origin/main` → 0.
-- [ ] **Step 2: 합친다** — `git merge --no-edit origin/main`. `docs/removed-tests.md` 충돌은 `## 항목` 아래에 먼저 머지된 쪽 줄이 위, 이 PR 줄이 아래, 머리 뒤 빈 줄 하나 · 항목 사이 빈 줄 없음으로 푼다. 다른 파일 충돌은 표에 닿는지 보고 고치기 전에 보고한다. 합친 뒤 과제 22 Step 3 의 테스트를 다시 돌린다.
+- [ ] **Step 2: 합친다** — `git merge --no-edit origin/main`. `docs/removed-tests.md` 충돌은 `## 항목` 아래에 먼저 머지된 쪽 줄이 위, 이 PR 줄이 아래, 머리 뒤 빈 줄 하나 · 항목 사이 빈 줄 없음으로 푼다. 설계문서(`docs/superpowers/specs/2026-11-26-test-prune-design.md` — #350 · #351 과 add/add)의 충돌은 `relay/E4/merge-order-notes.md` 「PR 5 가 main 을 합칠 때」 절대로 푼다(PR 1 · 3 승인 줄 → 지휘 기록 다섯 줄 → PR 5 승인 줄 · `## 판정` 은 하나) — 푼 뒤 그 절의 확인 명령을 돈다. 다른 파일 충돌은 표에 닿는지 보고 고치기 전에 보고한다. 합친 뒤 과제 22 Step 3 의 테스트를 다시 돌린다.
 - [ ] **Step 3: 다시 읽는다** — 표 끝 목록의 16행과 K1 의 셋(TestFilteredListed · plain_readme 남김 · governance 부분 핀)마다 합친 HEAD 에서 그 테스트 · 겹침 상대 · 받는 쪽을 다시 열어 `reread-B.tsv`(행 · 바뀐 줄 번호 · 짝 · 받는 쪽 · 판정이 표와 같은가 · 근거)를 쓴다. 표가 #347 에 기댄 사실(예: TestGate final 갈래를 `test_retired_switches_do_not_skip` 이 잰다 · plain_readme :118–121 행 32 지움 · intent_wide :475–500 지움 · critiquing :17–30 지움 · e2e_docs DISABLE_E2E 지움 · pipeline_verdict :250–286 지움)이 합친 HEAD 에서 참인지 하나씩 본다.
 - [ ] **Step 4: 판정이 다르면 BLOCKED** — 판정 · 고침 · 받는 쪽이 표와 다른 행은 고치지 않고 지휘자에게 `BLOCKED — <행> · 표: … · 다시 읽은 것: … · 근거` 로 올린다. 사용자 동의가 와서 표가 고쳐지기 전에는 그 행을 하지 않는다(같은 파일의 다른 행은 해도 된다).
 - [ ] **Step 5: 앞 시간 · 기준값(K10)** — `files-B.txt` 와 그 받는 쪽(`test_intent_return.py` · `test_intent_handed.py` · `test_other_teams.py` · `test_topic_scope_wiring.sh`)을 돌려 `before-B/` · `before-totals-B.tsv`, 잠금 명령으로 `before-times-B.tsv`.
