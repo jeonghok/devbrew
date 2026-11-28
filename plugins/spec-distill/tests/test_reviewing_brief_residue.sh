@@ -191,7 +191,10 @@ rb_bad_n="$(grep -c '^BAD ' <<< "$rb_out")"; rb_dir_n="$(grep -c '^DIR ' <<< "$r
   || no "전제: sid 도출 실패 —$bad. 그 셀들은 \$CODEX_YAML 이 비어 아무것도 재지 못한다"
 # 짝 — 첫 sid 하나는 명령줄 두 호출(session-id · state-dir-for)로 돌린다. 묶은 확인은 명령줄의 main() 을 지나지 않는다.
 for rb_first in $SIDS; do break; done
-rb_cli="$(DEVBREW_SPEC_DISTILL_SESSION_ID="$rb_first" python3 "$PR/scripts/state_path.py" session-id 2>/dev/null)|$(where "$rb_first" "$DOC_B")"
+rb_sid="$(DEVBREW_SPEC_DISTILL_SESSION_ID="$rb_first" python3 "$PR/scripts/state_path.py" session-id 2>/dev/null)"; rb_sid_rc=$?
+rb_dir="$(where "$rb_first" "$DOC_B")"; rb_dir_rc=$?
+assert_eq "$rb_sid_rc $rb_dir_rc" "0 0" "전제 짝: 명령줄 두 호출(session-id · state-dir-for)이 종료 코드 0 으로 끝난다"
+rb_cli="$rb_sid|$rb_dir"
 rb_esc="$(printf '%s' "$SCRATCH" | sed -E 's/[][\.*^$+?(){}|]/\\&/g')"
 assert_grep "$rb_cli" "^${rb_first}[|]${rb_esc}/${rb_first}/\.claude/spec-distill/\.docreview/brief-sample-[0-9a-f]{16}\$" \
   "전제 짝: 명령줄의 session-id 는 sid 그 자체를, state-dir-for 는 <홈>/.claude/spec-distill/.docreview/brief-sample-<16자> 를 낸다"

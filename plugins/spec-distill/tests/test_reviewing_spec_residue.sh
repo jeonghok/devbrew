@@ -177,7 +177,10 @@ else
 fi
 # 짝 — 첫 sid 하나는 명령줄 두 호출(session-id · state-dir-for)로 돈다. 묶은 확인은 명령줄의 main() 을 지나지 않는다.
 set -- $SIDS; pair_sid="${1:-}"; set --
-pair_cli="$(DEVBREW_SPEC_DISTILL_SESSION_ID="$pair_sid" python3 "$PR/scripts/state_path.py" session-id 2>/dev/null)|$(dir_of "$pair_sid" "$SPEC_DOC")"
+pair_id="$(DEVBREW_SPEC_DISTILL_SESSION_ID="$pair_sid" python3 "$PR/scripts/state_path.py" session-id 2>/dev/null)"; pair_id_rc=$?
+pair_dir="$(dir_of "$pair_sid" "$SPEC_DOC")"; pair_dir_rc=$?
+assert_eq "$pair_id_rc $pair_dir_rc" "0 0" "전제 짝: 명령줄 두 호출(session-id · state-dir-for)이 종료 코드 0 으로 끝난다"
+pair_cli="$pair_id|$pair_dir"
 scratch_re="$(printf '%s' "$SCRATCH" | sed -E 's/[][\.*^$+?(){}|]/\\&/g')"
 assert_grep "$pair_cli" "^${pair_sid}[|]${scratch_re}/${pair_sid}/\.claude/spec-distill/\.docreview/SKILL-[0-9a-f]{16}\$" \
   "전제 짝: 명령줄의 session-id 는 sid 그대로를, state-dir-for 는 <홈>/.claude/spec-distill/.docreview/SKILL-<16자> 를 낸다"
