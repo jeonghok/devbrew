@@ -19,6 +19,7 @@ SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 . "$HERE/fixtures/docreview/cases.sh"
 . "$HERE/fixtures/docreview/cases_advice.sh"
 . "$HERE/fixtures/docreview/cases_ask.sh"
+r1_templates_on
 case_ask_short_warn_line_unit
 case_ask_status_count_equals_first_line
 case_ask_status_no_warns

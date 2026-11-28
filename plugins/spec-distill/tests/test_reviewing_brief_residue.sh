@@ -15,7 +15,7 @@
 #   P  문서별 자리가 실행으로 갈리는가 · S 문서를 모르는 라운드가 다른 문서의 산출물을 건드리지 않는가
 # 이 자리에만 있는 것:
 #   · 게이트 입력이 하나 더 있다(번들) — 번들 부재도 codex 를 건너뛰는 skip 경로다(A·E 번들 부재).
-#   · R 러너 인자 넷의 실측 — 넷 다 비지 않고, 둘째가 payload 가 아니라 번들인가.
+#   · R 러너 인자 넷 — 넷 다 비지 않고, 둘째가 payload 가 아니라 번들인가.
 #   · P×자리 — 같은 세션에서 design doc 자리(`spec-review`)와 brief 자리가 다른 자리를 받는가.
 #   · S×자리 — payload 를 모르는 brief 쪽 fence 가 design doc 자리와 brief 자리의 어느 것도 건드리지 않는가.
 #   · B 번들 조립이 실패한 라운드가 직전 번들을 남기지 않는가, 그 뒤 fence 가 codex 를 건너뛰는가.
@@ -80,7 +80,7 @@ cut_block_with() {   # cut_block_with <SKILL> <절 헤딩 정규식> <줄 정규
 FENCE="$SCRATCH/fence.sh";  cut_fence "$SKILL" > "$FENCE"
 INPUT="$SCRATCH/input.sh";  cut_block "$SKILL" '^## 입력$' > "$INPUT"
 BUNDLE_BLK="$SCRATCH/bundle.sh"; cut_block "$SKILL" '^## 번들' > "$BUNDLE_BLK"
-# spec-review 의 `## 입력` 절에는 후보 펜스(spec-distill 3.0.0)가 먼저 온다 — 첫 블록이 아니라 `STATE_DIR=` 대입을
+# spec-review 의 `## 입력` 절에는 후보 펜스가 먼저 온다 — 첫 블록이 아니라 `STATE_DIR=` 대입을
 # 담은 블록을 고른다. 없으면 아래 추출 검사가 RED 다.
 S_INPUT="$SCRATCH/spec-input.sh"; cut_block_with "$SPEC_SKILL" '^## 입력$' '^STATE_DIR=' > "$S_INPUT"
 S_FENCE="$SCRATCH/spec-fence.sh"; cut_fence "$SPEC_SKILL" > "$S_FENCE"
@@ -164,14 +164,42 @@ SIDS="rb01kill rb02noin rb03nopl rb04nobd rb05rc3x rb06nodt rb07keep rb08trap rb
       rb50relx rb51relb rb52gtrm rb53gttr rb54gtst rb55gtre rb56bdst rb57nopl rb58apnd rb59nosd
       rb60mskp rb61mnsk rb62mwsp rb63mkil rb64mnbd rb65mlck rb66mhst rb67mhse rb68mtwo rb69mdwn
       rb70mske rb71mzsk rb72mzno rb73mzhs rb74mzki rb75menv rb76mxpg rb77mztp"
-bad=""
+# python 한 번이 sid 마다 `BAD <sid>`(세션 검사 실패) · `DIR <sid> <자리>` 를 낸다. 표준 오류(거부된 sid 마다 한 줄)는 버린다.
+RB_PREP='import os, sys
+sys.path.insert(0, sys.argv[1])
+import state_path, docreview_state
+for s in sys.argv[4:]:
+    os.environ["DEVBREW_SPEC_DISTILL_SESSION_ID"] = s
+    if state_path.resolve_session_id(None) != s:
+        print("BAD", s)
+    try:
+        print("DIR", s, docreview_state.state_dir_for(sys.argv[2] + "/" + s + "/.claude/spec-distill", sys.argv[3]))
+    except Exception:
+        pass'
+rb_out="$(python3 -c "$RB_PREP" "$PR/scripts" "$SCRATCH" "$DOC_B" $SIDS 2>/dev/null)"
+rb_nl='
+'
+bad=""; rb_n=0
 for s in $SIDS; do
-  DEVBREW_SPEC_DISTILL_SESSION_ID="$s" python3 "$PR/scripts/state_path.py" session-id >/dev/null 2>&1 || bad="$bad $s"
-  [ -n "$(where "$s" "$DOC_B")" ] || bad="$bad $s(state-dir-for)"
+  rb_n=$((rb_n + 1))
+  case "$rb_nl$rb_out$rb_nl" in *"${rb_nl}BAD ${s}${rb_nl}"*) bad="$bad $s" ;; esac
+  case "$rb_nl$rb_out" in *"${rb_nl}DIR ${s} /"*) ;; *) bad="$bad $s(state-dir-for)" ;; esac
 done
-[ -z "$bad" ] \
+rb_bad_n="$(grep -c '^BAD ' <<< "$rb_out")"; rb_dir_n="$(grep -c '^DIR ' <<< "$rb_out")"
+[ -z "$bad" ] && [ "$rb_bad_n" -eq 0 ] && [ "$rb_dir_n" -eq "$rb_n" ] \
   && ok "전제: 이 락의 sid 전부가 state_path.py 세션 검사와 state-dir-for 를 통과한다 (도출이 조용히 죽지 않는다)" \
   || no "전제: sid 도출 실패 —$bad. 그 셀들은 \$CODEX_YAML 이 비어 아무것도 재지 못한다"
+# 짝 — 첫 sid 하나는 명령줄 두 호출(session-id · state-dir-for)로 돌린다. 묶은 확인은 명령줄의 main() 을 지나지 않는다.
+for rb_first in $SIDS; do break; done
+rb_sid="$(DEVBREW_SPEC_DISTILL_SESSION_ID="$rb_first" python3 "$PR/scripts/state_path.py" session-id 2>/dev/null)"; rb_sid_rc=$?
+rb_dir="$(where "$rb_first" "$DOC_B")"; rb_dir_rc=$?
+assert_eq "$rb_sid_rc $rb_dir_rc" "0 0" "전제 짝: 명령줄 두 호출(session-id · state-dir-for)이 종료 코드 0 으로 끝난다"
+rb_cli="$rb_sid|$rb_dir"
+rb_esc="$(printf '%s' "$SCRATCH" | sed -E 's/[][\.*^$+?(){}|]/\\&/g')"
+assert_grep "$rb_cli" "^${rb_first}[|]${rb_esc}/${rb_first}/\.claude/spec-distill/\.docreview/brief-sample-[0-9a-f]{16}\$" \
+  "전제 짝: 명령줄의 session-id 는 sid 그 자체를, state-dir-for 는 <홈>/.claude/spec-distill/.docreview/brief-sample-<16자> 를 낸다"
+assert_eq "$rb_cli" "$rb_first|$(sed -n "s/^DIR $rb_first //p" <<< "$rb_out")" \
+  "전제 짝: 명령줄 결과(<sid>|<자리>)가 묶은 확인의 첫 sid 결과와 글자까지 같다"
 
 # `fire <sid> <bin> <plant|-> <stub_write> <stub_rc> [env…]` → 산출물 경로를 stdout 으로.
 # 자리는 `${AT_DOC:-$DOC_B}` 의 것이고, `NO_BUNDLE` 이 비어 있으면 그 자리에 이번 라운드 번들을 둔다

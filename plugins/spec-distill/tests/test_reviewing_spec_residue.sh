@@ -4,12 +4,10 @@
 # `spec-review` 의 codex 게이트를 **잘라내 실행**해, 직전 라운드의 산출물이 이번 라운드
 # 판정으로 새지 않는지 잰다.
 #
-# ── 왜 이 파일이 생겼는가 ────────────────────────────────────────────────────
-# 이 성질은 산문으로 네 번 주장됐고 **한 번도 집행되지 않았다.** 실측(재리뷰 2): 진입
-# 중화를 가용성 분기 «안»으로 되돌리는 변이를 넣으면 보안 결함이 완전히 되살아나는데
-# (skip 경로마다 직전 라운드 finding 2건 섭취) 리포의 셸 락 전수가 GREEN 그대로였다.
-# 형제 `intent-sync` 는 바로 이 락을 갖고 있다(`test_seed_gate_wiring.sh` 의
-# `residue_case` 행렬) — 모양은 복사됐는데 그 모양을 지키는 락은 복사되지 않았다.
+# ── 무엇을 지키는가 ──────────────────────────────────────────────────────────
+# 진입 중화를 가용성 분기 «안»으로 되돌리면 skip 경로마다 직전 라운드 finding 이 섭취되는
+# 보안 결함이 되살아나는데, 산문을 읽는 락으로는 잡히지 않는다 — 이 파일이 실행으로 잰다.
+# 형제 `intent-sync` 의 같은 락은 `test_seed_gate_wiring.sh` 의 `residue_case` 행렬이다.
 #
 # ── 형제와 무엇이 다른가 (관측 대상이 다르다) ────────────────────────────────
 # 형제의 펜스는 `$CODEX_YAML` 을 **자기 안에서 읽고** 판정 줄을 stdout 으로 낸다. 그래서
@@ -17,7 +15,7 @@
 # 5단계의 `docreview_route.py prepare-recritic` 이고 그것은 다른 Bash 호출이다.
 # 그러므로 여기서 재는 것은 두 가지다:
 #   · **A) 디스크의 사후상태** — 펜스가 돌고 난 뒤 그 경로가 중화됐는가(부재 또는 0바이트).
-#     둘 다 하류에서 fail-closed 다(0바이트는 실측으로 `codex_absent: true`).
+#     둘 다 하류에서 fail-closed 다(0바이트는 `codex_absent: true` 로 읽힌다).
 #   · **D) 하류가 실제로 무엇을 보는가** — 한 셀을 end-to-end 로 돌려 「섭취되지 않는다」를
 #     기계 채널(`prepare-recritic`)에서 직접 확인한다. A 가 부류를, D 가 그 부류가 왜
 #     보안 문제인지를 잰다.
@@ -31,7 +29,7 @@
 # 함께 잰다:
 #   · `keep-rc0`  — 러너가 이번 라운드 산출물을 쓰고 정상 종료. 그 산출물은 **살아야** 한다.
 #   · `keep-trap` — 러너가 정직한 degrade 기록을 남기고 **non-zero** 로 죽는다(EXIT 트랩은
-#     자기 rc 를 갖지 않고 원래 실패의 rc 를 그대로 둔다 — 실측 `rc 143` +
+#     자기 rc 를 갖지 않고 원래 실패의 rc 를 그대로 둔다 — 예: `rc 143` +
 #     `aborted_before_completion`). 이 기록도 **살아야** 한다. `rc != 0` 으로 지우는 판본이
 #     여기서 RED 다.
 #
@@ -144,23 +142,50 @@ BASE="/usr/bin:/bin"
 # `state_path.py` 의 세션 이름 검사는 **8자 이상**을 요구한다. 짧은 sid 를 쓰면 도출이
 # 조용히 실패해 `$CODEX_YAML` 이 비고, 그러면 진입 중화는 **설계상 no-op** 이 된다 —
 # 아래 케이스는 「중화가 안 됐다」가 아니라 「아무것도 재지 않았다」가 되는데 둘의 겉모습이
-# 같다. 이 락을 처음 돌렸을 때 실제로 셀 하나가 그렇게 무의미했다(7자 sid). 쓰는 이름을
-# 전부 미리 통과시켜, 계측기가 죽은 채로 판정이 나오는 것을 막는다.
+# 같다. 쓰는 이름을 전부 미리 통과시켜, 계측기가 죽은 채로 판정이 나오는 것을 막는다.
 SIDS="rs01kill rs02noin rs03noip rs05rc3x rs04nodt rs06keep rs07trap rs08lock rs09down rs10ctlx
       rs11trnc rs12pred rs21kill rs22noin rs23noip rs24nodt rs25rc3x rs26lock rs30plce
       rs31swep rs32swpe"
-bad_sid=""
+# 확인은 python 한 번이다 — sid 마다 세션 검사에 지면 `BAD <sid>`, 문서별 자리를 얻으면 `DIR <sid> <자리>`.
+# 문서별 자리가 도출되지 않으면 셀이 심는 경로가 스크래치의 빈 자리로 떨어진다 — 같은 붕괴다.
+spec_probe='import os, sys
+scripts, scratch, doc = sys.argv[1:4]
+sys.path.insert(0, scripts)
+import state_path, docreview_state as ds
+for sid in sys.argv[4:]:
+    os.environ["DEVBREW_SPEC_DISTILL_SESSION_ID"] = sid
+    if state_path.resolve_session_id(None) != sid:
+        print("BAD", sid)
+    try:
+        print("DIR", sid, ds.state_dir_for(os.path.join(scratch, sid, ".claude", "spec-distill"), doc))
+    except Exception:
+        pass'
+probe_out="$(python3 -c "$spec_probe" "$PR/scripts" "$SCRATCH" "$SPEC_DOC" $SIDS 2>/dev/null)"
+LF='
+'
+bad_sid=""; sid_n=0
 for s in $SIDS; do
-  DEVBREW_SPEC_DISTILL_SESSION_ID="$s" python3 "$PR/scripts/state_path.py" session-id >/dev/null 2>&1 \
-    || bad_sid="$bad_sid $s"
-  # 문서별 자리가 도출되지 않으면 셀이 심는 경로가 스크래치의 빈 자리로 떨어진다 — 같은 붕괴다.
-  [ -n "$(dir_of "$s" "$SPEC_DOC")" ] || bad_sid="$bad_sid $s(state-dir-for)"
+  sid_n=$((sid_n + 1))
+  case "$LF$probe_out$LF" in *"${LF}BAD ${s}${LF}"*) bad_sid="$bad_sid $s" ;; esac
+  case "$LF$probe_out" in *"${LF}DIR ${s} /"*) ;; *) bad_sid="$bad_sid $s(state-dir-for)" ;; esac
 done
-if [ -z "$bad_sid" ]; then
+n_bad="$(printf '%s\n' "$probe_out" | grep -c '^BAD ')"; n_dir="$(printf '%s\n' "$probe_out" | grep -c '^DIR ')"
+if [ "$sid_n" -gt 0 ] && [ -z "$bad_sid" ] && [ "$n_bad" -eq 0 ] && [ "$n_dir" -eq "$sid_n" ]; then
   ok "전제: 이 락이 쓰는 sid 전부가 state_path.py 의 세션 이름 검사를 통과한다 (도출이 조용히 죽지 않는다)"
 else
-  no "전제: sid 도출 실패 —$bad_sid. 그 케이스들은 \$CODEX_YAML 이 비어 아무것도 재지 못한다(계측기 붕괴)"
+  no "전제: sid 도출 실패 —${bad_sid} (sid ${sid_n}개 · BAD ${n_bad}줄 · DIR ${n_dir}줄). 그 케이스들은 \$CODEX_YAML 이 비어 아무것도 재지 못한다(계측기 붕괴)"
 fi
+# 짝 — 첫 sid 하나는 명령줄 두 호출(session-id · state-dir-for)로 돈다. 묶은 확인은 명령줄의 main() 을 지나지 않는다.
+set -- $SIDS; pair_sid="${1:-}"; set --
+pair_id="$(DEVBREW_SPEC_DISTILL_SESSION_ID="$pair_sid" python3 "$PR/scripts/state_path.py" session-id 2>/dev/null)"; pair_id_rc=$?
+pair_dir="$(dir_of "$pair_sid" "$SPEC_DOC")"; pair_dir_rc=$?
+assert_eq "$pair_id_rc $pair_dir_rc" "0 0" "전제 짝: 명령줄 두 호출(session-id · state-dir-for)이 종료 코드 0 으로 끝난다"
+pair_cli="$pair_id|$pair_dir"
+scratch_re="$(printf '%s' "$SCRATCH" | sed -E 's/[][\.*^$+?(){}|]/\\&/g')"
+assert_grep "$pair_cli" "^${pair_sid}[|]${scratch_re}/${pair_sid}/\.claude/spec-distill/\.docreview/SKILL-[0-9a-f]{16}\$" \
+  "전제 짝: 명령줄의 session-id 는 sid 그대로를, state-dir-for 는 <홈>/.claude/spec-distill/.docreview/SKILL-<16자> 를 낸다"
+assert_eq "$pair_cli" "${pair_sid}|$(printf '%s\n' "$probe_out" | sed -n "s/^DIR ${pair_sid} //p")" \
+  "전제 짝: 명령줄 결과(<sid>|<자리>)가 묶은 확인의 같은 sid 결과와 글자까지 같다"
 
 plant_stale() {   # plant_stale <path>
   printf 'findings:\n  - agent: codex-reviewer\n    ref: s1\n    layer: 2\n    category: placeholder\n    anchor: "#12-files-to-modify"\n    disposition: decide\n    summary: "%s"\n    evidence: null\nmeta:\n  codex_failed: false\n  exit_code: 0\n' "$STALE_MARK" > "$1"
@@ -445,7 +470,7 @@ fi
 # **파일 이름이 같다** — 이름표(stem)만으로 갈리면 도출에서 문서 경로가 빠져도 통과한다.
 # 텍스트가 아니라 실행 결과로 판정한다: 블록을 잘라 이어 붙이고 끝에 관측 줄 하나를 단다.
 INPUT="$SCRATCH/input.sh"
-# `## 입력` 절에는 후보 펜스(spec-distill 3.0.0)가 먼저 온다 — 첫 블록이 아니라 줄머리 `STATE_DIR=` 대입을 담은
+# `## 입력` 절에는 후보 펜스가 먼저 온다 — 첫 블록이 아니라 줄머리 `STATE_DIR=` 대입을 담은
 # 첫 블록을 고른다. 그런 블록이 없으면 아래 추출 검사가 RED 다.
 awk '
   /^## 입력$/ {ins=1; next}
