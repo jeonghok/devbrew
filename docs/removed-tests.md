@@ -29,3 +29,6 @@
 - 2026-11-28 · plugins/quality-gates/tests/harness/agent_stub.py · 지키던 것: 테스트 도구 자신의 파싱 · 스키마 단언(제품 아님) · docs/testing.md 「가짜 응답은 쓰지 않는다」 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
 - 2026-11-28 · plugins/quality-gates/tests/test_readme_scope_reconcile.sh · :27–30 · :44–46 · 지키던 것: README 구성 표 네 행 전체 · codex 비용 문장 · 옛 비용 문구 부재 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
 - 2026-11-28 · plugins/quality-gates/tests/test_artifact_critique_truths.sh · :26–39 · 지키던 것: 줄 길이는 지키는 동작이 없다 · README 는 사람만 읽는 글 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_skill_orchestration.sh · :48 · 지키던 것: 낮춘 지적 게이트의 「그대로 둔다」 라벨 · 판정: 둘째 줄(같은 것을 다른 테스트가 지킨다) · 지금 지키는 것: plugins/quality-gates/tests/test_lowered_gate_wiring.sh :63 · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_plain_qg_templates.sh · :26–29 · :33 · :35 · 지키던 것: 낮춘 지적 질문이 한국어이고 하나다 · 판정: 둘째 줄(같은 것을 다른 테스트가 지킨다) · 지금 지키는 것: plugins/quality-gates/tests/test_lowered_gate_wiring.sh case_step45_gate · plugins/quality-gates/tests/test_skill_orchestration.sh :37–41 · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_plain_qg_templates.sh · README 단언(:61–63 · :69–78) · 지키던 것: 질문 · 완료 보고 · 범위 줄이 한국어 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
