@@ -286,23 +286,34 @@ next_round() {   # next_round <state-dir> <doc-for-this-round> [extra-quote]  �
   py docreview_state.py observe-diff --state-dir "$d" > "$d/obs$n.json"
   echo "$d/diff$n.json"
 }
-case_r1_template_isolated() {   # r1 템플릿: 두 번째 r1 은 템플릿을 복사하고, 복사본은 서로 · 템플릿과 상태를 나누지 않는다
-  local DOCREVIEW_R1_TEMPLATES t a b o
-  t="$(mktemp -d -t docreview-r1tpl-XXXXXX)" || { no "r1 템플릿: 폴더를 만들지 못했다"; return; }
-  DOCREVIEW_R1_TEMPLATES="$t"
+_r1_meta_stamp() {   # _r1_meta_stamp <templates> → .meta 마다 (inode, 수정 시각 ns) — 새로 짓기 길만 .meta 를 다시 쓴다
+  python3 -c 'import glob, os, sys; print([(os.stat(p).st_ino, os.stat(p).st_mtime_ns) for p in sorted(glob.glob(sys.argv[1] + "/*.meta"))])' "$1"
+}
+case_r1_template_isolated() {   # r1 템플릿: 둘째 · 셋째 r1 은 템플릿을 복사하고, 앞 원장에 쓴 것이 뒤 복사본 · 템플릿에 새지 않는다
+  local DOCREVIEW_R1_TEMPLATES w a b c o tpl m0 n
+  w="$(mktemp -d -t docreview-r1tpl-XXXXXX)" || { no "r1 템플릿: 폴더를 만들지 못했다"; return; }
+  DOCREVIEW_R1_TEMPLATES="$w/t"; mkdir -p "$w/t"
   a="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
-  b="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" 2>"$t/b.err")"
-  assert_eq "$(ls "$t" | grep -c '\.meta$')" "1" "r1 템플릿: 같은 프로필 · 문서의 r1 두 번에 템플릿이 하나다"
-  assert_eq "$(grep -c '^\[cases\.sh\] r1 템플릿' "$t/b.err")" "0" "r1 템플릿: 두 번째 r1 은 알림 없이 템플릿을 복사한다(복사에 실패해 새로 지은 것이 아니다)"
-  next_round "$a" "$FX/design-sample.md" >/dev/null
-  printf '\nA_ONLY_q4\n' >> "$a/src/design-sample.md"
-  assert_eq "$(st_yaml "$a" 'st["round"]') $(st_yaml "$b" 'st["round"]')" "2 1" "r1 템플릿: A 의 라운드를 넘겨도 B 는 1라운드다"
-  assert_eq "$(grep -c A_ONLY_q4 "$b/src/design-sample.md")" "0" "r1 템플릿: A 의 문서 사본에 쓴 것이 B 에 없다"
-  assert_eq "$(ledger_doc "$b")" "$b/src/design-sample.md" "r1 템플릿: B 의 원장 문서는 B 안의 사본이다"
-  o="$(sed -n 2p "$t"/*.meta 2>/dev/null)"
-  assert_eq "$(grep -rlF "$t" "$b" | wc -l | tr -d ' ') $(grep -rlF "${o:-NO_ORIGIN}" "$b" | wc -l | tr -d ' ')" "0 0" \
-    "r1 템플릿: B 의 어느 파일에도 템플릿 폴더 · 원본 원장 폴더 경로가 없다"
-  rm -rf "$a" "$b" "$t"
+  for tpl in "$w/t"/r1-*; do [ -d "$tpl" ] && break; done
+  : > "$tpl/copy-witness"   # 템플릿에만 둔 표 — 복사 길을 탄 원장만 싣는다(새로 지은 원장에는 없다)
+  m0="$(_r1_meta_stamp "$w/t")"
+  next_round "$a" "$FX/design-sample.md" >/dev/null; printf '\nA_ONLY_q4\n' >> "$a/src/design-sample.md"
+  b="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" 2>"$w/b.err")"
+  next_round "$b" "$FX/design-sample.md" >/dev/null; printf '\nB_ONLY_q4\n' >> "$b/src/design-sample.md"
+  c="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" 2>"$w/c.err")"
+  assert_eq "$(ls "$w/t" | grep -c '\.meta$')" "1" "r1 템플릿: 같은 프로필 · 문서의 r1 세 번에 템플릿이 하나다"
+  assert_eq "$(cat "$w/b.err" "$w/c.err" | grep -c '^\[cases\.sh\] r1 템플릿')" "0" "r1 템플릿: 둘째 · 셋째 r1 은 알림을 내지 않는다"
+  assert_eq "$([ -f "$b/copy-witness" ] && echo b)$([ -f "$c/copy-witness" ] && echo c) $(_r1_meta_stamp "$w/t")" "bc $m0" \
+    "r1 템플릿: 둘째 · 셋째 r1 은 복사 길을 탔다(템플릿에만 둔 표를 싣고, 새로 짓기 길만 쓰는 .meta 는 그대로다)"
+  assert_eq "$(st_yaml "$a" 'st["round"]') $(st_yaml "$b" 'st["round"]') $(st_yaml "$c" 'st["round"]') $(st_yaml "$tpl" 'st["round"]')" "2 2 1 1" \
+    "r1 템플릿: A · B 의 라운드를 넘겨도 C 와 템플릿은 1라운드다"
+  n="$(grep -c A_ONLY_q4 "$b/src/design-sample.md") $(grep -c -e A_ONLY_q4 -e B_ONLY_q4 "$c/src/design-sample.md") $(grep -rlF -e A_ONLY_q4 -e B_ONLY_q4 "$w/t" | wc -l | tr -d ' ')"
+  assert_eq "$n" "0 0 0" "r1 템플릿: A 에 쓴 것이 B · C · 템플릿에, B 에 쓴 것이 C · 템플릿에 없다"
+  assert_eq "$(ledger_doc "$b") $(ledger_doc "$c")" "$b/src/design-sample.md $c/src/design-sample.md" "r1 템플릿: B · C 의 원장 문서는 저마다 안의 사본이다"
+  o="$(sed -n 2p "$w/t"/*.meta 2>/dev/null)"
+  assert_eq "$(grep -rlF "$w/t" "$b" "$c" | wc -l | tr -d ' ') $(grep -rlF "${o:-NO_ORIGIN}" "$b" "$c" | wc -l | tr -d ' ')" "0 0" \
+    "r1 템플릿: B · C 의 어느 파일에도 템플릿 폴더 · 원본 원장 폴더 경로가 없다"
+  rm -rf "$a" "$b" "$c" "$w"
 }
 case_r1_template_follows_doc_content() {   # r1 템플릿: 같은 경로의 문서가 바뀌면 새 내용으로 짓는다
   local DOCREVIEW_R1_TEMPLATES w a b
