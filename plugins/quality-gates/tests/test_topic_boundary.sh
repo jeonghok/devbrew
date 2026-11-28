@@ -25,19 +25,44 @@ sync_base() {   # 이미 맞으면 ref 를 건드리지 않는다(ref 이동 · 
 }
 rt() { sync_base; bash "$RT" "$@"; }
 
-new_repo() {   # 빈 리포 + main 두 커밋(둘째가 $KEY 의 선언 대상 경로). CWD = 리포
-  # AC16 은 선언이 가리키는 경로가 실재해야 "ok" 로 간다 — $KEY 의 경로
-  # (docs/x-design.md) 를 여기서 만들어 두지 않으면 F1·F2·F3 의 "status: ok"
-  # 기대치가 원리적으로 도달 불가능해진다(모든 브랜치가 이 커밋의 후손이라
-  # working tree 에 상속된다).
-  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
+# 견본: 빈 리포 + main 두 커밋(둘째가 $KEY 의 선언 대상 경로). 파일에서 한 번 짓고 끝나면 지운다.
+# AC16 은 선언이 가리키는 경로가 실재해야 "ok" 로 간다 — $KEY 의 경로
+# (docs/x-design.md) 를 여기서 만들어 두지 않으면 F1·F2·F3 의 "status: ok"
+# 기대치가 원리적으로 도달 불가능해진다(모든 브랜치가 이 커밋의 후손이라
+# working tree 에 상속된다).
+_TB_TEMPLATE=$(mktemp -d) || exit 1
+trap 'rm -rf "$_TB_TEMPLATE"' EXIT
+( cd "$_TB_TEMPLATE" || exit 1
   git init -q .
   git config user.email t@t.test; git config user.name tester
   git checkout -q -b main
   echo r0 > f.txt; git add f.txt; git commit -qm r0
   mkdir -p docs; echo '# design' > docs/x-design.md
   git add docs/x-design.md; git commit -qm "add design doc"
+) || exit 1
+
+new_repo() {   # 견본을 새 자리에 복사한다(빈 리포 + main 두 커밋). CWD = 리포
+  REPO=$(mktemp -d) || exit 1
+  cp -R "$_TB_TEMPLATE/." "$REPO/" || exit 1
+  cd "$REPO" || exit 1
   sync_base
+}
+
+# ── 준비물 사본 격리: 한 사본에 더한 커밋이 다음 사본에 없고, 사본의 .git 이 견본 경로를 담지 않는다 ──
+#    견본 경로는 두 꼴(받은 꼴 · 링크를 푼 실제 경로 — macOS 의 /tmp → /private/tmp)로 찾는다.
+case_new_repo_copies_are_isolated() {
+  new_repo
+  echo iso > iso.txt; git add iso.txt; git commit -qm iso
+  local sha; sha=$(git rev-parse HEAD)
+  cleanup
+  new_repo
+  assert_eq "$(git rev-list --count HEAD 2>/dev/null)" "2" "사본 격리: 새 사본은 main 두 커밋 레포다(양의 짝)"
+  git cat-file -e "$sha" 2>/dev/null
+  assert_eq "$?" "1" "사본 격리: 앞 사본에 더한 커밋이 새 사본에 없다"
+  local real; real=$(cd "$_TB_TEMPLATE" && pwd -P)
+  assert_eq "$({ grep -rlF "$_TB_TEMPLATE" .git; grep -rlF "$real" .git; } | grep -c .)" "0" \
+    "사본 격리: 새 사본의 .git 에 견본 경로가 없다(두 꼴 모두)"
+  cleanup
 }
 
 decl_commit() {   # <파일> <내용> <메시지> — 토픽 선언 트레일러를 단 커밋
@@ -254,23 +279,8 @@ Spec: docs/x-design.md#pr2"
   cleanup
 }
 
-# ── nkeys 추출 정합 1/2: 진짜 트레일러의 다른 키는 여전히 잡는다 (약화 아님) ──
-#    F7 과 같은 모양(빈 줄 + `Spec: <다른 키>`)이지만, 이 케이스는 명시적으로
-#    「--grep 계열로 갈아도 진짜 트레일러 다른-키 검출력이 그대로다」를 잠근다 —
-#    F2 가 nkeys 추출기를 트레일러 atom 에서 원시-메시지 매치로 바꾼 회귀 락이다.
-case_nkeys_grep_family_catches_genuine_trailer() {
-  new_repo
-  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
-  echo b1 > b.txt; git add b.txt
-  git commit -qm "b1
-
-Spec: docs/x-design.md#pr2"
-  local out; out=$(rt resolve "$KEY")
-  assert_eq "$(field status "$out")" "declaration-invalid" "nkeys: 진짜 트레일러의 다른 키는 여전히 declaration-invalid"
-  cleanup
-}
-
-# ── nkeys 추출 정합 2/2: 소문자 spec: 트레일러는 거짓 declaration-invalid 를 안 낸다 ──
+# ── nkeys 추출 정합: 소문자 spec: 트레일러는 거짓 declaration-invalid 를 안 낸다 ──
+#    짝: 진짜 트레일러의 다른 키는 declaration-invalid 로 잡는다 — case_f7_mixed_keys_in_T.
 #    트레일러 atom(`%(trailers:key=Spec,valueonly)`)은 키를 대소문자 무시로 매치하므로
 #    이 케이스에서 nkeys=2 로 부풀려 거짓 declaration-invalid 를 낸다. --grep 계열
 #    (대소문자 구분)은 안 낸다. 구 구현(atom) 대비 RED 로 이빨을 증명한다.
@@ -783,12 +793,12 @@ case_base_unresolved_in_base_is_dash() {
   rm -rf "$nogit"
 }
 
-for c in case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
+for c in case_new_repo_copies_are_isolated \
+         case_f1_two_siblings case_f1_boundary case_f2_merged_ref_alive \
          case_all_declared_in_base case_orphan_tag_only case_f3_merged_ref_deleted \
          case_f4_undeclared_ancestor_included case_f5_fragment_discriminates \
          case_f5b_prefix_fragment_collision \
          case_f6_path_absent case_f7_mixed_keys_in_T \
-         case_nkeys_grep_family_catches_genuine_trailer \
          case_nkeys_lowercase_trailer_no_false_positive \
          case_f8_seal_first_then_maximal \
          case_seal_on_topic_yes case_seal_off_topic_excludes_commits \
