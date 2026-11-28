@@ -69,6 +69,10 @@ Error: authentication failed: invalid API key
 EOF
 check "auth error in stderr" "$TMP/empty.jsonl" "$TMP/auth-err.txt" 'reason: auth_error_in_stderr'
 
+# Fixture 5b: exit ≠ 0 의 모양 — 빈 stdout · 빈 stderr(옛 test_failure_injection.sh 1번)
+: > "$TMP/exit1.jsonl"; : > "$TMP/exit1.err"
+check "exit-1 shape (empty stdout + empty stderr)" "$TMP/exit1.jsonl" "$TMP/exit1.err" 'reason: missing_result'
+
 # Fixture 6: exit-code override (timeout scenario — empty stdin, exit 124, reason override)
 : > "$TMP/empty-for-timeout.jsonl"
 output="$(python3 "$PARSER" \
