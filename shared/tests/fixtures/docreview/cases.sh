@@ -215,7 +215,7 @@ st_yaml() {   # st_yaml <state-dir> <python-expr over st>   — heredoc-in-$() �
 }
 # ── r1 템플릿 길 — DOCREVIEW_R1_TEMPLATES(폴더)가 비지 않았을 때만. 같은 키의 1라운드 원장을 한 번 짓고 그 뒤로는 복사한다 ──
 # 템플릿 폴더의 꼴: <T>/r1-<crc>-<len>/(1라운드를 연 원장 폴더의 사본)와 <T>/r1-<crc>-<len>.meta(1행 키 글 · 2행 원본
-# 원장 폴더 · 3행 원본 상태 파일의 수정 시각 ns). .meta 는 폴더를 다 옮긴 뒤 마지막에 쓴다 — .meta 가 없으면 템플릿도 없다.
+# 원장 폴더). .meta 는 폴더를 다 옮긴 뒤 마지막에 쓴다 — .meta 가 없으면 템플릿도 없다.
 # begin-round 가 종료 코드 0 으로 끝난 원장만 템플릿이 된다(실패한 원장은 부를 때마다 새로 짓는다).
 _r1_note() { echo "[cases.sh] r1 템플릿을 쓰지 못했다 — $1. 새로 지은 원장을 쓴다" >&2; }   # _r1_note <까닭>
 _r1_key() {   # _r1_key <profile> <doc> → 키 글 한 줄(탭 이음). 프로필 · 문서를 읽지 못하면 종료 코드 1
@@ -223,37 +223,38 @@ _r1_key() {   # _r1_key <profile> <doc> → 키 글 한 줄(탭 이음). 프로�
   printf '%s\t%s\t%s\t%s\t%s' "$SCRIPTS" "$1" "$2" "$kp" "$kd"
 }
 _r1_save() {   # _r1_save <templates> <name> <key> <state-dir> — 원장 폴더를 템플릿으로 둔다. 쓰지 못하면 남긴 것을 지우고 1
-  local t="$1/$2.tmp.$$" ns
+  local t="$1/$2.tmp.$$"
   { mkdir -p "$1" && rm -rf "$1/$2.meta" "$1/$2" "$t" && cp -R "$4" "$t" && mv "$t" "$1/$2" \
-    && ns="$(python3 -c 'import os, sys; print(os.stat(sys.argv[1]).st_mtime_ns)' "$4/docreview-state.md")" \
-    && printf '%s\n%s\n%s\n' "$3" "$4" "$ns" > "$1/$2.meta"; } 2>/dev/null && return 0
+    && printf '%s\n%s\n' "$3" "$4" > "$1/$2.meta"; } 2>/dev/null && return 0
   rm -rf "$t" "$1/$2" "$1/$2.meta" 2>/dev/null; return 1
 }
 # 복사본의 원장을 엔진의 load_state · save_state 로 다시 적는다(손으로 고치면 원장 손상으로 읽힌다) — 문서 경로의 원본 폴더
-# 부분만 새 폴더로 바꾸고, 1라운드의 시작 표식이 정수면 (복사본 상태 파일의 수정 시각 − 원본 상태 파일의 수정 시각)만큼
-# 옮긴다(덮어쓰지 않는다 — 없거나 정수가 아닌 표식은 그대로 둔다). 인자: <SCRIPTS> <새 폴더> <원본 폴더> <원본 수정 시각 ns>.
+# 부분만 새 폴더로 바꾼다. 1라운드의 시작 표식이 정수면 begin-round 와 같은 차례로 다시 찍는다 — 한 번 저장하고, 방금 쓴
+# 복사본 상태 파일의 수정 시각을 표식으로 두고, 다시 저장한다(원본의 시각에서 옮기지 않는다 — 없거나 정수가 아닌 표식은
+# 그대로 둔다). 인자: <SCRIPTS> <새 폴더> <원본 폴더>.
 _R1_REWRITE='import os, sys
 sys.path.insert(0, sys.argv[1])
 import docreview_state as ds
-new, old, ns = sys.argv[2], sys.argv[3], int(sys.argv[4])
+new, old = sys.argv[2], sys.argv[3]
 st = ds.load_state(new)
 doc = st.get("doc")
 if not (old and isinstance(doc, str) and doc.startswith(old + "/")):
     sys.exit(3)
 st["doc"] = new + doc[len(old):]
+ds.save_state(new, st)
 rd = (st.get("rounds") or {}).get("1")
 if isinstance(rd, dict) and type(rd.get("started_mtime_ns")) is int:
-    rd["started_mtime_ns"] += os.stat(ds.state_path(new)).st_mtime_ns - ns
-ds.save_state(new, st)
+    rd["started_mtime_ns"] = os.stat(ds.state_path(new)).st_mtime_ns
+    ds.save_state(new, st)
 '
 _r1_templated() {   # _r1_templated <profile> <doc> — r1 과 같은 계약(1라운드를 연 상태 폴더를 한 번 낸다 · mk_state 실패면 1)
-  local T="${DOCREVIEW_R1_TEMPLATES:-}" key c name="" o ns n d s rc
+  local T="${DOCREVIEW_R1_TEMPLATES:-}" key c name="" o n d s rc
   if key="$(_r1_key "$1" "$2" 2>/dev/null)"; then
     c="$(printf '%s' "$key" | cksum)"; name="r1-${c%% *}-${c##* }"
     if [ -f "$T/$name.meta" ] && [ "$(sed -n 1p "$T/$name.meta" 2>/dev/null)" = "$key" ]; then
-      o="$(sed -n 2p "$T/$name.meta")"; ns="$(sed -n 3p "$T/$name.meta")"
+      o="$(sed -n 2p "$T/$name.meta")"
       if n="$(mktemp -d -t docreview-XXXXXX)" && cp -R "$T/$name/." "$n/" 2>/dev/null; then
-        if python3 -c "$_R1_REWRITE" "$SCRIPTS" "$n" "$o" "$ns" >/dev/null 2>&1; then echo "$n"; return 0; fi
+        if python3 -c "$_R1_REWRITE" "$SCRIPTS" "$n" "$o" >/dev/null 2>&1; then echo "$n"; return 0; fi
         _r1_note "원장을 다시 적지 못했다"
       else _r1_note "복사하지 못했다"; fi
       if [ -n "$n" ]; then rm -rf "$n"; fi
@@ -325,6 +326,29 @@ case_r1_template_round_start_after_call() {   # r1 템플릿: 복사본의 라�
   assert_eq "$(python3 -c 'import os, sys; print(int(sys.argv[1]) > os.stat(sys.argv[2]).st_mtime_ns)' \
       "$(st_yaml "$b" 'st["rounds"]["1"]["started_mtime_ns"]')" "$w/before")" "True" \
     "r1 템플릿(시작): 복사본의 라운드 시작 표식이 r1 을 부르기 전에 쓴 파일보다 뒤다(새로 지은 원장과 같다)"
+  rm -rf "$b" "$w"
+}
+_R1_SHIFT_MARK='import sys
+sys.path.insert(0, sys.argv[1])
+import docreview_state as ds
+st = ds.load_state(sys.argv[2])
+st["rounds"]["1"]["started_mtime_ns"] -= int(sys.argv[3])
+ds.save_state(sys.argv[2], st)
+'
+case_r1_template_round_start_late_second_save() {   # r1 템플릿: 원본의 둘째 저장이 첫 저장보다 한참 늦어도 복사본의 라운드 시작은 r1 을 부르기 전에 쓴 파일보다 뒤다
+  local DOCREVIEW_R1_TEMPLATES w a b tpl
+  w="$(mktemp -d -t docreview-r1tpl-XXXXXX)" || { no "r1 템플릿(늦은 저장): 폴더를 만들지 못했다"; return; }
+  DOCREVIEW_R1_TEMPLATES="$w/t"; mkdir -p "$w/t"
+  a="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; rm -rf "$a"
+  for tpl in "$w/t"/r1-*; do [ -d "$tpl" ] && break; done
+  # 템플릿의 시작 표식을 10초 앞으로 — 원본의 첫 저장(표식)과 둘째 저장 사이가 10초 벌어진 원장과 같다
+  python3 -c "$_R1_SHIFT_MARK" "$SCRIPTS" "$tpl" 10000000000 || no "r1 템플릿(늦은 저장): 템플릿의 표식을 옮기지 못했다"
+  : > "$w/before"
+  b="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" 2>"$w/err")"
+  assert_eq "$(grep -c '^\[cases\.sh\] r1 템플릿' "$w/err")" "0" "r1 템플릿(늦은 저장): 두 번째 r1 은 알림 없이 템플릿을 복사한다"
+  assert_eq "$(python3 -c 'import os, sys; print(int(sys.argv[1]) > os.stat(sys.argv[2]).st_mtime_ns)' \
+      "$(st_yaml "$b" 'st["rounds"]["1"]["started_mtime_ns"]')" "$w/before")" "True" \
+    "r1 템플릿(늦은 저장): 복사본의 라운드 시작 표식이 r1 을 부르기 전에 쓴 파일보다 뒤다(원본의 저장 간격을 빼지 않는다)"
   rm -rf "$b" "$w"
 }
 case_r1_template_unusable_falls_back() {   # r1 템플릿: 템플릿 폴더를 쓸 수 없으면 새로 짓고 한 줄 알린다
