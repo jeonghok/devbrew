@@ -67,11 +67,6 @@ section_window() {
   sed -n "$((start_line + 1)),$((end_line - 1))p" "$SKILL"
 }
 
-# "Codex skip 안내" 섹션 전체(그 아래 새 서브섹션 헤딩 직전까지) — Task 12가 넣은
-# 배너 문구용 윈도우.
-SKIP_WINDOW="$(section_window '^#### Codex skip 안내')" \
-  || { echo "FAIL: 'Codex skip 안내' 섹션을 찾지 못했다"; exit 1; }
-
 # "codex 결과 판정" 서브섹션 — 이번 태스크(Step 3)가 추가하는 절차 전용 윈도우.
 # 아직 추가되지 않았으면 section_window가 실패해 빈 문자열을 남긴다(의도된 RED).
 RESULT_WINDOW="$(section_window '^#### codex 결과 판정')"
