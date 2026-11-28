@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # AC9/AC10 (v2.13.0) — README fan-out consent 게이트 주장 whole-file reconcile
-# + §166 3-tier 정합 + prerequisites. negative(게이트 주장 부재) + positive(재계산
-# max fan-out 존재 + 3-tier + optional deps).
+# + prerequisites. negative(게이트 주장 부재) + positive(두 공시 줄 · optional deps).
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 RM="$ROOT/plugins/quality-gates/README.md"
@@ -23,11 +22,10 @@ present "리뷰어 상한 없이 두 공시 줄"  '리뷰어 상한 없이'
 present "끝 줄(다시 부른 수)"      'dispatch 가 모두 돌아온 뒤의 끝 줄'
 present "P22 transparency-기반 restate" 'transparency'
 
-echo "== AC10: 리뷰어 구성 표 + prerequisites (v10 — spec §2 · AC11) =="
+echo "== AC10: prerequisites (AC11) =="
 present "prereq: optional decl (body-unique)" 'Prerequisites (optional dependency)'
 present "prereq: pr-review-toolkit named (body-unique)" 'pr-review-toolkit`(code-reviewer'
 gone    "prereq: feature-dev 없음 (AC11 — code-architect 를 부르지 않는다)" 'feature-dev'
-
 
 echo; echo "readme-scope-reconcile: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
