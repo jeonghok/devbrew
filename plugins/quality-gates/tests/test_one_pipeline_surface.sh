@@ -55,6 +55,13 @@ case_old_surface_absent() {
       assert_file_absent_ci "$f" "$tok" "$(basename "$f") 에 '$tok' 이 없다(대소문자 무관)"
     done
   done
+
+  # 옛 판정값 일곱은 낱말 경계로 다시 잰다 — 위 PASS/FAIL 정규식이 비켜 가는 `FAIL:` 꼴과
+  # 한 번도 실재하지 않은 셋까지. 코퍼스에는 SKILL 이 읽게 하는 references/e2e.md 도 든다.
+  for f in "$SKILL" "$REF" "$PLUGIN_ROOT/references/e2e.md"; do
+    assert_file_absent "$f" '\b(PASS|FAIL|SKIP_WITH_EVIDENCE|NEEDS_RESOLUTION|PARTIAL|INCONCLUSIVE|DEGRADED_VERDICT)\b' \
+      "$(basename "$f") 에 옛 판정값 일곱이 낱말로 없다"
+  done
 }
 
 case_new_skeleton_present() {
