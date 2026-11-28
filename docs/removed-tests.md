@@ -20,3 +20,7 @@
 - 2026-11-28 · plugins/quality-gates/tests/test_artifact_adversarial_frontmatter.sh · :10 · 지키던 것: color 8색 · 판정: 둘째 줄(같은 것을 다른 테스트가 지킨다) · 지금 지키는 것: plugins/quality-gates/tests/test_agent_color.sh · PR #<번호>
 - 2026-11-28 · plugins/quality-gates/tests/test_codex_backward_compat.sh · Check 1 · 지키던 것: 스위치를 켜면 detect_codex 가 skip_reason: kill_switch · 판정: 둘째 줄(같은 것을 다른 테스트가 지킨다) · 지금 지키는 것: plugins/quality-gates/tests/test_detect_codex.sh Case 3 · PR #<번호>
 - 2026-11-28 · plugins/quality-gates/tests/test_codex_backward_compat.sh · Check 2a · 2b · 지키던 것: SKILL 의 codex 각도 앵커 · scope 무관 · 판정: 둘째 줄(같은 것을 다른 테스트가 지킨다) · 지금 지키는 것: plugins/quality-gates/tests/test_codex_dispatch_invariant.sh 1 · 2 · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_isolation.sh · T3 · T5 · 지키던 것: (테스트가 스스로 rm -rf 한 뒤를 봄 — setup-qg 동작 없음) · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_isolation.sh · T4 · T6 · 지키던 것: 두 SID 가 서로의 폴더를 안 건드림 · 같은 SID 다시 실행은 새로 시작 · 판정: 둘째 줄(같은 것을 다른 테스트가 지킨다) · 지금 지키는 것: plugins/quality-gates/tests/test_entry_safety_e1_e6.sh E1 · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_worktree.sh · T3 · T4 · 지키던 것: git 자신(rev-parse · diff · .git 이 파일)의 동작 — 플러그인이 지키는 것이 없다 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_worktree.sh · T5 · 지키던 것: security-reviewer dispatch 가 project_dir 를 싣는다 · 판정: 둘째 줄(같은 것을 다른 테스트가 지킨다) · 지금 지키는 것: plugins/quality-gates/tests/test_v_requirements.sh case_v12 · PR #<번호>

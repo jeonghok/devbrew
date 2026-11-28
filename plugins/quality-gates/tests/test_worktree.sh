@@ -39,6 +39,10 @@ make_repo_with_worktree() {
   printf '%s|%s|%s\n' "$root/repo" "$root/worktree" "$branch"
 }
 
+inode_of() {
+  stat -f %i "$1" 2>/dev/null || stat -c %i "$1" 2>/dev/null
+}
+
 # --- Test 1: worktree setup writes state inside worktree, not origin repo ---
 IFS='|' read -r REPO WT BRANCH < <(make_repo_with_worktree)
 unset CLAUDE_CODE_SESSION_ID
@@ -68,36 +72,36 @@ else
   no "T1c: state file missing session_id frontmatter"
 fi
 
-rm -rf "$(dirname "$REPO")"
-
-# --- Test 3: git operations read worktree context ---
-IFS='|' read -r REPO WT BRANCH < <(make_repo_with_worktree)
-
-WT_BRANCH=$(cd "$WT" && git rev-parse --abbrev-ref HEAD)
-if [[ "$WT_BRANCH" == "$BRANCH" ]]; then
-  ok "T3a: git rev-parse returned worktree branch ($BRANCH)"
+# 같은 SID 로 원 레포에서도 setup — worktree 의 상태가 원 레포를 막지 않는다.
+(cd "$REPO" && HOME="$REPO" "$SETUP" --session-id "$SID" >/dev/null 2>&1)
+RC_REPO=$?
+WT_FILE="$WT/.claude/quality-gates/$SID/result.md"
+REPO_FILE="$REPO/.claude/quality-gates/$SID/result.md"
+if [[ "$RC_REPO" -eq 0 && -f "$REPO_FILE" ]]; then
+  ok "T1d: 같은 SID 로 원 레포의 setup 도 된다(원 레포가 worktree 상태를 보지 않는다)"
 else
-  no "T3a: got '$WT_BRANCH', expected '$BRANCH'"
+  no "T1d: 같은 SID 로 원 레포의 setup 이 안 됐다(rc=$RC_REPO) — 격리가 깨졌다"
 fi
 
-# Stage a change in worktree; diff should observe it
-echo "extra line" >> "$WT/README.md"
-DIFF_BYTES=$(cd "$WT" && git diff HEAD | wc -c)
-if [[ "$DIFF_BYTES" -gt 0 ]]; then
-  ok "T3b: git diff HEAD sees worktree-local changes"
+WT_INODE=$(inode_of "$WT_FILE")
+REPO_INODE=$(inode_of "$REPO_FILE")
+if [[ -n "$WT_INODE" && -n "$REPO_INODE" && "$WT_INODE" != "$REPO_INODE" ]]; then
+  ok "T1e: 두 상태 파일이 물리적으로 다르다(inode 다름)"
 else
-  no "T3b: git diff HEAD empty in worktree"
+  no "T1e: 두 상태 파일이 inode 를 같이 쓰거나 읽을 수 없다"
 fi
 
-rm -rf "$(dirname "$REPO")"
-
-# --- Test 4: .git in worktree is a file (gitdir pointer), not a directory ---
-IFS='|' read -r REPO WT BRANCH < <(make_repo_with_worktree)
-if [[ -f "$WT/.git" && ! -d "$WT/.git" ]]; then
-  ok "T4: worktree .git is a file pointer (any -d \".git\" check would skip worktree)"
+# 거꾸로 — 새 SID 로 원 레포 먼저, 그다음 worktree.
+SID2="wt1session02"
+(cd "$REPO" && HOME="$REPO" "$SETUP" --session-id "$SID2" >/dev/null 2>&1)
+(cd "$WT" && HOME="$WT" "$SETUP" --session-id "$SID2" >/dev/null 2>&1)
+RC_WT=$?
+if [[ "$RC_WT" -eq 0 && -f "$WT/.claude/quality-gates/$SID2/result.md" ]]; then
+  ok "T1f: 원 레포 먼저 돈 같은 SID 로 worktree 의 setup 도 된다(worktree 가 원 레포 상태를 보지 않는다)"
 else
-  no "T4: worktree .git layout unexpected"
+  no "T1f: 원 레포 먼저 돈 같은 SID 로 worktree 의 setup 이 안 됐다(rc=$RC_WT)"
 fi
+
 rm -rf "$(dirname "$REPO")"
 
 # --- Test 8: agent.md Inputs contract drift guard (AC2, T8) ---
@@ -122,28 +126,6 @@ elif grep -q '\$REPO_ROOT/plugins/quality-gates' "$PLUGIN_DIR/scripts/run_codex_
 else
   ok "T7: codex-reviewer migrated to script; script uses \${CLAUDE_PLUGIN_ROOT} (devbrew-portable)"
 fi
-
-# --- Test 5: SKILL.md prose contains project_dir in agent dispatch blocks ---
-# v1.32.0 reverts to subagent_type-anchored search for ALL 4 reviewers
-# (uniform pattern; no italic-bold heading required). Previous heading-
-# anchored fallback for security-reviewer is removed (drift-prone).
-SKILL_MD="$PLUGIN_DIR/skills/quality-pipeline/SKILL.md"
-T5_FAIL=0
-# PR4a: adversarial dropped. code-recritic (Step 3.5) delivers project_dir as a
-# `<project_dir>` slot, not a `project_dir:` field — shared/tests/test_agent_input_slots.sh
-# measures that delivery.
-for name in security-reviewer; do
-  if ! awk -v name="quality-gates:$name" '
-    $0 ~ name { found=NR }
-    found && NR <= found+15 && /project_dir:/ { ok=1; exit }
-    END { exit !ok }
-  ' "$SKILL_MD"; then
-    T5_FAIL=1
-    no "T5: SKILL.md dispatch for $name lacks project_dir"
-  fi
-done
-[[ "$T5_FAIL" -eq 0 ]] && ok "T5: SKILL.md propagates project_dir to the security-reviewer dispatch"
-
 
 # --- Test 9: REMOVED — v1.32.0 schema intentionally has no project_dir field ---
 # project_dir is now a per-dispatch runtime parameter threaded by the SKILL
