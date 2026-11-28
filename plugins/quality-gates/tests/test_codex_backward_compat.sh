@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
-# AC7 (revised) — structural verification that codex-disabled paths
-# behave identically to pre-feature state.
+# 실패 원장(codex-blessed-red.txt)의 소비자 — 원장에 등재된 red 를 다시 돌려 확인한다.
 #
-# Four checks:
-#   1. Probe with kill switch returns false (uses AC1 test's logic)
-#   2. SKILL.md documents codex as a Tier B availability-floor (dispatched on
-#      every non-trivia iteration when detected, regardless of scope/depth) with
-#      an unavailable-degrade path (v2.13.0 contract; supersedes the pre-v2.11.0
-#      standard/deep-only gate + v1.10.x byte-equivalent fallback).
+# 확인 둘(번호는 셋째 · 넷째 그대로 부른다):
 #   3. 원장(codex-blessed-red.txt)에 등재된 red 만 다시 돌려 지문을 대조한다 —
 #      등재되지 않은 실패는 전체 러너가 그 테스트를 직접 돌려 자기 `FAILED` 줄로 낸다.
 #   4. 임시 사본에 이 파일 자신과 가짜 테스트 · 가짜 원장을 두고 셋째 확인만 돌려
-#      지문 일치 · 불일치 · stale 갈래를 본다(`CODEX_COMPAT_INNER=1` 안쪽 실행은 셋째만 돈다).
+#      지문 일치 · 불일치 · stale · 빈 지문 · 자기 등재 갈래를 본다(`CODEX_COMPAT_INNER=1`
+#      안쪽 실행은 셋째만 돈다). 실제 원장이 비어도(등재 0건) 넷째 확인은 가짜 테스트를 띄운다.
 
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,48 +16,9 @@ pass=0; fail=0
 
 # 안쪽 실행(CODEX_COMPAT_INNER=1)은 셋째 확인만 돈다.
 INNER="${CODEX_COMPAT_INNER:-}"
-
-# Check 2 (v2.13.0 availability-floor contract): SKILL.md documents codex as a
-# Tier B availability-floor — dispatched every non-trivia iteration when
-# detect_codex is true, regardless of scope/depth, with an unavailable-degrade
-# path. (Supersedes the pre-v2.11.0 standard/deep-only gate + v1.10.x
-# byte-equivalent fallback, which no longer exist in the SKILL.)
-# Three sub-checks; all must pass. Anchors are body-unique (mutation-tested).
-SKILL_MD="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
-c2_fail=0
-if [[ -z "$INNER" ]]; then
-
-# 2a: SKILL.md documents codex as the 다른 전제 각도 (different-premise angle)
-if grep -qE '다른 전제 각도 — codex \(사용 가능하면 부른다' "$SKILL_MD"; then
-  : # sub-check pass
-else
-  echo "  FAIL: SKILL.md does not document codex as the 다른 전제 각도"
-  c2_fail=$((c2_fail + 1))
-fi
-
-# 2b: the availability-floor is unconditional regardless of scope/depth (NOT
-#     depth-gated — the semantics that superseded the old standard/deep-only gate)
-if grep -qE 'regardless of scope' "$SKILL_MD"; then
-  : # sub-check pass
-else
-  echo "  FAIL: SKILL.md does not state codex dispatches unconditionally, scope/depth-independent"
-  c2_fail=$((c2_fail + 1))
-fi
-
-# 2c: codex-unavailable path degrades gracefully (continue without codex)
-if grep -qE 'If codex is unavailable, continue without it' "$SKILL_MD"; then
-  : # sub-check pass
-else
-  echo "  FAIL: SKILL.md does not document the codex-unavailable degrade path"
-  c2_fail=$((c2_fail + 1))
-fi
-
-if [[ $c2_fail -eq 0 ]]; then
-  echo "  PASS: SKILL.md documents codex as the 다른 전제 각도 (all non-trivia depths) with unavailable-degrade"
-  pass=$((pass + 1))
-else
-  fail=$((fail + 1))
-fi
+# 표지가 바깥 실행에 새면 넷째 확인이 조용히 빠진다 — 출력 첫 줄로 보인다.
+if [[ -n "$INNER" ]]; then
+  echo "  NOTE: CODEX_COMPAT_INNER=1 — 셋째 확인만 돈다(넷째 확인을 건너뛴다)"
 fi
 
 # Check 3: 원장(codex-blessed-red.txt)에 등재된 red 만 다시 돌려 지문을 대조한다 —
@@ -109,6 +65,8 @@ if [[ ! -f "$LEDGER" ]]; then
   c3_add "원장 없음:$LEDGER"
 else
   # 원장은 별도 fd(3)로 읽는다 — 다시 돌리는 테스트가 표준 입력을 읽어도 남은 등재 줄을 먹지 못하게.
+  # 다시 돌리기가 표준 입력을 `/dev/null` 로도 막으므로, 넷째 확인의 가짜(`test_fake_red.sh` 의
+  # `cat >/dev/null`)는 fd 3 분리를 따로 가르지 못한다.
   while read -r b listed _rest <&3 || [[ -n "$b" ]]; do
     case "$b" in ''|'#'*) continue ;; esac
     listed_count=$((listed_count + 1))
@@ -170,6 +128,9 @@ if [[ -z "$INNER" ]]; then
   printf '%s\n' 'cat >/dev/null; echo "  ✗ red-a"; exit 1' > "$C4_TMP/tests/test_fake_red.sh"
   printf '%s\n' 'echo "  ✗ red-b"; exit 1' > "$C4_TMP/tests/test_fake_red2.sh"
   printf '%s\n' 'exit 0' > "$C4_TMP/tests/test_fake_green.sh"
+  printf '%s\n' 'echo quiet; exit 1' > "$C4_TMP/tests/test_fake_quiet.sh"
+  # 거절 갈래(빈 지문 · 자기 등재)에 등재할 지문 — 실제 지문 · 빈 지문과 겹치지 않는 고정 값.
+  C4_ANY_HEX='1111111111111111111111111111111111111111111111111111111111111111'
   # 지문은 안쪽이 잴 때와 같은 경로 치환을 받도록 이 파일의 fingerprint 로, 같은 임시 사본 경로에서 잰다.
   c4_inner() {   # 안쪽 원장 내용(표준 입력) → 출력 + 마지막 줄 `rc=<n>`
     cat > "$C4_TMP/tests/codex-blessed-red.txt"
@@ -194,8 +155,18 @@ if [[ -z "$INNER" ]]; then
     *"stale 등재"*"rc=1") : ;;
     *) c4_fail="${c4_fail}  FAIL: 다시 돌리는 갈래 — 통과하는 등재가 stale 등재로 실패하지 않았다"$'\n' ;;
   esac
+  out_d="$(printf '%s\n' "test_fake_quiet.sh $C4_ANY_HEX" | c4_inner)"
+  case "$out_d" in
+    *"빈지문"*"rc=1") : ;;
+    *) c4_fail="${c4_fail}  FAIL: 다시 돌리는 갈래 — 빈 지문이 빈지문으로 실패하지 않았다"$'\n' ;;
+  esac
+  out_e="$(printf '%s\n' "$SELF $C4_ANY_HEX" | c4_inner)"
+  case "$out_e" in
+    *"자기 등재"*"rc=1") : ;;
+    *) c4_fail="${c4_fail}  FAIL: 다시 돌리는 갈래 — 자기 등재가 자기 등재로 실패하지 않았다"$'\n' ;;
+  esac
   if [[ -z "$c4_fail" ]]; then
-    echo "  PASS: 다시 돌리는 갈래 — 지문 일치 · 불일치 · stale 을 가짜 원장으로 확인"
+    echo "  PASS: 다시 돌리는 갈래 — 지문 일치 · 불일치 · stale · 빈 지문 · 자기 등재를 가짜 원장으로 확인"
     pass=$((pass + 1))
   else
     printf '%s' "$c4_fail"

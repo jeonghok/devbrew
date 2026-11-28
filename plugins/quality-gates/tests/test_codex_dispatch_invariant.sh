@@ -73,4 +73,11 @@ for stale in 'codex_manifest.codex_available == false' 'codex_manifest.codex_ava
 done
 [ "$c5_bad" -eq 0 ] && ok "5: stale codex_manifest fallback prose absent (scope-driven rewrite)"
 
+# 6. codex 를 못 쓰면 빼고 계속 간다(옛 test_codex_backward_compat.sh Check 2c).
+if grep -qE 'If codex is unavailable, continue without it' "$SKILL"; then
+  ok "6: codex-unavailable degrade path documented"
+else
+  no "6: SKILL missing the codex-unavailable degrade path"
+fi
+
 finish
