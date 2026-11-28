@@ -216,11 +216,28 @@ st_yaml() {   # st_yaml <state-dir> <python-expr over st>   — heredoc-in-$() �
 # ── r1 템플릿 길 — DOCREVIEW_R1_TEMPLATES(폴더)가 비지 않았을 때만. 같은 키의 1라운드 원장을 한 번 짓고 그 뒤로는 복사한다 ──
 # 템플릿 폴더의 꼴: <T>/r1-<crc>-<len>/(1라운드를 연 원장 폴더의 사본)와 <T>/r1-<crc>-<len>.meta(1행 키 글 · 2행 원본
 # 원장 폴더). .meta 는 폴더를 다 옮긴 뒤 마지막에 쓴다 — .meta 가 없으면 템플릿도 없다.
+# 키: SCRIPTS 경로 · 프로필과 문서의 경로 · 내용 cksum · 엔진 .py 내용 cksum · r1 을 부를 때 내보내진 DEVBREW_DOCREVIEW_* 값.
 # begin-round 가 종료 코드 0 으로 끝난 원장만 템플릿이 된다(실패한 원장은 부를 때마다 새로 짓는다).
 _r1_note() { echo "[cases.sh] r1 템플릿을 쓰지 못했다 — $1. 새로 지은 원장을 쓴다" >&2; }   # _r1_note <까닭>
-_r1_key() {   # _r1_key <profile> <doc> → 키 글 한 줄(탭 이음). 프로필 · 문서를 읽지 못하면 종료 코드 1
-  local kp kd; kp="$(cksum < "$1")" && kd="$(cksum < "$2")" || return 1
-  printf '%s\t%s\t%s\t%s\t%s' "$SCRIPTS" "$1" "$2" "$kp" "$kd"
+_R1_ENGINE_SUM=""; _R1_ENGINE_FOR=""   # 엔진 .py 내용의 cksum 과 그것을 잰 SCRIPTS — _r1_engine_warm 이 셸마다 한 번 채운다
+_r1_engine_sum() {   # 엔진($SCRIPTS/*.py) 내용의 cksum 한 줄 — 이 셸에 같은 SCRIPTS 로 잰 값이 있으면 그것. 엔진을 읽지 못하면 1
+  if [ -n "$_R1_ENGINE_SUM" ] && [ "$_R1_ENGINE_FOR" = "$SCRIPTS" ]; then printf '%s' "$_R1_ENGINE_SUM"; return 0; fi
+  [ -r "$SCRIPTS/docreview_state.py" ] || return 1
+  cat "$SCRIPTS"/*.py | cksum
+}
+_r1_engine_warm() {   # 엔진 체크섬을 이 셸에서 재 둔다 — r1 은 $(…) 안에서 불려 거기서 잰 값은 부모로 돌아오지 않는다
+  if [ -n "$_R1_ENGINE_SUM" ] && [ "$_R1_ENGINE_FOR" = "$SCRIPTS" ]; then return 0; fi
+  if _R1_ENGINE_SUM="$(_r1_engine_sum 2>/dev/null)"; then _R1_ENGINE_FOR="$SCRIPTS"; else _R1_ENGINE_SUM=""; _R1_ENGINE_FOR=""; fi
+  return 0
+}
+_r1_env() {   # r1 을 부를 때 내보내진 DEVBREW_DOCREVIEW_* 의 「이름=값」(값은 %q 로 한 줄) — 엔진이 읽어 원장에 적는 값
+  local n q o=""
+  for n in $(compgen -e); do case "$n" in DEVBREW_DOCREVIEW_*) printf -v q '%q' "${!n}"; o="$o $n=$q" ;; esac; done
+  printf '%s' "$o"
+}
+_r1_key() {   # _r1_key <profile> <doc> → 키 글 한 줄(탭 이음). 프로필 · 문서 · 엔진을 읽지 못하면 종료 코드 1
+  local kp kd ke; kp="$(cksum < "$1")" && kd="$(cksum < "$2")" && ke="$(_r1_engine_sum)" || return 1
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s' "$SCRIPTS" "$1" "$2" "$kp" "$kd" "$ke" "$(_r1_env)"
 }
 _r1_save() {   # _r1_save <templates> <name> <key> <state-dir> — 원장 폴더를 템플릿으로 둔다. 쓰지 못하면 남긴 것을 지우고 1
   local t="$1/$2.tmp.$$"
@@ -267,11 +284,13 @@ _r1_templated() {   # _r1_templated <profile> <doc> — r1 과 같은 계약(1�
   echo "$d"
 }
 r1_templates_on() {   # 이 셸의 r1 을 템플릿 길로 켠다 — 이미 켜져 있으면 그대로 둔다. 종료 코드는 늘 0
+  _r1_engine_warm
   if [ -n "${DOCREVIEW_R1_TEMPLATES:-}" ]; then return 0; fi
   if _R1_TEMPLATES_OWN="$(mktemp -d -t docreview-r1tpl-XXXXXX)"; then DOCREVIEW_R1_TEMPLATES="$_R1_TEMPLATES_OWN"
   else _R1_TEMPLATES_OWN=""; echo "[cases.sh] r1 템플릿 폴더를 만들지 못했다 — 템플릿 없이 돈다" >&2; fi
   return 0
 }
+if [ -n "${DOCREVIEW_R1_TEMPLATES:-}" ]; then _r1_engine_warm; fi   # 바깥에서 켜고 들어온 셸(변이 행렬의 run_case)
 r1() {   # r1 <profile> <doc> → state dir with round 1 begun
   if [ -n "${DOCREVIEW_R1_TEMPLATES:-}" ]; then _r1_templated "$1" "$2"; return; fi
   local d s; d="$(mk_state "$2" "$1")" || return 1; s="$d/s1.json"; snap "$2" "$s"
@@ -325,6 +344,22 @@ case_r1_template_follows_doc_content() {   # r1 템플릿: 같은 경로의 문�
     || no "r1 템플릿(내용): 같은 경로의 문서가 바뀌었는데 낡은 템플릿을 받았다"
   assert_eq "$(ls "$w/t" | grep -c '\.meta$')" "2" "r1 템플릿(내용): 내용이 다르면 템플릿도 따로다"
   rm -rf "$a" "$b" "$w"
+}
+case_r1_template_key_engine_env() {   # r1 템플릿: 같은 템플릿 폴더에서 엔진 내용이나 DEVBREW_DOCREVIEW_* 값이 바뀌면 새로 짓는다
+  local DOCREVIEW_R1_TEMPLATES SCRIPTS="$SCRIPTS" w a b c e
+  w="$(mktemp -d -t docreview-r1tpl-XXXXXX)" || { no "r1 템플릿(키): 폴더를 만들지 못했다"; return; }
+  DOCREVIEW_R1_TEMPLATES="$w/t"; mkdir -p "$w/t" "$w/e"
+  cp "$SCRIPTS"/*.py "$w/e/" || no "r1 템플릿(키): 엔진 사본을 만들지 못했다"
+  SCRIPTS="$w/e"
+  a="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  printf '\n# 엔진 사본을 고친 줄\n' >> "$w/e/docreview_state.py"
+  b="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" 2>"$w/b.err")"
+  assert_eq "$(ls "$w/t" | grep -c '\.meta$') $(grep -c '^\[cases\.sh\] r1 템플릿' "$w/b.err")" "2 0" \
+    "r1 템플릿(키): 엔진 사본의 내용이 바뀌면 새 키로 새로 짓는다(옛 엔진이 지은 원장을 복사하지 않는다)"
+  c="$(DEVBREW_DOCREVIEW_DETECTORS=2 r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md" 2>"$w/c.err")"
+  assert_eq "$(ls "$w/t" | grep -c '\.meta$') $(st_yaml "$c" 'st["rounds"]["1"]["config"]["detectors"]["value"]')" "3 2" \
+    "r1 템플릿(키): r1 을 부를 때의 DEVBREW_DOCREVIEW_* 값이 다르면 새로 짓고, 원장이 그 값을 싣는다"
+  rm -rf "$a" "$b" "$c" "$w"
 }
 case_r1_template_round_start_after_call() {   # r1 템플릿: 복사본의 라운드 시작은 r1 을 부르기 전에 쓴 파일보다 뒤다
   local DOCREVIEW_R1_TEMPLATES w a b

@@ -47,10 +47,10 @@ if [ -z "$DOCREVIEW_PROF_SD" ] || [ ! -d "$DOCREVIEW_PROF_SD" ]; then
   no "사본 프로필 디렉토리 없음: '${DOCREVIEW_PROF_SD}' — 변이 행렬을 돌리지 못한다"; exit 1
 fi
 export DOCREVIEW_PROF_SD
-# r1 의 1라운드 원장은 키(엔진 사본 · 프로필 · 문서)마다 한 번 짓고 복사해 쓴다 — cases.sh 의 r1 템플릿 길.
+# r1 의 1라운드 원장은 키(엔진 사본의 경로 · 내용 · 프로필 · 문서 · DEVBREW_DOCREVIEW_* 값)마다 한 번 짓고 복사해 쓴다 — cases.sh 의 r1 템플릿 길.
 # 키에 엔진 사본의 경로가 들어 변이 사본은 깨끗한 사본의 템플릿을 받지 않는다. 폴더는 위 trap 이 함께 지운다.
 # 같은 변이 사본에서 같은 키의 둘째 r1 은 변이된 엔진이 첫째 r1 에 지은 원장의 복사본을 받는다 — 새로 지은
-# 둘째 r1 에서만(환경 변수 · 시계처럼 키 밖 입력이 달라야) 드러나는 init · begin-round 변이는 보이지 않는다.
+# 둘째 r1 에서만(시계처럼 키 밖 입력이 달라야) 드러나는 init · begin-round 변이는 보이지 않는다.
 # 그런 셀을 더하면 그 셀의 run_case 호출에서 DOCREVIEW_R1_TEMPLATES 를 비운다(run_case 는 비우지 않는다).
 DOCREVIEW_R1_TEMPLATES="$BASE_MUT/r1-templates"; mkdir -p "$DOCREVIEW_R1_TEMPLATES"
 export DOCREVIEW_R1_TEMPLATES
