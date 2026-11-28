@@ -26,7 +26,7 @@
 # 이 락은 처분의 «유무»를 재고 «종류」는 재지 않는다. reject 를 accept 로
 # 바꾸면 통과한다 — 종류의 정합은 소비자마다 자기 처분 행렬 테스트가 잰다:
 # `quality-gates/tests/test_synthesize_disposition.sh`(synthesize_findings.py) ·
-# `quality-gates/tests/test_synthesize_artifact_adjudication.py` ·
+# `quality-gates/tests/test_synthesize_artifact_findings.sh` ·
 # `shared/tests/test_docreview_route.sh`(docreview_route.py).
 # 단일 락을 지목하면 그 하나가 덮지 않는 나머지 소비자가 조용해진다(최종 리뷰 A/m3).
 #

@@ -9,3 +9,9 @@
 ```
 
 ## 항목
+
+- 2026-11-28 · plugins/quality-gates/tests/test_artifact_metadata.sh · 지키던 것: plugin.json 판 바닥 2.11 · CHANGELOG [2.11.0] · 옛 skill 이름 · README 낱말 둘 — 판은 내려가지 않는 값이라 바닥이 걸릴 일이 없고 건너뛴 판은 shared/tests/test_changelog_integrity.sh 가 잰다 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_cost_consent.sh (+ plugins/quality-gates/tests/harness/run_consent_gate.sh) · 지키던 것: 테스트 쪽 흉내 하네스가 마커 없을 때만 질문을 쓴다(플러그인 코드 0) — README 가 동의 게이트를 주장하지 않음은 test_gate_era_prose_absent.sh 가 잰다 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_impact_runtime_docs.sh · 지키던 것: major ≥3 · CHANGELOG [3.0.0] 섹션 · README 구조 트리 · 원칙 LD 줄 · 새 스크립트 셋 실행 비트 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: shared/tests/test_test_selection_bundle.sh (실행 비트) · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_readme_state_diagram_complete.sh · 지키던 것: README 도식 하나 · 표지 열 · 옛 표지 여덟 부재 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_synthesize_artifact_adjudication.py · 지키던 것: Ledger(items=closed) 가 미판정을 빼되 막음 · phase_synth 가 unadjudicated 1 · converged False · 판정: 둘째 줄(같은 것을 다른 테스트가 지킨다) · 지금 지키는 것: plugins/quality-gates/tests/test_synthesize_artifact_findings.sh · PR #<번호>

@@ -72,7 +72,7 @@ assert_file_absent "$RM" '`Retry` / `Accept and finish` / `Stop`' "AC6: README �
 assert_not_contains "$(flat "$RM")" '「고치고 다시 돌기」는 「적용」 항목만 고친다.' "AC6: README 에 고치기 라벨 문장이 없다"
 assert_not_contains "$(flat "$RM")" 'Retry 는 「적용」 항목만 고친다' "AC6: README 에 옛 라벨 문장이 없다"
 
-# ⑦ README 상태도가 같은 라벨을 부른다(질문 앵커 표지는 test_readme_state_diagram_complete.sh 가 잰다)
+# ⑦ README 상태도가 같은 라벨을 부른다
 assert_file_absent "$RM" '분류표\(항목마다 적용 / 제외' "AC6: README 상태도에 분류표 줄이 없다"
 assert_file_grep "$RM" '막는 지적 · 차등 defect → 묻지 않는다 — `## 고칠 목록` 을 result.md 에 남기고 e2e 로 간다$' "AC6(양의 짝): README 상태도가 묻지 않고 고칠 목록을 남긴다"
 assert_file_absent "$RM" 'Retry / Accept and finish / Stop' "AC6: README 상태도에 옛 라벨 나열이 없다"
