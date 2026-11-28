@@ -184,7 +184,7 @@ case_text_locks() {
   assert_contains "$P2W" '앱을 걷지 않고' "P2b: 범위 모드는 앱을 걷지 않는다(양성 짝)"
   assert_contains "$P2W" 'PR 코멘트를 달지 않는다' "P2b: 범위 모드는 PR 코멘트를 달지 않는다(양성 짝)"
   assert_not_contains "$(cat "$SK")" '범위 모드 갈래' "범위 모드의 끝내기 질문 갈래가 없다"
-  assert_not_contains "$(awk '/^\*\*P2b — /{f=1} /^\*\*리뷰 트리 /{f=0} f' "$SK")" '고치고 다시 돌지 않고' "P2b: 고치고 다시 돌지 않는다는 옛 갈래 안내가 없다"
+  assert_not_contains "$P2W" '고치고 다시 돌지 않고' "P2b: 고치고 다시 돌지 않는다는 옛 갈래 안내가 없다"
 
   local E2; E2="$(awk '/^## e2e$/{f=1;next} f&&/^\*\*E0/{exit} f' "$SK")"
   assert_contains "$E2" '범위 모드도 질문 없이 걷기를 건너뛰' "e2e: 범위 모드는 걷지 않는다"
@@ -194,7 +194,7 @@ case_text_locks() {
   local vf; vf="$(printf '%s\n' "$FV" | python3 -I -X utf8 -c "$PY_VERDICT_FENCES")"
   assert_grep "$vf" '^VERDICT_FENCES:3$' "판정 펜스는 셋이다(양성 짝)"
   assert_grep "$vf" '^SHA_SLOT_FENCES:3$' "판정 펜스 셋 모두 범위 결과 줄 자리를 받아 --sha 로 넘긴다 — 범위 파일을 다시 읽지 않고, HEAD 는 줄이 없을 때의 기본값뿐이다"
-  assert_contains "$FV" '리뷰 트리 펜스가 낸 줄' "Final verdict: 범위 모드면 범위 결과 줄을 넣는다"
+  assert_grep "$FV" '^\| `QG_ARGS_S` [^|]*\| [^|]*리뷰 트리 펜스가 낸 줄 \|' "Final verdict: 범위 모드면 범위 결과 줄을 넣는다"
   assert_contains "$(printf '%s\n' "$FV" | fence_with "printf '\n## 판정")" "if [ -f \"\$RD/range-scope.txt\" ]; then printf '\n## 범위\n\n'; cat \"\$RD/range-scope.txt\"; fi" "기록 펜스: 범위 모드면 ## 범위 절을 남긴다"
 
   local PB; PB="$(awk '/^## Publish$/{f=1;next} f&&/^## kill switch$/{exit} f' "$SK")"
