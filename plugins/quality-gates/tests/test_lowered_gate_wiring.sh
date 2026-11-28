@@ -62,6 +62,7 @@ case_step45_gate() {
   assert_contains "$S45" '셋씩 묶어' "게이트: 넷 이상이면 셋씩 나눠 묻는다"
   assert_contains "$S45" '한 호출에 넷까지' "게이트: 묶음 질문은 한 호출에 넷까지"
   assert_contains "$S45" '{label: "그대로 둔다", description: "이 묶음의 지적을 낮춘 대로 둔다."}' "게이트: 그대로 둔다"
+  assert_eq "$(printf '%s\n' "$S45" | grep -cF ':<줄> (L<k>)"')" "1" "게이트: 지적마다 선택지 라벨이 번호 (L<k>) 로 끝난다 — 창 안 한 자리"
   assert_contains "$S45" '기타 칸에 「전부」' "게이트: 넷 이상이면 본문에 「전부」 안내"
   assert_contains "$S45" '전문: <$RV/synth.out 의 경로>' "게이트: 질문 본문이 전문 자리를 싣는다"
   assert_contains "$S45" 'question: "재비판이 심각도를 낮춘 지적 <n>개 가운데 <이 묶음의 번호들 — 예: L1 · L2 · L3>.' "게이트: 질문 본문이 이 묶음의 번호를 싣는다"

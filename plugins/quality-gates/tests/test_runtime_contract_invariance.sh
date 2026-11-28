@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test_runtime_contract_invariance.sh — create-baseline + 기존 계약 바이트 무변경.
-# AC7 AC24 AC25 AC26 · T5 T18
+# AC7 AC24 AC25 · T5 T18 (AC26 의 verdict 토큰 집합은 test_one_pipeline_surface.sh case_old_surface_absent)
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -81,7 +81,7 @@ case_remove_namespace_guard() {
   cd / && rm -rf "$REPO"
 }
 
-# T18 + AC24/AC25/AC26: 훅 항목 수 · 에이전트 파일 수 불변
+# T18 + AC24/AC25: 훅 항목 수 · 에이전트 파일 수 불변
 #
 # 이 락은 몰래 늘거나 주는 쪽 둘 다 잡는 알람이지, "늘기만 막는" 래칫이 아니다 —
 # 의도적 변경이면 이 숫자를 같은 커밋에서 의식적으로 고치는 게 정확히 이 락이
