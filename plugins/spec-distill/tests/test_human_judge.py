@@ -246,6 +246,24 @@ class Match(SeededRepo):
         copy = real.replace(S + ":", other + ":").replace("2026-11-18", "2026-11-19")
         self.assertEqual(self.v(copy, [real, copy]), H.MISMATCH)
 
+    def test_one_answer_two_lines_through_collect(self):   # 시작 묶음 · 결과 대조 · human-check 가 줄을 모으는 collect 를 거친다
+        real = self.approve(self.tip)
+        twin = real.replace("2026-11-18", "2026-11-19")
+        alone = self.commit(TEAM.intent(JOB), INTENT + "\n" + real + "\n", "진짜 줄 하나")
+        both = self.commit(TEAM.intent(JOB), INTENT + "\n" + real + "\n" + twin + "\n", "같은 답을 근거로 든 줄 둘")
+        lines, notes = H.collect(self.git, TEAM, JOB, [alone, self.c1])
+        self.assertEqual((lines, notes), ((real,), []))
+        self.assertEqual(H.match(self.scope(alone, lines), real).verdict, H.PASS)   # 양성 대조 — 근거를 쓴 줄이 하나뿐이다
+        lines, notes = H.collect(self.git, TEAM, JOB, [both, alone, self.c1])
+        self.assertEqual((lines, notes), ((real, twin), []))
+        apart = self.commit(TEAM.intent(JOB), INTENT + "\n" + twin + "\n", "둘째 줄만 다른 끝에")
+        split, notes = H.collect(self.git, TEAM, JOB, [apart, alone])                # 두 줄이 서로 다른 끝에 있다
+        self.assertEqual((split, notes), ((twin, real), []))
+        for tip, got_lines in ((both, lines), (apart, split)):
+            for raw in (real, twin):
+                got = H.match(self.scope(tip, got_lines), raw)
+                self.assertEqual((got.verdict, got.why), (H.MISMATCH, "같은 답을 근거로 쓴 줄이 또 있다"), raw)
+
     def test_plan_head_carries_the_plan_number(self):   # 설계 §2 — 계획 파일 둘을 한 커밋이 마지막으로 고쳤다
         both = self.commit_many({TEAM.plan(JOB, 1): "# 계획 1 고침\n", TEAM.plan(JOB, 2): "# 계획 2 고침\n"}, "두 계획을 한 커밋에서")
         self.assertEqual(H.version(self.git, both, TEAM.plan(JOB, 1)), H.version(self.git, both, TEAM.plan(JOB, 2)))   # 판이 같다
