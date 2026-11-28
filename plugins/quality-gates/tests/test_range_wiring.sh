@@ -21,33 +21,65 @@ RM="$PLUGIN_ROOT/README.md"
 export PYTHONDONTWRITEBYTECODE=1
 
 ROOT=$(mktemp -d)
-trap 'rm -rf "$ROOT"' EXIT
+TPL=$(mktemp -d)   # 픽스처 견본(아래 「끝에서 끝 사슬」) — 케이스 폴더 ROOT 밖에 둔다
+trap 'rm -rf "$ROOT" "$TPL"' EXIT
 
-# 펜스 뽑기 — stdin 의 글에서 본문에 needle 이 든 첫 ```bash 펜스(들여쓰기를 걷어 낸 본문).
+# 펜스 사전 — SKILL · DT 의 ```bash 펜스를 python 한 번으로 뽑아 $ROOT/fences/<번호> 에 둔다(들여쓰기를 걷어 낸 본문).
+# <번호>.raw 는 여는 줄부터 닫는 줄까지의 원문, <번호>.body 는 본문 원문이다.
 # 파이썬 본문은 `$( )` 안 heredoc 으로 두지 않는다 — 최상위 heredoc 으로 변수에 담는다.
 IFS= read -r -d '' PY_FENCE <<'PY' || true
-import re, sys, textwrap
-text = sys.stdin.read()
-needle = sys.argv[1]
-lines = text.splitlines()
+import os, re, sys, textwrap
+out = sys.argv[1]
+os.makedirs(out)
 open_re = re.compile(r'^[ \t]*```bash\s*$')
 close_re = re.compile(r'^[ \t]*```\s*$')
-i = 0
-while i < len(lines):
-    if open_re.match(lines[i]):
-        j = i + 1
-        body = []
-        while j < len(lines) and not close_re.match(lines[j]):
-            body.append(lines[j])
-            j += 1
-        if any(needle in l for l in body):
-            print(textwrap.dedent("\n".join(body)))
-            break
-        i = j + 1
-    else:
-        i += 1
+n = 0
+for path in sys.argv[2:]:
+    with open(path, encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+    i = 0
+    while i < len(lines):
+        if open_re.match(lines[i]):
+            j = i + 1
+            while j < len(lines) and not close_re.match(lines[j]):
+                j += 1
+            body = "\n".join(lines[i + 1:j])
+            for name, text in (("%d.raw" % n, "\n".join(lines[i:j + 1])), ("%d.body" % n, body),
+                               ("%d" % n, textwrap.dedent(body) + "\n")):
+                with open(os.path.join(out, name), "w", encoding="utf-8") as fh:
+                    fh.write(text)
+            n += 1
+            i = j + 1
+        else:
+            i += 1
+print(n)
 PY
-fence_with() { python3 -I -X utf8 -c "$PY_FENCE" "$1"; }
+NFENCE=$(python3 -I -X utf8 -c "$PY_FENCE" "$ROOT/fences" "$SK" "$DT") || { echo "펜스 사전을 만들지 못했다"; exit 1; }
+FENCE_RAW=(); FENCE_BODY=(); FENCE_OUT=()
+_k=0
+while [ "$_k" -lt "$NFENCE" ]; do
+  _v=""; IFS= read -r -d '' _v < "$ROOT/fences/$_k.raw"; FENCE_RAW[_k]="$_v"
+  _v=""; IFS= read -r -d '' _v < "$ROOT/fences/$_k.body"; FENCE_BODY[_k]="$_v"
+  _v=""; IFS= read -r -d '' _v < "$ROOT/fences/$_k"; FENCE_OUT[_k]="$_v"
+  _k=$((_k+1))
+done
+# 펜스 뽑기 — stdin 의 글에서 본문에 needle 이 든 첫 ```bash 펜스(들여쓰기를 걷어 낸 본문). 사전에서 원문이 stdin 에
+# 통째로 들고 본문에 needle 이 든 펜스 가운데 stdin 에서 가장 앞선 것을 낸다.
+fence_with() {
+  local in k pre pos best=-1 bestpos=-1
+  in="$(cat)"
+  k=0
+  while [ "$k" -lt "$NFENCE" ]; do
+    case "${FENCE_BODY[k]}" in *"$1"*)
+      case "$in" in *"${FENCE_RAW[k]}"*)
+        pre="${in%%"${FENCE_RAW[k]}"*}"; pos=${#pre}
+        if [ "$bestpos" -lt 0 ] || [ "$pos" -lt "$bestpos" ]; then bestpos=$pos; best=$k; fi ;;
+      esac ;;
+    esac
+    k=$((k+1))
+  done
+  [ "$best" -lt 0 ] || printf '%s' "${FENCE_OUT[best]}"
+}
 
 # 판정 펜스 셋(일반 · trivia · scope-empty) — verdict.py 를 부르는 펜스마다 범위 결과 줄 자리(QG_ARGS_S)를 받아
 # 그 줄을 --sha 로 넘기는가. 범위 파일을 다시 읽지 않고, 지금 HEAD 는 범위 결과 줄이 없을 때의 기본값뿐이다.
@@ -267,23 +299,28 @@ case_review_tree() {
 
 # ── 끝에서 끝 사슬 ───────────────────────────────────────────────────────
 # 픽스처: 레포 A(trunk: S → c1(설계 a · 코드) → E(설계 b · tests/test_x.sh 100755)) · 클론 R 을 S 에 체크아웃.
-# 전역 A R S E D F 를 채운다.
+# 견본을 파일에서 한 번 짓는다(S · E 를 채운다). mkfix 가 케이스마다 새 자리에 복사해 전역 A R S E D F 를 채운다.
+A="$TPL/A"; R="$TPL/R"
+git init -q -b trunk "$A"
+echo "# a" > "$A/README.md"; g "$A" add README.md; g "$A" commit -q -m c0
+S=$(git -C "$A" rev-parse HEAD)
+mkdir -p "$A/docs/specs" "$A/src" "$A/tests"
+printf '# A 설계\n- a\n' > "$A/docs/specs/a-design.md"
+printf 'echo x\n' > "$A/src/x.sh"
+g "$A" add -A; g "$A" commit -q -m "feat: x" -m "Spec: docs/specs/a-design.md"
+printf '# B 설계\n- b\n' > "$A/docs/specs/b-design.md"
+printf '#!/bin/sh\n. ./src/x.sh\n' > "$A/tests/test_x.sh"; chmod +x "$A/tests/test_x.sh"
+g "$A" add -A; g "$A" commit -q -m "test: x" -m "Spec: docs/specs/b-design.md"
+E=$(git -C "$A" rev-parse HEAD)
+git clone -q "$A" "$R"
+git -C "$R" checkout -q --detach "$S"
+rm -rf "$R/.git/logs"   # 클론의 reflog 는 견본 경로(clone: from …)를 담는다 — 사본에 싣지 않는다
+
 mkfix() {
   local d; d=$(mktemp -d "$ROOT/fix.XXXXXX")
+  cp -R "$TPL/." "$d/" || exit 1
   A="$d/A"; R="$d/R"
-  git init -q -b trunk "$A"
-  echo "# a" > "$A/README.md"; g "$A" add README.md; g "$A" commit -q -m c0
-  S=$(git -C "$A" rev-parse HEAD)
-  mkdir -p "$A/docs/specs" "$A/src" "$A/tests"
-  printf '# A 설계\n- a\n' > "$A/docs/specs/a-design.md"
-  printf 'echo x\n' > "$A/src/x.sh"
-  g "$A" add -A; g "$A" commit -q -m "feat: x" -m "Spec: docs/specs/a-design.md"
-  printf '# B 설계\n- b\n' > "$A/docs/specs/b-design.md"
-  printf '#!/bin/sh\n. ./src/x.sh\n' > "$A/tests/test_x.sh"; chmod +x "$A/tests/test_x.sh"
-  g "$A" add -A; g "$A" commit -q -m "test: x" -m "Spec: docs/specs/b-design.md"
-  E=$(git -C "$A" rev-parse HEAD)
-  git clone -q "$A" "$R"
-  git -C "$R" checkout -q --detach "$S"
+  git -C "$R" remote set-url origin "$A"
   D="$R/.claude/quality-gates/sid12345"; mkdir -p "$D"; F="$D/range-scope.txt"
 }
 
@@ -403,8 +440,33 @@ case_fences_agree() {
   assert_eq "$(grep -cx '## 게시' "$D/result.md")" "1" "게시 펜스: ## 게시 는 하나뿐이다"
 }
 
+# 준비물 사본 격리 — 한 사본에서 더한 커밋이 다음 사본에 없고, 사본 R 의 origin 은 그 사본의 A 이며, 사본의 .git 이
+# 견본 경로를 담지 않는다. 견본 경로는 두 꼴(받은 꼴 · 링크를 푼 실제 경로 — macOS 의 /var → /private/var)로 찾는다.
+case_mkfix_copies_are_isolated() {
+  echo "[준비물 — 사본 격리]"
+  mkfix
+  local a1="$A" sha real
+  printf 'iso\n' > "$R/iso.txt"; g "$R" add iso.txt; g "$R" commit -q -m iso
+  sha=$(git -C "$R" rev-parse HEAD)
+  git -C "$R" push -q origin HEAD:refs/heads/iso 2>/dev/null
+  git -C "$a1" cat-file -e "$sha" 2>/dev/null
+  assert_eq "$?" "0" "사본 격리: 첫 사본 R 의 커밋이 origin(그 사본의 A)으로 push 됐다(양의 짝)"
+  mkfix
+  assert_eq "$(git -C "$R" rev-parse HEAD) $(cat "$R/README.md") $(git -C "$R" worktree list | grep -c .) $(git -C "$A" rev-list --all | grep -c .)" \
+    "$S # a 1 3" "사본 격리: 새 사본은 견본 그대로다 — R 은 시작 커밋 · README 그대로 · worktree 하나 · A 커밋 셋(양의 짝)"
+  git -C "$R" cat-file -e "$sha" 2>/dev/null
+  assert_eq "$?" "1" "사본 격리: 앞 사본에 더한 커밋이 새 사본 R 에 없다"
+  git -C "$A" cat-file -e "$sha" 2>/dev/null
+  assert_eq "$?" "1" "사본 격리: 앞 사본이 push 한 커밋이 새 사본 A 에 없다"
+  assert_eq "$(git -C "$R" remote get-url origin)" "$A" "사본 격리: 사본 R 의 origin 은 그 사본의 A 다"
+  real=$(cd "$TPL" && pwd -P)
+  assert_eq "$({ grep -rlF "$TPL" "$A/.git" "$R/.git"; grep -rlF "$real" "$A/.git" "$R/.git"; } | grep -c .)" "0" \
+    "사본 격리: 사본 A · R 의 .git 에 견본 경로가 없다(두 꼴 모두)"
+}
+
 case_text_locks
 case_chain_agrees
 case_fences_agree
 case_review_tree
+case_mkfix_copies_are_isolated
 finish
