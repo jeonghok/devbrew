@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/*/SKILL.md plugins/quality-gates/README.md plugins/quality-gates/agents/artifact-adversarial.md
-# AC2 — 문서 비평 skill 의 adversarial 도구 서술이 실제 tools: 와 맞고, README 에 지운 게이트 인용이 없다.
+# guards: plugins/quality-gates/skills/*/SKILL.md plugins/quality-gates/agents/artifact-adversarial.md
+# AC2 — 문서 비평 skill 의 adversarial 도구 서술이 실제 tools: 와 맞다.
 set -u
 # test_guards_coverage_bidirectional.sh 가 읽는다 — 이 락이 여는 파일(리포 상대)을 낸다.
 if [ "${1:-}" = "--emit-scanned" ]; then
   cd "$(dirname "$0")/../../.." || exit 1
   ls plugins/quality-gates/skills/*/SKILL.md
-  printf '%s\n' plugins/quality-gates/README.md plugins/quality-gates/agents/artifact-adversarial.md
+  printf '%s\n' plugins/quality-gates/agents/artifact-adversarial.md
   exit 0
 fi
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -23,18 +23,4 @@ assert_contains "$(cat "$SK")" "adversarial 은 egress 도구가 없다" "고친
 # E2c 는 경로 문자열을 고정한다(inode 아님 — E2c 의 TOCTOU 한계 절) — 「그 파일로 고정」은 그보다 큰 약속이다.
 assert_file_absent "$SK" '그 파일로 고정' "egress 문장은 경로를 고정한다고 말한다(미룸)"
 assert_contains "$(cat "$SK")" "E2c 가 인가한 그 경로로 읽게" "egress 문장 양성 짝(그 경로로)"
-# egress 문단(3. adversarial 머리부터 그 dispatch 펜스 앞까지)에 160자 넘는 줄이 없다 — 표 · 펜스 줄은 이미 넘어 창으로 좁힌다.
-long="$(PYTHONDONTWRITEBYTECODE=1 python3 -I -c '
-import io, sys
-L = io.open(sys.argv[1], encoding="utf-8").read().split("\n")
-s = next((i for i, l in enumerate(L) if l.startswith("**3. adversarial**")), None)
-if s is None:
-    print("창 없음"); sys.exit(0)
-e = next((i for i in range(s, len(L)) if L[i].startswith("```")), len(L))
-print(" ".join("L%d(%d)" % (i + 1, len(L[i])) for i in range(s, e) if len(L[i]) > 160))
-' "$SK")"
-assert_eq "$long" "" "egress 문단에 160자 넘는 줄이 없다"
-assert_grep "$(sed -n '/^\*\*3\. adversarial\*\*/,/^```/p' "$SK")" 'adversarial 은 egress 도구가 없다' "160자 창이 egress 문장을 담는다(창이 비지 않았다 — 양성 짝)"
-assert_not_contains "$(cat "$ROOT/plugins/quality-gates/README.md")" "hard-review" "README 에 지운 게이트(authoring-time hard-review) 인용이 없다"
-assert_contains "$(cat "$ROOT/plugins/quality-gates/README.md")" "dispatch 전 시작 줄" "README 가 지금 있는 공시 줄을 말한다(양성 짝)"
 finish

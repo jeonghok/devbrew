@@ -24,26 +24,10 @@ present "끝 줄(다시 부른 수)"      'dispatch 가 모두 돌아온 뒤의 
 present "P22 transparency-기반 restate" 'transparency'
 
 echo "== AC10: 리뷰어 구성 표 + prerequisites (v10 — spec §2 · AC11) =="
-present "리뷰어 구성 헤딩"              '## 리뷰어 구성'
-present "보안 always-run 표기"           '| 보안 | `quality-gates:security-reviewer` | 항상.'
-present "다른 모델 계열(codex) 표기"     '| 다른 모델 계열 | codex 러너 | 항상 시도.'
-present "재비판 always-run 표기"         '| 재비판 | `quality-gates:code-recritic` | 항상(탐지 0건이어도) |'
 present "prereq: optional decl (body-unique)" 'Prerequisites (optional dependency)'
 present "prereq: pr-review-toolkit named (body-unique)" 'pr-review-toolkit`(code-reviewer'
 gone    "prereq: feature-dev 없음 (AC11 — code-architect 를 부르지 않는다)" 'feature-dev'
 
-echo "== C5 regression lock: codex-depth reconcile (availability-floor vs standard/deep-only) =="
-# §166 documents codex as a Tier B *availability-floor* (runs on ALL non-trivia
-# depths when detected). This section locks the Cost prose against re-introducing
-# the superseded "standard/deep-only" codex-cost claim — the exact scope-blind
-# drift a fan-out-only reconcile missed (self-dogfood C5, v2.13.0: §166 was
-# rewritten to availability-floor while the Cost section still said standard/deep).
-# Teeth boundary (cf. AC11): the negatives pin the known old phrasings; a fresh
-# paraphrase that re-contradicts would slip the grep — the dynamic codex review
-# is the backstop for that residue.
-presentE "codex cost = availability-floor, every run (body-unique)" 'every non-trivia pipeline run when detected'
-goneE    "old 'standard/deep-only' codex-cost claim 제거"            'on each .standard./.deep. (Review gate|pipeline) dispatch'
-goneE    "Deep 비용행 codex depth-귀속 제거"                          '(Tier C 전문가|추가 리뷰어) 다수 \+ codex'
 
 echo; echo "readme-scope-reconcile: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

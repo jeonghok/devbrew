@@ -27,3 +27,5 @@
 - 2026-11-28 · plugins/quality-gates/tests/test_security_reviewer_behavior.py · AC45 · AC46 · AC47 · 지키던 것: 테스트 안의 고정 YAML 을 가짜 응답 도우미에 넣고 같은 파일이 정한 스키마로 잰다 — 기대값과 대상이 같은 출처라 깨질 수 없다(도우미 머리말 :18–31 이 「agent 정의를 읽지 않는다」 고 적음) · AC46 · AC47 은 도우미 자신이 예외를 내는지만 본다 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
 - 2026-11-28 · plugins/quality-gates/tests/test_agent_stub_harness.py · 지키던 것: 테스트 도구 자신의 파싱 · 스키마 단언(제품 아님) · docs/testing.md 「가짜 응답은 쓰지 않는다」 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
 - 2026-11-28 · plugins/quality-gates/tests/harness/agent_stub.py · 지키던 것: 테스트 도구 자신의 파싱 · 스키마 단언(제품 아님) · docs/testing.md 「가짜 응답은 쓰지 않는다」 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_readme_scope_reconcile.sh · :27–30 · :44–46 · 지키던 것: README 구성 표 네 행 전체 · codex 비용 문장 · 옛 비용 문구 부재 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_artifact_critique_truths.sh · :26–39 · 지키던 것: 줄 길이는 지키는 동작이 없다 · README 는 사람만 읽는 글 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
