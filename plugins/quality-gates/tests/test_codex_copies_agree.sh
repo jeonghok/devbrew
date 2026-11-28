@@ -23,22 +23,15 @@
 # **서로 다른 conf 세 개**를 읽으므로 conf 드리프트·교차배선에 여전히 이빨이 있다
 # (2026-08-17 mutation 으로 확인: 교차배선 60/62 · conf 무시 58/62 · 스위치 영구정지
 # 59/62, 전부 RED). 그리고 이 파일의 나머지 축들은 detect_codex 와 **무관하다** —
-# 층④는 codex_findings_to_yaml.py 를 비교한다. **2026-08-17 실측 이후** 배포 지점도
+# 층④는 codex_findings_to_yaml.py 를 잰다. **2026-08-17 실측 이후** 배포 지점도
 # shared/codex/codex_findings_to_yaml.py 를 가리키는 상대 심볼릭 링크가 됐다(층①과
 # 같은 이유) — 그 결과 층④ 안에서 **판정 등가**와 **값 고정**은 서로 다른 운명을
 # 갖는다(다른 하위 체크들 — anti-vacuous 계측기 확인·표본 수 바닥 — 은 이 갈림과
 # 무관하게 그대로 유효하다).
 #
-# **판정 등가는 다시 실질 판정이다** 〔2026-08-17 fix round 2, R2-7 — 이 문단의
-# 앞 판본을 정정한다〕. 앞 판본은 *"파일이 하나뿐이라는 구조로 이미 보장되어 더
-# 이상 실질 판정이 아니다(vacuous-but-harmless)"* 라고 적었는데, **그 문장을 쓴
-# 커밋 자신이 그 전제를 깼다.** fix round 1(CRIT-1)이 배포 지점마다 형제
-# `codex_jsonl.py` 사본을 두고 정본의 import 경로를 역참조하지 않는 `.parent` 로
-# 바꿨다 — 그래서 `python3 $QG/scripts/...` 는 **qg 옆 사본**을, `$SD/scripts/...`
-# 는 **sd 옆 사본**을 읽는다. 두 호출이 태우는 코드는 더 이상 전부 같은 파일이
-# 아니고, 그 사본들이 갈라지면 아래 판정 등가가 실제로 갈라진다(2026-08-17
-# mutation 으로 확인 — 아래 층⑤ 주석 참조). 스스로를 vacuous 라 부르는 서술은
-# 그 축을 지워도 안전하다는 신호를 남기므로 거짓 그 자체보다 위험하다.
+# **판정 등가**(qg · sd 두 호출 경로가 같은 판정을 내는가)는 이 파일이 재지 않고
+# `shared/tests/test_copy_of_contract.sh` (b)(축 1b — 두 호출이 태우는 형제
+# `codex_jsonl.py` copy-of 사본이 정본과 바이트 같다)가 지킨다.
 #
 # **값 고정**(알려진-상이 표본에 대해 `codex_failed: false`/`true`가 실제로
 # 나오는가)은 파일 수와 무관하게 그대로 이빨이 있다 — 사본이 하나가 돼도
@@ -56,9 +49,9 @@ PA="$ROOT/plugins/plugin-audit"
 TMP="$(mktemp -d -t qg-copies-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
-# ── 층④: codex_findings_to_yaml.py — quality-gates·spec-distill 호출 경로가
-# 정본(shared/codex/codex_findings_to_yaml.py)을 가리키는 심볼릭 링크를 거쳐
-# 같은 판정을 내는가 ──────────────────────────────────────────────────────
+# ── 층④: codex_findings_to_yaml.py — quality-gates 호출 경로가 정본
+# (shared/codex/codex_findings_to_yaml.py)을 가리키는 심볼릭 링크를 거쳐
+# 알려진 표본에 맞는 판정을 내는가 ──────────────────────────────────────────
 # 표본은 판정을 실제로 가르는 것들이다. 정상·빈 스트림·펜스 없는 raw JSON·
 # 컨테이너 위반·원소 위반·override 유무.
 mk() { printf '%s\n' "{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":$1}}"; }
@@ -71,14 +64,14 @@ mk '"no fence at all"'                               > "$samples_dir/05-no-json.
 : > "$samples_dir/06-empty.jsonl"
 printf 'not json\n'                                  > "$samples_dir/07-garbage.jsonl"
 
-# 판정 필드만 뽑는다. 〔2026-08-17 fix round 1〕 이 락은 아래에서 qg·sd 호출
-# **둘 다 --emit-keys 인자 없이** 부른다(정본화 이후 기본값은 DEFAULT_KEYS) —
+# 판정 필드만 뽑는다. 〔2026-08-17 fix round 1〕 이 락은 아래에서 qg 호출을
+# **--emit-keys 인자 없이** 부른다(정본화 이후 기본값은 DEFAULT_KEYS) —
 # category/target_section이 나타나는 design 어휘는 여기서 아예 안 켜지므로
 # findings 본문에 지금 갈릴 만한 차이가 없다. 그 배선(호출자가 자기 keyset 을 --emit-keys 로
 # 실제로 넘기는가)은 이 락이 아니라 호출자 쪽 락이 잰다 — run_docreview_codex_reviewer.sh 는
 # shared/tests/test_docreview_codex.sh 가 잰다. verdict()가 findings 본문이
 # 아니라 meta만 보는 것은 그와 무관하게 유지한다 — 이 락의 목적은 codex_failed·
-# reason 같은 판정 필드의 동일성이지 렌더 형태 동일성이 아니다.
+# reason 같은 판정 필드지 렌더 형태가 아니다.
 verdict() { grep -E '^  (codex_failed|reason|raw_findings_type|bad_element_types):' || true; }
 
 seen=0
@@ -88,27 +81,18 @@ for s in "$samples_dir"/*.jsonl; do
   for ov in "" "1"; do
     if [ -z "$ov" ]; then oargs=(); else oargs=(--meta-override-exit-code 1 --meta-override-reason exit_nonzero); fi
     a="$(python3 "$QG/scripts/codex_findings_to_yaml.py" "${oargs[@]+"${oargs[@]}"}" < "$s" | verdict)"
-    b="$(python3 "$SD/scripts/codex_findings_to_yaml.py" "${oargs[@]+"${oargs[@]}"}" < "$s" | verdict)"
-    if [ "$a" = "$b" ]; then
-      ok "층④ $name (override='${ov:-none}'): 두 사본이 같은 판정"
-    else
-      no "층④ $name (override='${ov:-none}'): 판정이 갈라졌다"
-      echo "      qg: $(printf '%s' "$a" | tr '\n' ' ')"
-      echo "      sd: $(printf '%s' "$b" | tr '\n' ' ')"
-    fi
     # positive(존재): verdict()가 이번 표본에서 실제로 뭔가를 뽑아냈는가. 앵커가
-    # 깨져 아무것도 매칭하지 않으면 a·b가 둘 다 빈 문자열이 되어 위 비교가 "차이
-    # 없음"으로 늘 통과한다(vacuous) — 모든 표본은 codex_failed 키를 반드시
-    # 내므로 그 존재를 여기서 강제한다.
+    # 깨져 아무것도 매칭하지 않으면 아래 값 고정이 무엇을 보는지 알 수 없다 —
+    # 모든 표본은 codex_failed 키를 반드시 내므로 그 존재를 여기서 강제한다.
     case "$a" in
       *codex_failed:*) ok "층④ $name (override='${ov:-none}'): 계측기가 codex_failed 를 추출했다" ;;
-      *) no "층④ $name (override='${ov:-none}'): 계측기가 아무것도 추출하지 못했다 — 위 비교가 vacuous하다" ;;
+      *) no "층④ $name (override='${ov:-none}'): 계측기가 아무것도 추출하지 못했다 — 아래 값 고정이 vacuous하다" ;;
     esac
     # positive(값 고정): "존재"만으로는 부족하다 — verdict()가 입력과 무관하게
-    # 고정 문자열(예: 항상 `codex_failed: true`)을 내도록 망가지면 위 두 체크를
-    # 모두 속인다(양쪽이 같은 상수라 등가 비교 통과, 상수가 `codex_failed:`를
-    # 포함하니 존재 체크도 통과). 알려진-상이(known-distinct) 두 표본의 실제
-    # 판정값을 여기서 못박는다: override 없는 01-clean은 정상 라운드라
+    # 고정 문자열(예: 항상 `codex_failed: true`)을 내도록 망가지면 위 체크를
+    # 속인다(상수가 `codex_failed:`를 포함하니 존재 체크 통과). 알려진-상이
+    # (known-distinct) 두 표본의 실제 판정값을 여기서 못박는다: override 없는
+    # 01-clean은 정상 라운드라
     # `codex_failed: false`, 02-container-violation은 컨테이너 위반이라
     # `codex_failed: true`다 — 상수 추출기는 둘 중 하나에서 반드시 틀린다.
     # 표본에 따라 verdict가 여러 줄일 수 있어 부분문자열 포함으로 잰다. verdict()가
@@ -121,26 +105,18 @@ for s in "$samples_dir"/*.jsonl; do
             *'codex_failed: false'*) ok "층④ 값 고정 $name (qg): codex_failed: false 확인(상수 추출기 아님)" ;;
             *) no "층④ 값 고정 $name (qg): codex_failed: false 가 없다 — 상수 추출기 의심" ;;
           esac
-          case "$b" in
-            *'codex_failed: false'*) ok "층④ 값 고정 $name (sd): codex_failed: false 확인(상수 추출기 아님)" ;;
-            *) no "층④ 값 고정 $name (sd): codex_failed: false 가 없다 — 상수 추출기 의심" ;;
-          esac
           ;;
         02-container-violation.jsonl)
           case "$a" in
             *'codex_failed: true'*) ok "층④ 값 고정 $name (qg): codex_failed: true 확인(상수 추출기 아님)" ;;
             *) no "층④ 값 고정 $name (qg): codex_failed: true 가 없다 — 상수 추출기 의심" ;;
           esac
-          case "$b" in
-            *'codex_failed: true'*) ok "층④ 값 고정 $name (sd): codex_failed: true 확인(상수 추출기 아님)" ;;
-            *) no "층④ 값 고정 $name (sd): codex_failed: true 가 없다 — 상수 추출기 의심" ;;
-          esac
           ;;
       esac
     fi
   done
 done
-# positive: 표본을 실제로 돌렸는가. 없으면 "차이 0"과 "아무것도 안 봄"이 구별되지 않는다.
+# positive: 표본을 실제로 돌렸는가. 없으면 "실패 0"과 "아무것도 안 봄"이 구별되지 않는다.
 if [ "$seen" -ge 7 ]; then ok "층④ 표본 ${seen}건 실행 (vacuous 아님)"
 else no "층④ 표본이 ${seen}건뿐 — 위 판정이 무의미하다"; fi
 
