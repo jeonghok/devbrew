@@ -1174,7 +1174,7 @@ case_T22_permit_expired_reraise() {
 # 전방 포인터 계약 아래서는 `record-findings` 경로(라우터를 거치지 않고 손으로 후속을 심는 것)로 `superseded_by` 를 쓸 수 없다 —
 # 그 필드를 쓰는 곳은 `docreview_route.py` 의 재상승 루프 하나뿐이다(`PUBLIC_FIELDS` 는 finding 의 공개 필드이지 decides 레코드가 아니다).
 # 그래서 이 케이스의 둘째 단언은 「후속이 생기면 만료 항목은 안 막는다」가 아니라 그 사실 자체를 락으로 만든다. 「후속을 채택·적용하면
-# 승인이 다시 열린다」 쪽은 `finalize` 의 실제 재상승 경로로만 잴 수 있어 `case_AC20_reexpiry_blocks_again` 이 잰다.
+# 승인이 다시 열린다」 쪽은 `case_T21_permit_applied` 의 끝 단언이 잰다(`case_AC20_reexpiry_blocks_again` 은 `blocked_expired` 에서 빠지는지만 잰다).
 case_T22b_expired_superseded_unblocks() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
   py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' >/dev/null
@@ -2824,10 +2824,9 @@ case_AC6_permit_contract() {
   assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 anchor_immutable" "AC6·AC11: immutable 은 permit 으로도 절대 못 넘는다(immutable 플래그 없는 decide 의 permit 이 §6 을 겨눈 경우)"
   rm -rf "$d"
 }
-# 위 세 케이스에서 insert-after 모드는 found 검사만 한다(설계 §7 은 insert-after 에 「#x 바로 뒤에 새 섹션 하나」 외의 제약을 두지 않는다 — #x 본문은
-# 안 바뀐다). 일반 앵커 모드에서는 immutable 을 fix_allowed·protected 보다 먼저 본다 — fix_allowed 검사가 먼저면 §6 케이스가 `anchor_not_in_fix_anchors` 로
-# 나와 위 기대(`anchor_immutable`)와 어긋나고, protected 검사를 insert-after 에도 적용하면 `#3-non-goals`(Non-goals 는 보호 부류)가 `anchor_protected` 로
-# 막혀 위 insert-after 통과 기대와 어긋난다. 아래는 그 순서가 없으면 못 잡는 나머지 사유들을 채운다(12개 중 이 파일이 reason 값까지 재는 것 전부).
+# 일반 앵커 모드에서는 immutable 을 fix_allowed·protected 보다 먼저 본다 — fix_allowed 검사가 먼저면 §6 케이스가 `anchor_not_in_fix_anchors` 로
+# 나와 위 기대(`anchor_immutable`)와 어긋난다. insert-after 모드가 보호 · 불변 대상을 막는 것은 `case_AC6_R13_insert_after_protection` 이 잰다.
+# 아래는 그 순서가 없으면 못 잡는 나머지 사유들을 채운다(12개 중 이 파일이 reason 값까지 재는 것 전부).
 case_AC6_reject_reasons_extra() {
   local d out rc
   d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
