@@ -94,12 +94,14 @@ fi
 # 거꾸로 — 새 SID 로 원 레포 먼저, 그다음 worktree.
 SID2="wt1session02"
 (cd "$REPO" && HOME="$REPO" "$SETUP" --session-id "$SID2" >/dev/null 2>&1)
+RC_REPO2=$?
 (cd "$WT" && HOME="$WT" "$SETUP" --session-id "$SID2" >/dev/null 2>&1)
 RC_WT=$?
-if [[ "$RC_WT" -eq 0 && -f "$WT/.claude/quality-gates/$SID2/result.md" ]]; then
+if [[ "$RC_REPO2" -eq 0 && -f "$REPO/.claude/quality-gates/$SID2/result.md" \
+      && "$RC_WT" -eq 0 && -f "$WT/.claude/quality-gates/$SID2/result.md" ]]; then
   ok "T1f: 원 레포 먼저 돈 같은 SID 로 worktree 의 setup 도 된다(worktree 가 원 레포 상태를 보지 않는다)"
 else
-  no "T1f: 원 레포 먼저 돈 같은 SID 로 worktree 의 setup 이 안 됐다(rc=$RC_WT)"
+  no "T1f: 원 레포 먼저 돈 같은 SID 의 거꾸로 순서 setup 이 안 됐다(원 레포 rc=$RC_REPO2, worktree rc=$RC_WT)"
 fi
 
 rm -rf "$(dirname "$REPO")"
