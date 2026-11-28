@@ -34,6 +34,11 @@ python3 "$V" --line --blocking 1 >/dev/null 2>&1
 assert_eq "$?" "2" "--line 에 값이 빠지면 exit 2"
 python3 "$V" --blocking 1 >/dev/null 2>&1
 assert_eq "$?" "2" "--line 없이 판정 줄 값만 주면 exit 2"
+assert_eq "$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import verdict; print(" ".join(verdict.VALUES))' "$SCRIPT_DIR/../scripts")" \
+  "defect not-certified clean" "판정값은 셋이고 우선순위 순서다"
+out="$(python3 "$V" --line --blocking x --optional 0 --new-failures 0 --sha abc1234 2>/dev/null)"; rc=$?
+assert_eq "$rc" "4" "비정수 개수는 exit 4"
+assert_eq "$out" "" "비정수 개수면 stdout 이 비어 있다"
 out="$(python3 "$V" --line --blocking -1 --optional 0 --new-failures 0 --sha abc1234 2>/dev/null)"; rc=$?
 assert_eq "$rc" "4" "음수 개수는 exit 4"
 assert_eq "$out" "" "exit 4 면 stdout 이 비어 있다 — 반쯤 된 판정을 내지 않는다"

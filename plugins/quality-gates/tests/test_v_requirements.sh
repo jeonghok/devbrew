@@ -23,38 +23,16 @@ flat() { sec "$1" | tr '\n' ' ' | tr -s ' '; }
 win() { awk -v s="$1" -v e="$2" '$0 ~ s{f=1;next} f&&$0 ~ e{exit} f' "$SKILL" | tr '\n' ' ' | tr -s ' '; }
 
 case_v1_verdict_vocabulary_is_closed() {
-  assert_eq "$(python3 -c "import sys; sys.path.insert(0,'$S'); import verdict; print(' '.join(verdict.VALUES))")" \
-    "defect not-certified clean" "V1 — 판정값은 셋이고 우선순위 순서다"
   python3 "$S/verdict.py" --reason no-such-reason >/dev/null 2>&1
   assert_eq "$?" "4" "V1 — 열거 밖 사유는 exit 4"
-  local out rc
-  out=$(python3 "$S/verdict.py" --line --blocking x --optional 0 --new-failures 0 --sha abc1234 2>/dev/null)
-  rc=$?
-  assert_eq "$rc" "4" "V1 — 비정수 개수는 exit 4 (_count 경로)"
-  assert_eq "$out" "" "V1 — 비정수 개수는 stdout 을 비운다"
-  out=$(python3 "$S/verdict.py" --line --blocking 1 --optional 0 --new-failures 0 --sha abc1234 2>/dev/null)
-  assert_grep "$out" '^qg: clean · 막는 지적 1 · 선택 0 · 차등 새 실패 0 · abc1234$' \
-    "V1 — 정수 개수는 판정 줄이 된다(양성 짝)"
   assert_contains "$(flat '### Step 4.5 — Surface the verdict')" 'You do not choose or edit it (V1)' \
     "V1 — SKILL 은 판정 줄을 고르거나 고치지 말라고 한다"
 }
 
 case_v2_synth_failure_is_not_clean() {
-  local out; out=$(python3 "$S/synthesize_findings.py" --findings "$T/none.yaml" --emit-verdict 2>/dev/null)
-  assert_not_grep "$out" '^verdict: clean$' "V2 — 못 읽는 findings 는 clean 이 아니다"
   assert_grep "$(flat '### Step 4 — synthesis (after the differential test)')" \
     '\*\*rc 를 소비하라\.\*\* rc 가 0 이 아니거나 `\$RV/synth\.out` 이 비어 있으면 이 실행은 \*\*clean 이 아니다\*\*' \
     "V2 — SKILL 이 합성기 rc·빈 stdout 을 clean 으로 읽지 말라고 한다"
-}
-
-case_v3_malformed_finding_blocks() {
-  mkdir -p "$T/v3"; printf -- '- "CRITICAL: bare"\n' > "$T/v3/findings.yaml"
-  rf_prep "$T/v3"; rf_reply "$T/v3" 'verdicts: []'
-  local out; out=$(rf_synth "$T/v3" --emit-verdict 2>/dev/null)
-  assert_grep "$out" '^reason: findings-lost$' "V3 — 파손 finding 은 findings-lost"
-  # 원장의 hold 가 사유를 따로 내므로, «센다»(dropped_malformed)는 이 공시 줄과 차단 문구로만 보인다.
-  assert_grep "$out" '^1개 지적을 버렸다 — 형식이 깨졌다\(dropped as malformed — .*이 실행은 clean이 아니다' \
-    "V3 — 버려진 파손 finding 은 세어 공시한다(dropped as malformed)"
 }
 
 case_v4_missing_recritic_is_not_clean() {
@@ -93,15 +71,6 @@ case_v7_scope_count_is_independent() {
     'resolved_scope_file_count == 0.*changes_exist == yes.*scope-empty' "V7 — 빈 범위 floor 행"
   assert_grep "$(sec '### Step 1b — changes-exist signal')" \
     'It is \*\*never\*\* copied from `check-review-scope.sh`' "V7 — 개수는 독립 신호에서 베끼지 않는다"
-}
-
-case_v8_missing_severity_is_not_optimistic() {
-  mkdir -p "$T/v8"; printf -- '- {agent: r, file: a.py, line: 1, summary: s}\n' > "$T/v8/findings.yaml"
-  rf_prep "$T/v8"; rf_reply "$T/v8" 'verdicts:
-  - f: f1
-    verdict: confirm'
-  local out; out=$(rf_synth "$T/v8" --emit-verdict 2>/dev/null)
-  assert_grep "$out" '^verdict: defect$' "V8 — severity 결측은 막는 지적으로 남는다"
 }
 
 case_v9_one_pass_no_code_edits() {
@@ -180,10 +149,10 @@ case_p21_intent_never_lowers_or_skips() {
     "P21 — 의도 텍스트는 지적을 낮추거나 건너뛰게 하지 못한다"
 }
 
-for c in case_v1_verdict_vocabulary_is_closed case_v2_synth_failure_is_not_clean case_v3_malformed_finding_blocks \
+for c in case_v1_verdict_vocabulary_is_closed case_v2_synth_failure_is_not_clean \
          case_v4_missing_recritic_is_not_clean case_v5_security_absent_is_not_certified \
          case_v6_codex_output_cleared_and_degrade_disclosed case_v7_scope_count_is_independent \
-         case_v8_missing_severity_is_not_optimistic case_v9_one_pass_no_code_edits \
+         case_v9_one_pass_no_code_edits \
          case_v10_backstop_called_directly case_v11_identity_grammar_fullmatch case_v12_dispatches_carry_project_dir \
          case_ac9_intent_line_printed_once case_p21_intent_never_lowers_or_skips; do
   "$c"

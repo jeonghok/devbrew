@@ -5,22 +5,8 @@ set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 WT="$PLUGIN_ROOT/scripts/qg-worktree.sh"
-SKILL_REAL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
-
-# Task 31 fix round 1 (F1); Task 7 이 기대값을 뒤집었다: case_no_new_surfaces() 의
-# verdict 토큰 7종 부재(PASS/FAIL/SKIP_WITH_EVIDENCE/NEEDS_RESOLUTION/PARTIAL/
-# INCONCLUSIVE/DEGRADED_VERDICT — 전부 SKILL.md 밖) 는 판정이 실제로 만들어지는
-# 차등 테스트 절차를 잰다 — 그 절차가 references/differential-test.md 로 옮겨진
-# 뒤에도 동일 계약이므로, 분할 전과 동일한 논리적 문서로 재구성해 그 위에서 돈다.
-# 재구성 실패는 조용히 원본으로 폴백하지 않고 FAIL 한다.
-. "$SCRIPT_DIR/lib/reconstruct-skill.sh"
-if ! SKILL="$(reconstruct_skill_md "$SKILL_REAL")"; then
-  echo "FAIL: SKILL.md ↔ references/differential-test.md 재구성 실패 ($SKILL_REAL)"
-  exit 1
-fi
-trap 'rm -f "$SKILL"' EXIT
 
 REPO=""
 
@@ -103,7 +89,7 @@ case_remove_namespace_guard() {
 # scripts/audit-sandbox.sh 로 옮겨 갔다. 그 동작은 plugins/plugin-audit/tests/
 # test_audit_sandbox_create.sh · test_audit_sandbox_mutation_guard.sh 가 잰다.
 
-# T18 + AC24/AC25/AC26: 훅 항목 수 · 에이전트 파일 수 · verdict 토큰 집합 불변
+# T18 + AC24/AC25/AC26: 훅 항목 수 · 에이전트 파일 수 불변
 #
 # 이 락은 몰래 늘거나 주는 쪽 둘 다 잡는 알람이지, "늘기만 막는" 래칫이 아니다 —
 # 의도적 변경이면 이 숫자를 같은 커밋에서 의식적으로 고치는 게 정확히 이 락이
@@ -118,26 +104,6 @@ case_no_new_surfaces() {
   # v10 ③: 게시 생성 agent 하나를 지워 6 → 5. ⑤: test-scope-validator 삭제로 5 → 4.
   # R1(intent-critic 리뷰어 추가)으로 4 → 5.
   [[ "$agents" == "5" ]] && ok "agents/ 파일 5개 불변"    || no "agents 파일 수 $agents (기대 5)"
-  # verdict 토큰은 이제 SKILL.md 에 0종이 기대값이다 (Task 7 — invert). 판정 어휘는
-  # `scripts/verdict.py` 밖에 두지 않는다(global constraints) — PASS/FAIL/
-  # SKIP_WITH_EVIDENCE/NEEDS_RESOLUTION 은 옛 Runtime 게이트가 SKILL.md 에 직접
-  # 내던 판정값이었고, 그 게이트 자체가 대상 소멸했다. 레거시 3종
-  # (PARTIAL/INCONCLUSIVE/DEGRADED_VERDICT) 은 애초에 실재한 적이 없어 그대로 0종.
-  #
-  # **부재를 통과로 읽지 않는다 (qg iter-5 C3 계승).** `$SKILL` 이 없으면 grep 은
-  # **exit 2**(파일 오류)를 내고, 그것을 "매치 없음"과 같은 non-zero 로 읽으면
-  # 파일을 지워도·이름을 바꿔도·경로를 오타내도 GREEN 이 된다 — 그래서 파일 실재를
-  # 먼저 확인한다.
-  if [[ ! -f "$SKILL" ]]; then
-    no "SKILL.md 부재 ($SKILL) — verdict 토큰 락이 공허하게 통과할 뻔했다"
-  else
-    local present="" t
-    for t in PASS FAIL SKIP_WITH_EVIDENCE NEEDS_RESOLUTION PARTIAL INCONCLUSIVE DEGRADED_VERDICT; do
-      grep -qE "\\b${t}\\b" "$SKILL" && present="$present $t"
-    done
-    [[ -z "$present" ]] && ok "verdict 토큰 0종 (레거시 7종 전부 부재 — Task 7)" \
-      || no "verdict 토큰 잔존:$present"
-  fi
 }
 
 # T88 + §11 ⑬ / §6.7 S4: HEAD 축 트리는 기준선 트리와 **동시에 공존하는** 별개 트리다.

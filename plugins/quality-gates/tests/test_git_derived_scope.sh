@@ -7,8 +7,8 @@
 #
 # NOTE: 원래 브리프의 다섯 번째 검사(리포 전체 files.md 살아있는 참조 0건)는
 # 이 락에 포함하지 않는다 — 그 검사는 자기 자신의 본문에 있는 'files.md' 리터럴
-# (check #2의 grep 대상 + 실패 메시지)을 스스로 매치해 통과할 수 없기 때문이다.
-# 그 검사는 위 A20 락의 축 3 이 대신 진다: 비교 대상 이름을 자기 본문에 적지 않고
+# (이 머리말)을 스스로 매치해 통과할 수 없기 때문이다. 그 검사와 정의 단락의
+# files.md 부재는 위 A20 락의 축 3 이 대신 진다: 비교 대상 이름을 자기 본문에 적지 않고
 # scripts/qg-gc.py 의 회수 마커에서 읽어 오므로 자기-매치가 성립하지 않는다.
 #
 # NOTE: check #1 은 원래 "정의가 check-review-scope.sh 를 근거로
@@ -48,11 +48,6 @@ grep -qF 'the size of the file set you actually resolved' <<<"$DEF" \
 grep -qF '$branch_ahead_count' <<<"$DEF" \
   && no "A22: 정의가 다시 \$branch_ahead_count 로 등식화됐다 (floor 무력화 재발)" \
   || ok "A22: 정의가 \$branch_ahead_count 와 등식화되지 않는다"
-
-# 음의 짝 — 그 정의가 files.md 를 근거로 들지 않는다.
-grep -qF 'files.md' <<<"$DEF" \
-  && no "A22: 정의가 아직 files.md 를 근거로 든다" \
-  || ok "A22: 정의에 files.md 없음"
 
 # degrade 분기 보존 — 판정 불가를 조용히 0으로 취급하지 않는다.
 grep -qF 'do NOT silently treat it as 0' <<<"$DEF" \
