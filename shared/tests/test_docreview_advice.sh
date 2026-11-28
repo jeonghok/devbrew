@@ -16,6 +16,7 @@ REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 . "$HERE/fixtures/docreview/cases.sh"
 . "$HERE/fixtures/docreview/cases_advice.sh"
+r1_templates_on
 case_advice_axes_per_profile
 case_advice_engine_items_mustcatch
 case_AC1_brief_overdesign_only

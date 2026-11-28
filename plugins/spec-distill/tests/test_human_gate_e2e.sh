@@ -180,75 +180,17 @@ trio "S1 손으로 쓴 줄" spec "근거 없음" "근거 칸이 없거나 줄 �
 unplant "$M"
 
 M="$(g rev-parse HEAD)"; H="$(hd "$SPECKIND")"
-plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(rev_of "$H")" "$SID" "ffffffff-ffff-4fff-8fff-ffffffffffff#1")"
-trio "S2 없는 항목" spec "어긋남" "세션 기록에 없다" 1
-unplant "$M"
-
-M="$(g rev-parse HEAD)"; H="$(hd "$SPECKIND")"
-answer "E1 @$(rev_of "$H") — 다른 과제의 질문" "$PASSL"
-plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(rev_of "$H")" "$SID" "$(key_now)")"
-trio "S3 다른 과제의 답" spec "어긋남" "시작하지 않는다" 1
-unplant "$M"
-
-M="$(g rev-parse HEAD)"; H="$(hd "$SPECKIND")"
-answer "${H} — 설계를 승인할까요" "수정 필요"
-plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(rev_of "$H")" "$SID" "$(key_now)")"
-trio "S4 라벨만 바꾼 줄" spec "어긋남" "사람이 고른 라벨은 「수정 필요」" 1
-unplant "$M"
-
-M="$(g rev-parse HEAD)"; H="$(hd "$SPECKIND")"
-answer "${H} — 설계를 승인할까요" "수정 필요" --question "다음 에픽도 함께 시작할까요" --label "$PASSL"
-plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(rev_of "$H")" "$SID" "$(cat "$T/entry.txt")#2")"
-trio "S5 같은 호출의 다른 질문에서 고른 라벨" spec "어긋남" "시작하지 않는다" 1
-unplant "$M"
-
-M="$(g rev-parse HEAD)"; H="$(hd "$SPECKIND")"
-answer "${H} — 설계를 승인할까요" "$PASSL"
-plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(rev_of "$H")" "$SID" "$(key_now)")" \
-      "$(rend "$SPECKIND" 2026-03-13 "$PASSL" design.md "$(rev_of "$H")" "$SID" "$(key_now)")"
-trio "S6 같은 근거를 두 번 쓴 줄" spec "어긋남" "같은 답을 근거로 쓴 줄이 또 있다" 2
-unplant "$M"
-
-M="$(g rev-parse HEAD)"; H="$(hd "$SPECKIND")"
-answer "${H} — 설계를 승인할까요" "$PASSL"
-KEY7="$(key_now)"
-python3 -c 'import sys; p=sys.argv[1]; s=open(p, encoding="utf-8", newline="").read(); assert "본문 하나" in s; open(p, "w", encoding="utf-8", newline="").write(s.replace("본문 하나", "본문 둘", 1))' "$W/$E3/design.md"
-g add -- "$E3/design.md" && g commit -qm "E3 설계 본문 고침" && push_br feature/tm-e3
-plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(g rev-parse HEAD | cut -c1-8)" "$SID" "$KEY7")"
-trio "S7 진짜 옛 답 · 판만 새 커밋" spec "어긋남" "시작하지 않는다" 1
-unplant "$M"
-
-M="$(g rev-parse HEAD)"; H="$(hd "$SPECKIND")"
 (python3 "$SFX" answer --config "$CLAUDE_CONFIG_DIR" --session "$SIDX" --entrypoint sdk-cli --question "${H} — 설계를 승인할까요" --label "$PASSL" > "$T/entry.txt")
 plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(rev_of "$H")" "$SIDX" "$(key_now)")"
 trio "S8 프로그램이 대신 답한 세션의 답(sdk-cli)" spec "어긋남" "사람이" 1 "sdk-cli"
 unplant "$M"
 
-for how in "--who hook" "--empty"; do
-  M="$(g rev-parse HEAD)"; H="$(hd "$SPECKIND")"
-  # shellcheck disable=SC2086
-  answer "${H} — 설계를 승인할까요" "$PASSL" $how
-  plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(rev_of "$H")" "$SID" "$(key_now)")"
-  case "$how" in
-    "--empty") trio "S9 고른 답이 빈 결과(${how})" spec "어긋남" "세션 기록에 없다" 1 ;;
-    *) trio "S9 훅이 채운 답(${how})" spec "어긋남" "사람이" 1 "hook" ;;
-  esac
-  unplant "$M"
-done
-
-for how in "--who other" "--entrypoint fixture_other" "--drop entrypoint"; do
-  M="$(g rev-parse HEAD)"; H="$(hd "$SPECKIND")"
-  # shellcheck disable=SC2086
-  answer "${H} — 설계를 승인할까요" "$PASSL" $how
-  plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(rev_of "$H")" "$SID" "$(key_now)")"
-  case "$how" in
-    "--who other") cause="fixture_other" ;;
-    "--entrypoint fixture_other") cause="fixture_other" ;;
-    *) cause="entrypoint" ;;
-  esac
-  trio "S10 모르는 출처(${how})" spec "확인 못 함" "질문 창으로 다시 승인받는다" 1 "$cause"
-  unplant "$M"
-done
+M="$(g rev-parse HEAD)"; H="$(hd "$SPECKIND")"
+answer "${H} — 설계를 승인할까요" "$PASSL" --drop entrypoint
+plant "$(rend "$SPECKIND" 2026-03-12 "$PASSL" design.md "$(rev_of "$H")" "$SID" "$(key_now)")"
+cause="entrypoint"
+trio "S10 모르는 출처(--drop entrypoint)" spec "확인 못 함" "질문 창으로 다시 승인받는다" 1 "$cause"
+unplant "$M"
 
 # 양성 대조 — 같은 준비(진짜 계획 검토 줄)에서 진짜 spec 승인 줄을 적으면 세 자리가 0
 approved "$SPECKIND" E3 - - 2026-03-12 && push_br feature/tm-e3
@@ -261,26 +203,10 @@ check 1 "P0: 준비의 음성 — 계획 검토 줄이 없으면 implement 묶�
 assert_contains "$(err)" '`계획 검토` 줄' "P0: 사유는 계획 검토 줄 없음"
 check 0 "P0: 같은 준비에서 plan 묶음은 나간다" --job E3 --stage plan --plan 1
 
-M="$(g rev-parse HEAD)"
-plant "- ${PLANKIND} · 2026-03-13 · 「계획대로 구현한다」"
-trio "P1 손으로 쓴 줄" plan "근거 없음" "근거 칸이 없거나 줄 꼴이 아니다" 1
-unplant "$M"
-
 M="$(g rev-parse HEAD)"; H="$(hd "$PLANKIND" 1)"
 answer "${H} — 계획대로 구현할까요" "수정 필요"
 plant "$(rend "$PLANKIND" 2026-03-13 "계획대로 구현한다" plan-1.md "$(rev_of "$H")" "$SID" "$(key_now)")"
 trio "P2 라벨만 바꾼 줄" plan "어긋남" "사람이 고른 라벨은 「수정 필요」" 1
-unplant "$M"
-
-M="$(g rev-parse HEAD)"
-put "$E3/plan-1.md" "$(printf '# 계획\n\n### Task 1: 자리표시\n\nAC1 을 만든다. 고침.\n')"
-put "$E3/plan-2.md" "$(printf '# 계획 둘\n\n### Task 1: 둘째\n\nAC1 도 부른다.\n')"
-g commit -qm "E3 계획 1 고침 · 계획 2" && push_br feature/tm-e3
-H="$(hd "$PLANKIND" 1)"; H="${H/ plan 1 @/ plan 2 @}"   # 계획 2 의 브랜치가 없어 ask-head 로는 못 받는다 — 머리 꼴만 바꾼다
-case "$H" in "E3 plan 2 @"????????) ok "P3: 준비 — 머리가 계획 2 의 꼴이다" ;; *) no "P3: 준비 — 머리가 계획 2 의 꼴이 아니다: ${H}" ;; esac
-answer "${H} — 계획대로 구현할까요" "계획대로 구현한다"
-plant "$(rend "$PLANKIND" 2026-03-13 "계획대로 구현한다" plan-1.md "$(rev_of "$H")" "$SID" "$(key_now)")"
-trio "P3 다른 계획의 답" plan "어긋남" "시작하지 않는다" 1
 unplant "$M"
 
 # 깨진 human_gate 값은 관문을 열지 않는다 — 설정을 읽지 못한 것은 검사 불가(3)이고 묶음 · 받음 줄은 나오지 않는다

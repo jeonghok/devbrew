@@ -63,7 +63,7 @@ next_phase: superpowers:writing-plans
 - 네 갈래(스크립트 동작 · 보안 장치 · 복사본 일치 · 문서 문구) 밖의 테스트(테스트를 시험하는 테스트 · 규칙 문서가 이름으로 부르는 테스트)도 같은 기준으로 가른다(C15). 네 갈래 가운데 통째로 없애는 갈래는 없다(C21).
 - 앞단 로드맵의 `plugins/spec-distill/tests/test_stage_prose_trim.sh` 는 값 대비 비용 차례에 올리지 않는다(사용자 2026-11-24 · 알림 글).
 - 판을 올리지 않는다 — `plugins/<X>/tests/` 와 `shared/tests/` 만 바꾸면 판 올림에 걸리지 않는다(CLAUDE.md 「plugin.json — 필수 키와 판 올림」).
-- 경로 예약: `plugins/spec-distill/tests/` · `plugins/quality-gates/tests/` · `plugins/plugin-audit/tests/` · `plugins/project-init/tests/` · `shared/tests/` — 이 에픽이 쓰는 `docs/removed-tests.md` 는 로드맵 문서 PR #342(E3 머지 뒤 재분해 · 사용자 승인 2026-11-26)가 예약에 더하고, 그 PR 이 머지되기 전에는 예약 요청 중이다. `docs/testing.md` 는 같은 PR 이 예약에 더하지만 이 설계는 바꾸지 않는다(Files to Modify) — 지움을 막는 문서로만 읽는다(§5).
+- 경로 예약: `plugins/spec-distill/tests/` · `plugins/quality-gates/tests/` · `plugins/plugin-audit/tests/` · `plugins/project-init/tests/` · `shared/tests/` — 이 에픽이 쓰는 `docs/removed-tests.md` 는 로드맵 문서 PR #342(E3 머지 뒤 재분해 · 사용자 승인 2026-11-26)가 예약에 더했다(로드맵 E4 블록의 경로 예약). `docs/testing.md` 는 같은 PR 이 예약에 더했지만 이 설계는 바꾸지 않는다(Files to Modify) — 지움을 막는 문서로만 읽는다(§5).
 
 ## Approaches
 
@@ -105,7 +105,7 @@ PR 을 나누는 길 셋을 견줬고 사용자가 A 를 골랐다(2026-11-26 �
 - **시간이 드는 곳을 먼저 잰다(B2).** 진단의 초는 파일 전체 시간이지 준비물을 다시 짓는 비용이 아니다 — 판정 표 담당자의 실측(2026-11-26)으로 준비물 짓기는 PR 1 대상 시간의 약 3–12%, PR 3 공유 파일 시간의 약 11% 였고, 나머지는 케이스마다 새로 띄우는 python · push/fetch · 확인마다 원장 값을 따로 읽는 python 이었다. 그래서 준비물 PR 의 고침은 넷 가운데 실측으로 시간이 드는 것을 고른다 — ① 준비물을 한 번 지어 복사 ② 같은 동작을 여러 표면에서 되풀이하는 확인을 대표만 남기고 줄이기(둘째 줄 · 보안이면 변이 넷 + 양성 대조) ③ 보고 글 · 상태를 python 한 번으로 읽게 묶기 ④ 값 읽기를 파일마다 한 프로세스로 묶기. 판정 표의 「줄어드는 초」 칸은 고침마다 따로 적는다.
 - **고치는 길 ① 의 조건.** 준비물을 파일마다(또는 테스트 클래스마다) 한 번 지어 두고 케이스마다 복사해 쓴다 — 케이스마다 bare 원격 · 클론 · 커밋 · push 를 다시 하지 않는다. 복사가 깨지는 조건을 먼저 본다 — 상태에 절대 경로나 수정 시각이 박히는가, 도우미가 캐시를 쥐는가(진단의 되풀이된 잘못 3). 깨지면 그 자리만 케이스마다 다시 짓는다.
 - **잃는 확인.** 진단 재독의 「고치면 잃는 것」 줄(`rereads.md`)을 표의 「고치면 잃는 확인」 칸으로 옮겨 시작한다. 예: `test_human_gate.sh` 의 케이스 26 · 27 은 단위로 내리면 잃는다 · `test_docreview_mutations.sh` 는 「행동 락 결과로 갈음」 하면 양성 대조를 잃는다. 잃는 확인을 그대로 두는 고치는 길이 있으면 그 길을 쓰고, 없으면 표에 적어 승인받는다.
-- **PR 3 의 엔진 케이스.** E1 은 케이스 모음의 값 읽기를 한 프로세스로 묶는 일을 「고쳐 쓰는 줄이 많고 얻는 것이 30% 안팎이며 잘못 고칠 위험이 더 크다」 며 기각했다. 원장 복사로는 11% 안팎이라는 실측을 새 근거로 사용자가 그 길을 다시 열었다(B2). 첫 라운드 원장 복사(①)와 값 읽기 묶기(④)를 함께 한다. 잘못 고칠 위험은 있는 장치 둘로 막는다 — 골든 출력을 바이트로 견주는 `shared/tests/test_docreview_golden.sh` 를 고친 뒤에도 그대로 통과시키고, 변이 행렬 `shared/tests/test_docreview_mutations.sh` 의 변이 셀이 고친 뒤에도 전과 같이 실패하는 것(양성 대조 포함)을 본다. 고친 확인 하나라도 그 둘에서 달라지면 그 파일은 묶기 전으로 되돌린다.
+- **PR 3 의 엔진 케이스.** E1 은 케이스 모음의 값 읽기를 한 프로세스로 묶는 일을 「고쳐 쓰는 줄이 많고 얻는 것이 30% 안팎이며 잘못 고칠 위험이 더 크다」 며 기각했다. 원장 복사로는 11% 안팎이라는 실측을 새 근거로 사용자가 그 길을 다시 열었다(B2). 첫 라운드 원장 복사(①)와 값 읽기 묶기(④)를 함께 한다 — PR 3 표의 답으로 ④ 는 하지 않았다(지휘 기록 2026-11-27). 잘못 고칠 위험은 있는 장치 둘로 막는다 — 골든 출력을 바이트로 견주는 `shared/tests/test_docreview_golden.sh` 를 고친 뒤에도 그대로 통과시키고, 변이 행렬 `shared/tests/test_docreview_mutations.sh` 의 변이 셀이 고친 뒤에도 전과 같이 실패하는 것(양성 대조 포함)을 본다. 고친 확인 하나라도 그 둘에서 달라지면 그 파일은 묶기 전으로 되돌린다.
 - **PR 2 의 python 묶음.** 폴더마다 프로세스 하나로 도는 묶음이라 준비물을 `setUpClass` 수준으로 올리는 것이 기본이다. 케이스끼리 상태를 나누게 되면 케이스 순서에 기대지 않는지 본다(순서를 섞어 한 번 돌린다).
 - **같이 쓰는 도우미.** 도우미를 바꾸지 않고 옆에 「한 번 지어 복사」 진입점을 더하는 길이 있으면 그 길을 먼저 쓴다. 도우미를 고치면 대상 밖에서 그 도우미를 쓰는 테스트(예: `session_fixture` 를 쓰는 `test_human_judge.py` · `test_session_fixture.py` · `test_session_record.py`)를 판정 표의 「기대는 곳」 칸에 적고, 그 PR 에서 함께 돌려 통과를 본다 — 그 테스트들의 확인은 바꾸지 않는다.
 - **시간 재기.** PR 마다 그 PR 의 대상 파일만 다른 스위트와 겹치지 않게 한 번씩 돌린 초를 고치기 전과 뒤로 PR 본문에 싣는다(겹쳤으면 그렇다고).
@@ -265,6 +265,14 @@ PR 을 나누는 길 셋을 견줬고 사용자가 A 를 골랐다(2026-11-26 �
 | 덜 또렷한 문장 · 긴 흐름에서 평가의 흔들림과 값 재기(E3 미룸) | 평가 케이스를 더하지 않는다(§4) | 없음 — 평가 케이스를 더하는 일 |
 | §4 의 대상에 들지 않는 「둠」 단위의 재판정 | 값 순서로 가다 멈춘다(사용자 2026-11-26) | 없음 — §9 의 숫자를 보고 사용자가 다시 정할 수 있다 |
 | 준비물 셋 밖의 「구조를 고침」 가운데 진단의 초가 20 미만인 83개(약 380초) | 하나에 평균 5초 미만이다(사용자 2026-11-26) | 없음 — §9 의 숫자를 보고 사용자가 다시 정할 수 있다 |
+| PR 3 · `cases.sh` r1 템플릿 폴더를 병행으로 나누면 `_r1_save` 의 `$$` 임시 이름이 부딪는다(한 셸의 `$(…)` 들은 `$$` 가 같다) | 지금은 그 쓰임이 없다 — 켜는 여섯 파일은 실행마다 새 폴더 · 행렬은 실행마다 `$BASE_MUT` 이고 r1 을 차례로 부른다 | 없음 — 다음에 r1 템플릿 폴더를 병행으로 나누는 일 |
+| PR 3 · 복사본이 새로 지은 원장과 같은지(다시 적기의 `log_line` · 다시 찍은 시작 표식 · begin-round 종료 0 만 저장)를 늘 지키는 확인이 없다 — 골든을 템플릿을 켠 채 돌릴 때만 보인다. 둘째 r1 이 복사 길을 탔는지는 `case_r1_template_isolated` 가 잰다 | 지금 판정에 닿지 않는다 — 켜는 여섯 파일은 원장 로그 · 실패 원장의 표준 오류를 읽지 않고, 행렬은 traceback 있음/없음으로 가른다 | 없음 — 다음에 `cases.sh` 의 r1 템플릿 길을 고치는 일(그때 케이스 하나) |
+| PR 3 · `case_AC38_audit_row10_11_entry_flags`(`cases.sh`) 가 `dmc` 를 지우지 않아 `test_docreview_state.sh` 실행마다 `docreview-XXXXXX` 폴더 하나가 남는다 | 승인 표에 없는 기존 동작 — 이 PR 은 표에 없는 확인을 고치지 않는다 | E4 PR 6(shared/tests 정리) 판정 표 후보 — §4 대상에 들지 않으면 없음 |
+| PR 3 · 공유 잠금은 잠금 밖 세션의 스위트를 막지 못해 PR 마다 앞 · 뒤 초 재기가 겹친다(PR 3 의 −1.5초 언저리 셋은 흔들림 범위) | 지휘 도구 · 잠금이라 경로 예약 밖이다 | E4 §9 의 마지막 재기(지휘자가 겹치지 않은 바퀴를 잰다) |
+| `test_roadmap_status.sh` 에서 실패를 삼키는 쓰기가 읽기 전용 행동 검사 · snap 비교를 지나고 정적 검사 하나에만 막힌다(이번 PR 전부터 있던 빈 곳 — 보안처럼 다룬다) | PR 1 의 범위(③ · ④)가 아니다 | 없음 — 다음에 `test_roadmap_status.sh` 의 읽기 전용 확인을 고치는 일(§4 대상 밖) — 다음에 그 확인을 고치는 세션이 받는다 |
+| `conductor_ledger.py` `_has_kind` 의 「줄 없음」 갈래에서, 꼴을 못 읽은 계획 검토 줄을 재는 테스트 | 원래부터 없다 — 옛 테스트도 재지 않았다(잃은 것이 아니다) | 없음 — 다음에 `_has_kind` 의 「줄 없음」 확인을 고치는 일(§4 대상 밖) — 다음에 `_has_kind` 나 그 테스트를 고치는 세션이 받는다 |
+| `test_team_status.sh` 의 `trap 'rm -rf "$T"'` 이 끝날 때의 `$T` 만 지워, 묶음 안에서 멈추면 바깥 임시 폴더가 남는다(이번 PR 전부터) | PR 1 의 범위 밖이다 | 없음 — 다음에 `test_team_status.sh` 의 임시 폴더 정리를 고치는 일(§4 대상 밖) — 다음에 그 파일의 trap 을 고치는 세션이 받는다 |
+| `docs/removed-tests.md` 의 케이스 칸에 칸 구분자 ` · ` 가 섞인 줄(`15 · 16` 등) | 계획이 정한 글이고, 지금 그 파일을 읽는 스크립트가 없다 | 없음 — 그 파일을 기계로 읽는 일이 생길 때 |
 
 ## 번호 대조
 
@@ -374,5 +382,66 @@ PR 을 나누는 길 셋을 견줬고 사용자가 A 를 골랐다(2026-11-26 �
 | a86f8ade#r3.1 | 참고(approaches_comparison) #있는-것-검토 — 있는 준비물 도우미 줄이 팀 레포 PR 의 실제 도우미를 빠뜨렸다. 대신 어느 준비물 PR 대상도 쓰지 않는 도우미를 싣고 있다. |
 | 169bbe6f#r3.1 | 참고(ambiguity) #3-준비물-pr-셋 — 준비물 PR 은 같이 쓰는 준비물 도우미에 한 번 짓기를 얹는다. 그런데 대상 목록 밖에서 그 도우미를 쓰는 테스트를 어떻게 다룰지 정하지 않았다. 바뀐 도우미는 판정 표에 없는 테스트의 동작까지 바꾸는데, 표에 없는 테스트는 고치지 않는다는 규칙과 부딪친다. — 고치면: §3 에 한 줄을 더한다 — 같이 쓰는 도우미를 고치면 대상 밖에서 그 도우미를 쓰는 테스트를 판정 표의 「기대는 곳」 칸에 적고, 그 테스트들도 그 PR 에서 돌려 통과를 본다. 그 테스트들의 확인은 바꾸지 않는다. 도우미를 바꾸지 않고 옆에 「한 번 지어 복사」 진입점을 더하는 길이 있으면 그 길을 먼저 쓴다. |
 - spec 승인 · 2026-11-26 · 「승인 — 계획 담당자에게 (권장)」
-- 판정 표 승인 · 2026-11-27 · PR 1(팀 레포 준비물) 「승인 (권장)」 · PR 3(문서 리뷰 원장 도우미) 「승인 (권장)」 — 표는 지휘 상태 폴더 files/relay/E4/table-pr1-final.md · table-pr3-final.md(읽은 담당자 A · 다시 읽은 담당자 B — 서로 다른 하위 agent). 앞선 답: 중복 확인 묶음은 대표 넷으로 줄이고 사유 확인은 test_human_judge.py 로 옮긴다 · test_human_gate.sh 는 15 · 16 만 지운다 · 값 읽기 묶기(④)는 하지 않는다
+- 판정 표 승인 · 2026-11-27 · PR 1(팀 레포 준비물) 「승인 (권장)」 · PR 3(문서 리뷰 원장 도우미) 「승인 (권장)」 — 표는 지휘 상태 폴더 files/relay/E4/table-pr1-final.md · table-pr3-final.md(읽은 담당자 A · 다시 읽은 담당자 B — 서로 다른 하위 agent). 앞선 답: 중복 확인 묶음은 대표 넷으로 줄이고 사유 확인은 test_human_judge.py 로 옮긴다 · test_human_gate.sh 는 15 · 16 만 지운다 · 값 읽기 묶기(④)는 하지 않는다(PR 3 표의 답)
+- 계획 검토 · 2026-11-27 · PR 1 계획(docs/superpowers/plans/2026-11-27-test-prune-team-repo.md · 3e1e4878) · PR 3 계획(docs/superpowers/plans/2026-11-27-test-prune-docreview.md · 9594b43d) 을 지휘자가 읽었다 — 설계에 없던 결정(PR 1 열둘: repo_copy 진입점 · 견본 T1–T3 · 도우미 확인 케이스 0 · 보고 캐시 체크섬 · static_check --batch · 변이를 git archive 사본에 · 시간 재기 · 지운 것 열세 줄 · 사유 조각 · 한 번 대조 · 둠 아홉 돌리기 · 과제 순서 / PR 3 넷: 키에 내용 체크섬 · 시작 표식 옮기기 · 켜는 길 · 위험 케이스 셋)은 모두 승인 표 안의 구현 선택이라 사용자에게 묻지 않았다. 실행 방식은 두 계획이 권한 subagent-driven
+- 계획 확인(E2 가 넘긴 둘) · 2026-11-27 · ① 두 계획이 실은 테스트는 승인 표의 행과 설계 「테스트할 자리」(준비물 도우미 · 옮긴 확인)에 든다 ② 망가뜨려 보기 걸음이 갈래를 따랐다 — 보안 확인을 옮기거나 줄이는 과제마다 변이 넷과 양성 대조 · 새 도우미 확인은 실패를 먼저 본다
+- 구현 중 판정 · 2026-11-27 · PR 1 Task 7: 지우기 전 견주기에서 human_lines.py:486 변이를 옛 e2e P1 만 잡았다(사유 글이 「지나지 못했다 · 근거 없음」 → 「줄이 없다」, 막는 것은 그대로) — 사용자 앞선 답 「사유 확인은 test_human_judge.py 로 옮긴다」 를 따라 judge Gates 로 옮긴 뒤 P1 을 지우는 2안을 지휘자가 정했다(사용자 답 아님) · PR 3: 구현 agent 가 과제 2–4 를 fable 로 돌려 과제 4 리뷰부터 opus 로 정정(커밋 꼬리 Fable 은 사실이라 그대로)
+- 순서 재결정 · 2026-11-28 · 사용자 「PR 5 판정 표를 지금 시작 (권장)」 — 설계 §1 순서 1 · 3 → 2 → 4 → 5 · 6 에서 PR 5(quality-gates 정리)를 앞당겨 PR 1 · 3 의 머지 전 확인과 나란히 판정 표를 만든다. 근거: qg 폴더에는 준비물 PR 이 없어 §1 의 「그 폴더의 준비물 PR 이 머지된 뒤」 조건이 없다 · PR 2 는 PR 1 과 #347 머지를 기다린다 · #347 이 고치는 qg 테스트 행은 머지 뒤 다시 읽는다
+- 스위트 한 번 · 2026-11-28 · 사용자 「그래」 — PR 마다 전체 스위트가 두 번(구현 담당자의 마지막 과제 · 지휘자의 머지 전 대조) 돌아 PR 당 약 70분과 잠금 대기를 더 썼다. PR 2 · 4 · 5 · 6 부터 구현 · 리뷰 담당자는 고친 파일과 그 파일을 읽는 락만 돌리고 시간은 대상 파일만 잠금 아래에서 잰다 — 전체 스위트는 머지 전 대조 한 번. 대조 뒤 main 이 다른 파일만 고쳐 움직이면 겹칠 만한 테스트만 다시 돌린다(#342 · #349 선례). 계획 입력 줄(relay/E4/plan-input.md)에 덧붙였다
 - 판정 표 승인 · 2026-11-28 · PR 5(quality-gates 정리) — 사람이 정할 갈림 19개(읽은 담당자 A 11 · 다시 읽은 담당자 B 8) 「권하는 쪽 그대로 (권장)」 · 「한 PR 로 (권장)」 · #347 이 고치는 16행 「#347 머지 뒤 다시 읽고 이 PR 에 (권장)」 — 표는 지휘 상태 폴더 files/relay/E4/table-pr5-final.md(원문 table-pr5-a.md · table-pr5-b.md — 서로 다른 하위 agent). 엮는 담당자가 docs/testing.md 의 기록 규칙으로 removed-tests 줄 여섯을 더하고 16행의 구현 순서 문단을 붙였다(지휘자가 받음 — 사용자 답 아님)
+
+## 판정
+
+### docs/superpowers/plans/2026-11-27-test-prune-docreview.md
+
+- Ruling: suite/timing lock uses dispatcher's command with --wait 7200 — dispatcher instruction overrides plan GC --wait 3600 — cost if wrong: longer wait only.
+- Ruling: Task 1 has no diff; no task review — verification-only task; its output is baseline files checked later by T2–T4 comparisons — cost if wrong: a bad baseline surfaces as mismatches in T3/T4.
+- Ruling: models — fable(most capable) for T2,T3,T4,T5 impl+review and final review (template contract / matrix / security range per dispatcher); opus T8 impl, fable T8 review (matrix file comments); sonnet T1,T7 impl, opus T7 review; opus T6 impl+review, T9 impl; sonnet T10.
+- Ruling: c9b81f16 trailer says Co-Authored-By Claude Fable 5.2 not the dispatcher's Opus 5.5 — left as is (no history rewrite allowed by dispatcher; truthful attribution) — later implementers told to use Opus 5.5 verbatim; reported to conductor — cost if wrong: one commit trailer differs.
+- Ruling: accept I1 — add "notice 0 lines" assertion on second r1 stderr in case_r1_template_isolated and case_r1_template_round_start_after_call — spec AC5 requires ① files not rebuilding per case; plan's cases can't see silent fallback; adds assertions only, no table/AC/visible-behavior change (K6 extension, report to conductor) — cost if wrong: +2 assertions in state Total.
+- Ruling: Fable-model implementers keep their own truthful Co-Authored-By (Fable 5.2) — they refuse agent override of their session attribution; Opus 5.5 line applies to commits by Opus-run agents — report to conductor which commits carry which trailer — cost if wrong: trailer mismatch on some commits, fixable only by history rewrite (forbidden).
+- Ruling: models from Task 4 review onward — opus for implement/fix/task review/final review; sonnet allowed for light tasks (record/measure: 1,7,10); no fable — user standing rule relayed by coordinator — T2/T3 not re-reviewed; final opus review covers them. Future commits carry the actual model's trailer.
+- Ruling: accept +2 (shape assertion + exact compare) — brief Step 2 explicitly keeps the Step 1 shape assertion; spec authority unaffected — cost if wrong: one extra assertion.
+- Ruling: Task 8 dispatched in parallel with Task 7 review — disjoint files (T7 cases.sh only; T8 nine test files), pathspec commits, norm compare per file at own B8 — cost if wrong: interleaved commit range for reviews (package T8 by its own commits).
+- Ruling: fix plan text pathspec 'plugins/*/tests' → 'plugins/*/tests/*' in the final fix wave — git pathspec dir-glob matches nothing (known trap); plan file is in the allowed changed-file list; docs only, no version bump — cost if wrong: one extra docs line diff.
+- Ruling: single fix wave = (1) mutations.sh:341-343 ㉒ comment correction (2) plan :298 ×2 · :342 pathspec → 'plugins/*/tests/*' (3) mutations.sh:50-51 one-sentence comment on the second-r1 blind spot, worded as an accurate limitation/guidance (not claiming behavior run_case lacks) (4) cases.sh:1432 · :1952 wording — comments/docs only, no table/AC/behavior change — cost if wrong: comment churn.
+- Ruling: 미룸 rows R1–R4 (key lacks engine content/env + $$ temp name; no standing "copy == fresh" lock (log_line/K2/K3); case_AC38 leaves dmc; shared lock does not prevent timing overlap) go to the conductor to add to the design doc ## 미룸 — design doc edits belong to the conductor per plan — cost if wrong: rows land one step later.
+- Ruling: keep this plan's SDD workspace (not rm -rf) — conductor and final report reference task reports/reviews there and backed it up; git-ignored — cost if wrong: stale git-ignored folder until conductor deletes it.
+
+### docs/superpowers/plans/2026-11-27-test-prune-team-repo.md
+
+- Ruling: 잠금 명령은 계획의 `--wait 3600 --owner <이름>` 대신 지휘자가 준 `--owner e4-impl-team-repo --wait 7200` — 지휘자 지시가 뒤이고 구체적 — 틀리면 대기 시간만 다르다.
+- Ruling: Task 9 Step 11(PR 번호 채움)은 이 실행에서 하지 않는다 — PR 은 지휘자가 연다 — `PR #<번호>` 자리표시가 남고 AC8 번호 부분은 「미룸 — PR 연 뒤」.
+- Ruling: Task 9 Step 5(시간) · Step 6(전체 스위트)는 지휘(이 세션)가 잠금 아래 직접 돈다; Step 1–4 는 하위 agent — 계획이 "이 흐름의 주인이 돈다" — 비용 차이뿐.
+- Ruling: 통과 수 기대치(+8 등)는 구현의 실제 셈을 따르고 실패 0 · 단언 집합으로 판정 — 계획의 셈은 어림 — 틀리면 리뷰가 잡는다.
+- Ruling: 모델 — T1 sonnet · T2 opus · T3 fable · T4 sonnet · T5 opus · T6 · T7 · T8 fable(보안 옮김 · 줄임 — 지휘자: 가장 뛰어난 모델) · T9 Step1–4 sonnet · 마지막 리뷰 fable. 리뷰어: T2 · T5 opus, T4 sonnet, T3 · T6 · T7 · T8 fable — 틀리면 비용 · 품질 차.
+- Ruling: Task 1 은 diff 가 없어 과제 리뷰를 건너뛴다 — 리뷰할 코드 없음 — 틀려도 Task 9 시간 대조에서 드러난다.
+- Ruling: Task 2 걱정 1(Step 5 기대 — set-url 지움에서 「한 사본의 push 가…」 는 ✓ 이고 다른 세 단언이 ✗) 은 계획 기대 문장이 낡은 것으로 받는다 — 단언은 다른 변이에서 이빨을 보였다 — 틀리면 리뷰가 잡는다.
+- Ruling: Task 2 걱정 2(첫 repo_copy team|new 를 $( ) 하위 셸에서 부르면 RD · TM · RM 이 부모에 없음) → Task 4 · 5 dispatch 에 「첫 부름은 하위 셸 밖에서」 를 싣는다.
+- Ruling: 모델 정정 — 지휘자 정정(이 로드맵 사용자 상시 규칙: 구현 · 고침 · 리뷰 하위 agent 는 Opus)에 따라 fable 로 적은 자리(T3 · T6 · T7 · T8 구현 · 리뷰 · 마지막 리뷰)를 모두 opus 로 바꾼다. T1 · T4 · T9 Step1–4 sonnet 그대로 — 틀리면 비용 · 품질 차.
+- Ruling: Important 1(plan-mandated) 은 고친다 — 계획 Review Focus 2 와 설계 「테스트할 자리」 가 그 가드가 무는 것을 요구한다; 계획이 쓴 단언 글은 두고 까닭 문구 · 덮어쓰지 않음 · c0c 안 생김 단언을 더한다 — 틀리면 단언 몇 개가 늘 뿐.
+- Ruling: Minor 1(ls-remote origin) · Minor 4(set-url 실패 까닭 한 줄) · Minor 5(TEAM_TPL 빈 값 가드 — rm -rf "/team" 위험)도 같은 라운드에 넣는다 — 값싸고 5 는 안전 — 틀리면 diff 가 조금 커진다.
+- Ruling: Task 4 를 Task 3 리뷰와 겹쳐 띄운다 — 리뷰어는 읽기만 하고 Task 4 파일(leader_seat_e2e · human_record · walk_next)은 Task 3 과 겹치지 않는다 — 틀리면 Task 3 고침 커밋이 Task 4 커밋 사이에 끼어 review-package 범위를 커밋별로 잡아야 한다.
+- Ruling: fc6da945 의 꼬리가 `Co-Authored-By: Claude Sonnet 5.5` 다(지휘자 지시는 Opus 5.5, 계획은 「그 agent 의 모델 이름으로」). 고치지 않는다 — 계획 글과 맞고 실제 쓴 모델이라 정확하며, 고치려면 커밋을 다시 써야 한다(HEAD 재작성 금지) — 틀리면 꼬리 한 줄의 표기 차.
+- Ruling: Important 1 은 고친다 — 계획의 조각 글은 그대로 두고, 갈래를 가르는 조각(리뷰가 실측한 "수락의 출처('fixture_other')" · "entrypoint: 'fixture_other'" 또는 같은 뜻)을 더한다. 승인 표의 「고치면 잃는 확인: 없음」 을 지키는 강화이고 AC · 보이는 동작 · 판정을 바꾸지 않으므로 사람에게 묻지 않는다 — 틀리면 조각 둘이 더 있을 뿐.
+- Ruling: Task 7 2안 — 사용자의 앞선 답(사유 확인은 judge 로 옮긴다)을 따른 지휘자 판정, 사용자 답 아님. judge Gates.test_missing 에 손 계획 검토 줄 「지나지 못했다」 · 「근거 없음」 단언(:486 변이에서 실패를 먼저 봄) → 패치대로 P1 포함 지움 → 기록 열두 줄(P1 「지금 지키는 것」 = test_human_judge.py(Gates)) → 변이 여섯 새 쪽 재확인 → opus 리뷰.
+- Ruling: diff 의 docs 둘(계획 · 설계문서)은 이 실행 전 브랜치에 있던 커밋(3e83f142 · 3e1e4878)이라 Global Constraints 위반이 아니다 — 틀리면 PR 범위 설명 한 줄.
+- Ruling: plugin-audit 실패는 이 브랜치의 새 실패가 아니다 — PR 이 plugin-audit · tools 를 건드리지 않고, 같은 HEAD 에서 그 테스트 · 모듈(11)을 따로 돌리면 OK(부하 아래 흔들림) — 틀리면 AC13 근거가 약하고 지휘자의 스위트 대조가 드러낸다.
+- Ruling: 마지막 리뷰의 고침 한 번에 Minor 1(확인 0 의 claude/ 공허 피연산자) · Minor 2(「블록이 없으면 빈 출력」 rc 함께) · Minor 3(.ok 에 RD · TM · RM 실어 하위 셸 첫 부름에도 서게)을 넣고, Step 8 미룸 줄도 같은 agent 가 쓴다 — 값싸고 리뷰가 권함, Minor 3 은 다음 PR 이 이 도우미를 쓸 때의 함정(Law 3) — 틀리면 diff 가 조금 커진다.
+- Ruling: Minor 3 의 「finish 뒤 exit 1 덧붙이기」(leader_seat_e2e · team_status 의 옛 꼴)는 하지 않는다 — 고치기 전과 같은 꼴이고 실패는 드러난다 — 틀리면 실패 뒤 단언 몇 개가 더 돈다.
+- Ruling: Minor 4(P1 옮김 변이 하나)는 더 하지 않는다 — 앞 Ruling 대로. Minor 5(plugin-audit 실패의 origin/main 대조)는 지휘자의 머지 전 스위트 대조에 맡긴다 — 이 PR 이 닿지 않는 경로. Minor 6①(기록 줄 ` · `)은 미룸 표로, ②(e2e 기록 열한 줄의 「지금 지키는 것」 에 e2e 대표 넷이 빠짐)는 승인 표의 글이라 바꾸지 않고 미룸 표 + 지휘자 판단으로 넘긴다.
+- Ruling: 마지막 고침(13b7ffb6..51d0dc03) 뒤에 시간 · 전체 스위트를 다시 돌리지 않는다 — 고침이 작고(단언 몇 · 도우미 몇 줄) 닿는 파일 일곱을 하나씩 돌려 실패 0, 지휘자의 머지 전 스위트 대조가 남아 있다 — 틀리면 대조가 드러낸다.
+- Ruling: check_bundle_coverage 경고는 고치지 않는다 — 계획 Step 9 가 「출력을 그대로 지휘자에게 보인다」 이고, 받는 곳을 에픽 번호로 바꿀지는 로드맵 주인(지휘자)의 판단 — 틀리면 미룸 줄 받는 곳 표기 고침 한 커밋.
+- Ruling: 계획의 「워크스페이스 삭제」 는 하지 않는다 — 지휘자가 남긴 파일 목록을 받고 백업한다 — 틀리면 git-ignored 폴더가 남을 뿐.
+- Ruling: Task 7 ⚠️(옮긴 P1 확인은 :486 변이 하나로만 실패를 보임)는 받아들인다 — 변이 일곱 전부를 새 judge(그 단언 포함)와 새 e2e 위에 돌려 옛만 잡는 것 0 을 보였고, AC7 은 보안 확인 묶음 단위로 변이 넷 + 양성 대조를 요구한다 — 틀리면 마지막 리뷰가 AC7 을 「빠짐」 으로 낼 것.
+- 판정 줄 전부는 원장 사본(progress.md)의 `Ruling:` 줄에 있다.
+
+## 구현 대조 — docs/superpowers/plans/2026-11-27-test-prune-docreview.md
+
+- 구현 대조: 경고 10개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 0개 · 받는 곳 없는 미룸 10개 · 받는 곳 검사 불가 0개 · 빠짐 0개 (--acs 로 고른 것 · 뺀 AC 7개) (이 PR 몫 AC 열로 쟀다(--acs) · 경고는 설계문서 미룸 표의 받는 곳이 「없음 — …」 · 「E4 PR 6」 · 「E4 §9」 꼴이라 규칙(에픽 · PR #숫자)에 안 맞는 줄들 · 지휘자가 사용자에게 보였다)
+- 보고: AC 10개(이 PR 몫 AC1 · AC2 · AC5 · AC7 · AC9–AC14) 중 구현됨 10 · 미룸 0 · 빠짐 0 — AC8 은 사라진 확인이 없어 줄이 없다 · AC3 · AC4 · AC6 · AC15–AC17 은 다른 PR 몫
+
+## 구현 대조 — docs/superpowers/plans/2026-11-27-test-prune-team-repo.md
+
+- 구현 대조: 경고 12개 — 보고에 없는 AC 0개 · 미룸 표에 없는 미룸/빠짐 1개 · 받는 곳 없는 미룸 11개 · 받는 곳 검사 불가 0개 · 빠짐 0개 (--acs 로 고른 것 · 뺀 AC 6개) (미룸 표에 없는 하나는 AC8 — AC 보고가 PR 번호를 채우기 전의 「미룸」 이고, 4c41decb 가 번호를 채웠고 e4c4a577 이 미룸 행을 지웠다 · 받는 곳 없는 미룸 열하나는 미룸 표의 받는 곳이 「없음 — …」 · 「지휘자」 꼴이라 규칙(에픽 · PR #숫자)에 안 맞는다)
+- 보고: AC 17개 중 구현됨 11(AC1 · AC2 · AC3 · AC7 · AC8 · AC9–AC14) · 미룸 6(AC4 · AC5 · AC6 · AC15 · AC16 · AC17 — 다른 PR) · 빠짐 0

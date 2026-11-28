@@ -183,31 +183,34 @@ class Match(SeededRepo):
     def test_forged_lines_do_not_pass(self):
         real = self.approve(self.tip)
         l = H.parse(real)
-        cases = {
-            "손으로 쓴 줄": ("- spec 승인 · 2026-11-18 · 「승인 — 계획 담당자에게」", H.NO_EVIDENCE),
-            "없는 항목": (real.replace(l.entry, "00000000-0000-4000-8000-00000000dead"), H.MISMATCH),
-            "없는 순번": (real.replace("#1", "#2"), H.MISMATCH),
-            "다른 과제의 답": (self.approve(self.tip, question="E2 @%s — 질문" % l.rev), H.MISMATCH),
-            "라벨만 바꾼 줄": (self.approve(self.tip, picked="수정 필요"), H.MISMATCH),
-            "머리 앞에 공백": (self.approve(self.tip, question=" " + H.head(JOB, l.rev) + " 질문"), H.MISMATCH),
-            "머리 뒤에 16진 글자(더 긴 판)": (self.approve(self.tip, question=H.head(JOB, l.rev) + "0 질문"), H.MISMATCH),
-            "사람 아님(수락이 아니다)": (self.approve(self.tip, who="denied"), H.MISMATCH),
-            "모르는 출처": (self.approve(self.tip, who="other"), H.UNCHECKED),
-            "훅이 채운 답": (self.approve(self.tip, who="hook"), H.MISMATCH),
-            "프로그램이 대신 답한 세션": (self.approve(self.tip, entrypoint="sdk-cli"), H.MISMATCH),
-            "모르는 entrypoint": (self.approve(self.tip, entrypoint="fixture_other"), H.UNCHECKED),
-            "entrypoint 칸 없음": (self.approve(self.tip, drop=("entrypoint",)), H.UNCHECKED),
-            "빈 답": (self.approve(self.tip, empty=True), H.MISMATCH),
-            "곁가지 항목": (self.approve(self.tip, sidechain=True), H.MISMATCH),
-            "하위 agent 기록": (self.approve(self.tip, subagent=True), H.MISMATCH),
-            "아는 칸 없음": (self.approve(self.tip, who="unknown"), H.UNCHECKED),
-            "기록 파일 없음": (real.replace(S + ":", "00000000-0000-4000-8000-00000000ffff:"), H.UNCHECKED),
-            "다른 계획 파일의 답": (self.approve(self.tip, H.KIND_PLAN, 1).replace("plan-1.md@%s" % self.c2[:8], "plan-2.md@%s" % self.c3[:8]), H.MISMATCH),
-            "건너뜀 — 질문에 관문 이름 없음": (self.approve(self.tip, H.KIND_SKIP, gate="계획 검토 plan 2", question=H.head(JOB, self.c4[:8]) + " 건너뛸까요"), H.MISMATCH),
-            "건너뜀 — 다른 관문의 답": (self.approve(self.tip, H.KIND_SKIP, gate="계획 검토 plan 1").replace("계획 검토 plan 1", "계획 검토 plan 2"), H.MISMATCH),
+        cases = {   # 이름: (줄, 판정, 사유 조각 — human-check 의 `사유:` 줄로 그대로 가는 글)
+            "손으로 쓴 줄": ("- spec 승인 · 2026-11-18 · 「승인 — 계획 담당자에게」", H.NO_EVIDENCE, ("근거 칸이 없거나 줄 꼴이 아니다",)),
+            "없는 항목": (real.replace(l.entry, "00000000-0000-4000-8000-00000000dead"), H.MISMATCH, ("세션 기록에 없다",)),
+            "없는 순번": (real.replace("#1", "#2"), H.MISMATCH, ()),
+            "다른 과제의 답": (self.approve(self.tip, question="E2 @%s — 질문" % l.rev), H.MISMATCH, ("시작하지 않는다",)),
+            "라벨만 바꾼 줄": (self.approve(self.tip, picked="수정 필요"), H.MISMATCH, ("사람이 고른 라벨은 「수정 필요」",)),
+            "머리 앞에 공백": (self.approve(self.tip, question=" " + H.head(JOB, l.rev) + " 질문"), H.MISMATCH, ()),
+            "머리 뒤에 16진 글자(더 긴 판)": (self.approve(self.tip, question=H.head(JOB, l.rev) + "0 질문"), H.MISMATCH, ()),
+            "사람 아님(수락이 아니다)": (self.approve(self.tip, who="denied"), H.MISMATCH, ()),
+            "모르는 출처": (self.approve(self.tip, who="other"), H.UNCHECKED, ("질문 창으로 다시 승인받는다", "fixture_other", "수락의 출처('fixture_other')")),
+            "훅이 채운 답": (self.approve(self.tip, who="hook"), H.MISMATCH, ("사람이", "hook")),
+            "프로그램이 대신 답한 세션": (self.approve(self.tip, entrypoint="sdk-cli"), H.MISMATCH, ()),
+            "모르는 entrypoint": (self.approve(self.tip, entrypoint="fixture_other"), H.UNCHECKED, ("질문 창으로 다시 승인받는다", "fixture_other", "entrypoint: 'fixture_other'")),
+            "entrypoint 칸 없음": (self.approve(self.tip, drop=("entrypoint",)), H.UNCHECKED, ()),
+            "빈 답": (self.approve(self.tip, empty=True), H.MISMATCH, ("세션 기록에 없다",)),
+            "곁가지 항목": (self.approve(self.tip, sidechain=True), H.MISMATCH, ()),
+            "하위 agent 기록": (self.approve(self.tip, subagent=True), H.MISMATCH, ()),
+            "아는 칸 없음": (self.approve(self.tip, who="unknown"), H.UNCHECKED, ()),
+            "기록 파일 없음": (real.replace(S + ":", "00000000-0000-4000-8000-00000000ffff:"), H.UNCHECKED, ()),
+            "다른 계획 파일의 답": (self.approve(self.tip, H.KIND_PLAN, 1).replace("plan-1.md@%s" % self.c2[:8], "plan-2.md@%s" % self.c3[:8]), H.MISMATCH, ()),
+            "건너뜀 — 질문에 관문 이름 없음": (self.approve(self.tip, H.KIND_SKIP, gate="계획 검토 plan 2", question=H.head(JOB, self.c4[:8]) + " 건너뛸까요"), H.MISMATCH, ()),
+            "건너뜀 — 다른 관문의 답": (self.approve(self.tip, H.KIND_SKIP, gate="계획 검토 plan 1").replace("계획 검토 plan 1", "계획 검토 plan 2"), H.MISMATCH, ()),
         }
-        for name, (raw, want) in cases.items():
-            self.assertEqual(self.v(raw), want, name)
+        for name, (raw, want, frags) in cases.items():
+            verdict = H.match(self.scope(self.tip, (raw,)), raw)
+            self.assertEqual(verdict.verdict, want, name)
+            for frag in frags:
+                self.assertIn(frag, verdict.why, name)
         self.assertIn("다시 승인받는다", H.match(self.scope(self.tip, (cases["기록 파일 없음"][0],)), cases["기록 파일 없음"][0]).why)
 
     def test_other_question_of_the_same_call(self):
@@ -217,6 +220,8 @@ class Match(SeededRepo):
         for n in (1, 2):
             raw = H.render(H.KIND_SPEC, "2026-11-18", "승인 — 계획 담당자에게", "design.md", rev, S, "%s#%d" % (uid, n))
             self.assertEqual(self.v(raw), H.MISMATCH, n)
+            if n == 2:
+                self.assertIn("시작하지 않는다", H.match(self.scope(self.tip, (raw,)), raw).why)
 
     def test_old_answer_with_a_rewritten_version(self):
         real = self.approve(self.tip)                                    # c1 의 본문을 보고 한 답
@@ -225,11 +230,13 @@ class Match(SeededRepo):
         rewritten = real.replace("design.md@" + self.c1[:8], "design.md@" + c5[:8])
         self.assertEqual(H.shape(self.scope(c5, (rewritten,)), rewritten).verdict, H.PASS)   # 꼴만 보면 지난다
         self.assertEqual(self.v(rewritten, tip=c5), H.MISMATCH)                               # 사람이 본 질문에는 옛 판이 있다
+        self.assertIn("시작하지 않는다", H.match(self.scope(c5, (rewritten,)), rewritten).why)
 
     def test_one_answer_two_lines(self):
         real = self.approve(self.tip)
         twin = real.replace("2026-11-18", "2026-11-19")
         self.assertEqual(self.v(real, [real, twin]), H.MISMATCH)
+        self.assertIn("같은 답을 근거로 쓴 줄이 또 있다", H.match(self.scope(self.tip, (real, twin)), real).why)
         self.assertEqual(self.v(twin, [real, twin]), H.MISMATCH)
         self.assertEqual(self.v(real, [real, "- 결정 · 2026-11-18 · 「글」"]), H.PASS)   # 여러 끝에서 모은 같은 줄은 한 줄이다(겹침 없이 넘긴다)
         other = "00000000-0000-4000-8000-00000000bbbb"                                    # 이어받은 세션이 같은 uuid 를 복사했다
@@ -238,6 +245,24 @@ class Match(SeededRepo):
         self.assertEqual(self.v(copy_alone := real.replace(S + ":", other + ":"), [copy_alone]), H.PASS)   # 이어받은 세션의 답만 있으면 지난다(J3)
         copy = real.replace(S + ":", other + ":").replace("2026-11-18", "2026-11-19")
         self.assertEqual(self.v(copy, [real, copy]), H.MISMATCH)
+
+    def test_one_answer_two_lines_through_collect(self):   # 시작 묶음 · 결과 대조 · human-check 가 줄을 모으는 collect 를 거친다
+        real = self.approve(self.tip)
+        twin = real.replace("2026-11-18", "2026-11-19")
+        alone = self.commit(TEAM.intent(JOB), INTENT + "\n" + real + "\n", "진짜 줄 하나")
+        both = self.commit(TEAM.intent(JOB), INTENT + "\n" + real + "\n" + twin + "\n", "같은 답을 근거로 든 줄 둘")
+        lines, notes = H.collect(self.git, TEAM, JOB, [alone, self.c1])
+        self.assertEqual((lines, notes), ((real,), []))
+        self.assertEqual(H.match(self.scope(alone, lines), real).verdict, H.PASS)   # 양성 대조 — 근거를 쓴 줄이 하나뿐이다
+        lines, notes = H.collect(self.git, TEAM, JOB, [both, alone, self.c1])
+        self.assertEqual((lines, notes), ((real, twin), []))
+        apart = self.commit(TEAM.intent(JOB), INTENT + "\n" + twin + "\n", "둘째 줄만 다른 끝에")
+        split, notes = H.collect(self.git, TEAM, JOB, [apart, alone])                # 두 줄이 서로 다른 끝에 있다
+        self.assertEqual((split, notes), ((twin, real), []))
+        for tip, got_lines in ((both, lines), (apart, split)):
+            for raw in (real, twin):
+                got = H.match(self.scope(tip, got_lines), raw)
+                self.assertEqual((got.verdict, got.why), (H.MISMATCH, "같은 답을 근거로 쓴 줄이 또 있다"), raw)
 
     def test_plan_head_carries_the_plan_number(self):   # 설계 §2 — 계획 파일 둘을 한 커밋이 마지막으로 고쳤다
         both = self.commit_many({TEAM.plan(JOB, 1): "# 계획 1 고침\n", TEAM.plan(JOB, 2): "# 계획 2 고침\n"}, "두 계획을 한 커밋에서")
@@ -248,6 +273,7 @@ class Match(SeededRepo):
         as_two = re.sub(r"plan-1\.md@", "plan-2.md@", one)
         self.assertEqual(H.shape(self.scope(both, (as_two,)), as_two).verdict, H.PASS)      # 꼴만 보면 지난다
         self.assertEqual(self.v(as_two, tip=both), H.MISMATCH)                               # 머리의 계획 번호로 갈린다
+        self.assertIn("시작하지 않는다", H.match(self.scope(both, (as_two,)), as_two).why)
         two = self.approve(both, H.KIND_PLAN, 2)
         self.assertEqual(self.v(two, [one, two], tip=both), H.PASS)
 
@@ -303,7 +329,7 @@ class Match(SeededRepo):
         rows[-2]["message"]["content"][0]["input"] = {"questions": "자리표시"}
         path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
 
-    def test_unreadable_call_at_the_cited_entry_is_unchecked(self):   # 과제 2 — 읽지 못한 호출은 답이 아니다. 그 자리를 가리킨 줄은 「어긋남」 이 아니다
+    def test_unreadable_call_at_the_cited_entry_is_unchecked(self):   # 읽지 못한 호출은 답이 아니다. 그 자리를 가리킨 줄은 「어긋남」 이 아니다
         raw = self.approve(self.tip)
         self.assertEqual(self.v(raw), H.PASS)                               # 양성 대조 — 같은 준비에서 깨기 전에는 지난다
         self.break_last_call()
@@ -327,7 +353,7 @@ class Match(SeededRepo):
         self.assertIn(H.LATER_ANSWER, got.why)
         self.assertIn("수정 필요", got.why)
 
-    def test_same_label_again_or_other_questions_do_not_stop_it(self):   # Review Focus 5 — 양성 대조
+    def test_same_label_again_or_other_questions_do_not_stop_it(self):   # 양성 대조
         real = self.approve(self.tip)
         l = H.parse(real)
         SF.add_answer(self.conf, S, [(H.head(JOB, l.rev) + " — 다시 승인", "승인 — 계획 담당자에게 (권장)")])
@@ -336,7 +362,7 @@ class Match(SeededRepo):
         SF.add_answer(self.conf, S, [(H.head(JOB, "0" * 8) + " — 다른 판", "수정 필요")])
         self.assertEqual(self.v(real), H.PASS)
 
-    def test_a_gate_word_in_the_requestion_does_not_hide_it(self):   # 검수 지적 — 「spec 승인」 낱말을 넣어 다시 물은 「수정 필요」
+    def test_a_gate_word_in_the_requestion_does_not_hide_it(self):   # 「spec 승인」 낱말을 넣어 다시 물은 「수정 필요」 도 어긋남이다
         real = self.approve(self.tip)
         SF.add_answer(self.conf, S, [(H.head(JOB, H.parse(real).rev) + " — spec 승인 다시 확인", "수정 필요")])
         self.assertEqual(self.v(real), H.MISMATCH)
@@ -444,6 +470,11 @@ class Gates(SeededRepo):
         hand = "- spec 승인 · 2026-11-18 · 「승인 — 계획 담당자에게」"
         self.assertIn("근거 없음", self.miss([hand], "plan", 1)[0])
         self.assertIn("record --human", self.miss([hand], "plan", 1)[0])
+        hand_plan = "- 계획 검토 · 2026-11-18 · 「계획대로 구현한다」"        # 근거 칸 없는 계획 검토 줄도 「줄이 없다」 로 감추지 않는다
+        got = self.miss([spec, hand_plan], "implement", 1)
+        self.assertEqual(len(got), 1, got)
+        self.assertIn("`계획 검토` 줄이 지나지 못했다", got[0])
+        self.assertIn("근거 없음", got[0])
 
     def test_skip_line_opens_only_its_gate(self):
         spec, plan1 = self.approve(self.tip), self.approve(self.tip, H.KIND_PLAN, 1)

@@ -11,7 +11,7 @@ T="$(mktemp -d)" || exit 1
 trap 'chmod -R u+rwX "$T" 2>/dev/null; rm -rf "$T"' EXIT
 . "$ROOT/plugins/spec-distill/tests/fixtures/team_repo.sh"
 
-team_repo && claim && ok "팀 레포와 지휘 표지" || { no "준비 실패 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+repo_copy "$T" team && claim && ok "팀 레포와 지휘 표지" || { no "준비 실패 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 E1="$TM/jobs/E1"
 E2="$TM/jobs/E2"
 intent_tail() { tail -n 1 "$W/$E1/INTENT.md"; }
@@ -51,7 +51,7 @@ assert_eq "$(rec)" "1" "AC5: 머리로 시작하는 답이 없으면 1"
 assert_contains "$(out)" "$HEAD1" "AC5: 사유가 기다린 머리를 보인다"
 assert_eq "$(g status --short -- "$TM")" "" "AC5: 답이 없으면 INTENT.md 가 그대로다"
 
-# 3 — 머리 앞에 글자가 붙은 질문(Review Focus 3)
+# 3 — 머리 앞에 글자가 붙은 질문
 answer " $HEAD1 — 질문" "$PASSL"
 answer "**$HEAD1** 질문" "$PASSL"
 assert_eq "$(rec)" "1" "AC5: 머리 앞에 공백 · 굵게 표시가 붙은 질문의 답으로는 쓰지 않는다"
@@ -175,7 +175,7 @@ assert_eq "$(led ask-head --human "spec 승인" --roadmap "$RM" --job E1)" "0" "
 assert_eq "$(out)" "$HEAD1" "AC4: 본문만 견준다 — 머리 그대로"
 g checkout -q -- "$E1/design.md"
 
-# 17 · 18 — 쓸 브랜치가 아닌 worktree(Review Focus 5)
+# 17 · 18 — 쓸 브랜치가 아닌 worktree
 g checkout -q main
 assert_eq "$(led ask-head --human "spec 승인" --roadmap "$RM" --job E1)" "1" "AC7: 다른 브랜치에서 부르면 1"
 assert_contains "$(out)" "feature/tm-e1" "AC7: 다른 브랜치 — 가야 할 브랜치 이름"
@@ -249,7 +249,7 @@ assert_contains "$(out)" "이미 있어 쓰지 않았다" "AC5: plan 12 — 23 �
 assert_contains "$(out)" "${SID}:${U23}#1" "AC5: plan 12 — 고른 답은 23 의 답이다"
 assert_eq "$(intent_lines)" "$N23" "AC5: plan 12 — 그대로"
 
-# 24b — 관문 이름이 둘 이상 든 질문(AC5 · 13796c12)
+# 24b — 관문 이름이 둘 이상 든 질문(AC5)
 answer "${SKIPH} — spec 승인 과 계획 검토 plan 2 를 건너뛸까요" "건너뛴다"
 assert_eq "$(led record --human "걸음 건너뜀" --roadmap "$RM" --job E1 --gate "spec 승인")" "1" "AC5: 관문 이름이 둘 이상인 질문의 답 — 1"
 assert_contains "$(out)" "그 질문에 관문 이름이 둘 이상 있다(spec 승인 · 계획 검토 plan 2) — 관문마다 따로 묻는다" "AC5: 관문 이름 둘 — 사유"
@@ -353,7 +353,7 @@ assert_eq "$(led ask-head --human "spec 승인" --roadmap "$RM" --job E1)" "0" "
 
 # h1–h3 — 계획 번호 없는 사람 줄은 머지되지 않은 브랜치 끝 모두에서 판정한다(K12 · AC23 미룸). 14b 의 답이 새지 않게 새 레포에서
 T0="$T"
-new_repo "$T0/h" && ok "h: 새 팀 레포를 세웠다" || { no "h: 새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; use_repo "$T0"; finish; exit 1; }
+repo_copy "$T0/h" new && ok "h: 새 팀 레포를 세웠다" || { no "h: 새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; use_repo "$T0"; finish; exit 1; }
 hdesign() { put "$E1/design.md" "$(printf '# 설계\n\n## Goals\n\n%s\n\n## 미룸\n\n- %s\n' "$1" "$2")"; }
 stale_why() { sed -n '/^낡음 — - spec 승인/{n;p;}' "$T/led.txt"; }
 g checkout -q -b feature/tm-e1 main
@@ -375,7 +375,7 @@ assert_eq "$(led human-check --roadmap "$RM" --job E1)" "0" "K12: 둘째 브랜�
 use_repo "$T0"
 
 # d1 · d2 — 새 레포에서(14b 의 「수정 필요」 답이 이 레포의 E1 머리에 닿지 않게). 지역 날짜 · 갈라진 형제 브랜치(K9 · K12 미룸)
-new_repo "$T0/d" && ok "d: 새 팀 레포를 세웠다" || { no "d: 새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; use_repo "$T0"; finish; exit 1; }
+repo_copy "$T0/d" new && ok "d: 새 팀 레포를 세웠다" || { no "d: 새 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; use_repo "$T0"; finish; exit 1; }
 g checkout -q -b feature/tm-e1 main
 put "$E1/design.md" "$(printf '# 설계\n\n본문 하나\n\n## 지휘 기록\n')" && g commit -qm "E1 설계" && push_br feature/tm-e1
 DH="E1 @$(short "$(g rev-parse HEAD)")"
