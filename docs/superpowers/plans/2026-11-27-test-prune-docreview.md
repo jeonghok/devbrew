@@ -295,7 +295,7 @@ git commit -m "test(spec-distill): spec 잔존물 테스트의 sid 전제 확인
 - Modify: `shared/tests/fixtures/docreview/cases.sh`(주석만)
 
 - [ ] **Step 1: 덜기 전 커밋을 적는다** — `B7=$(git rev-parse HEAD)`.
-- [ ] **Step 2: 이 파일의 글을 읽는 락을 찾는다** — `git grep -l -F 'fixtures/docreview/cases.sh' -- 'plugins/*/tests' 'shared/tests'` 와 `git grep -l -F 'cases.sh' -- 'plugins/*/tests' 'shared/tests'` 에서 그 파일을 실행만 하지 않고 글자로 읽는 테스트(예: `test_begin_round_snapshot.sh` 의 begin-round 줄 수 · `test_writer_trust_notice.sh` 의 옛 꼴 셈)를 목록으로 적는다. 덜 주석이 그 락이 세는 글을 담고 있으면 그 주석은 덜지 않는다.
+- [ ] **Step 2: 이 파일의 글을 읽는 락을 찾는다** — `git grep -l -F 'fixtures/docreview/cases.sh' -- 'plugins/*/tests/*' 'shared/tests'` 와 `git grep -l -F 'cases.sh' -- 'plugins/*/tests/*' 'shared/tests'` 에서 그 파일을 실행만 하지 않고 글자로 읽는 테스트(예: `test_begin_round_snapshot.sh` 의 begin-round 줄 수 · `test_writer_trust_notice.sh` 의 옛 꼴 셈)를 목록으로 적는다. 덜 주석이 그 락이 세는 글을 담고 있으면 그 주석은 덜지 않는다.
 - [ ] **Step 3: 덜어 낸다(AC11)** — 설계 §7 대로: 언제 · 어느 과제 · 어느 리뷰 · 누가 고쳤는지(예: `[Task 8b 재앵커]` · `R19 이전엔` · `fix round` · `리뷰어가 잡은` · `실측` 꼬리표 · 옛 판의 줄 인용)는 지운다. 확인이 무엇을 지키는지 · 왜 그 꼴인지 말하는 문장은 남긴다. 실제 우회 기록처럼 판정의 근거인 주석은 지키는 것 한 문장으로 줄여 남긴다. `# guards:` 줄과 줄 끝 주석이 붙은 코드 줄의 코드 쪽은 건드리지 않는다. here-doc · 따옴표 안의 `#` 줄은 주석이 아니다.
 - [ ] **Step 4: 주석만 바뀌었는지 본다** — K12. 아래 함수를 `$TMPDIR/e4-pr3/norm.sh` 에 두고, `git show "$B7":shared/tests/fixtures/docreview/cases.sh > $TMPDIR/e4-pr3/a.sh` 와 지금 파일에 각각 돌려 `cmp` 한다 → 같다(몸통 끝 줄이 주석이어도 `}` 가 다음 줄에 오도록 줄바꿈을 둔다). `bash -n` 통과. begin-round 줄 수 ≥ 79.
 
@@ -339,7 +339,7 @@ git commit -m "test: 원장 도우미 테스트 아홉에서 이력 주석을 �
 - [ ] **Step 1: 고친 뒤 시간을 잰다** — Task 1 Step 3 과 같은 명령으로 `after-times.tsv`. 파일마다 앞 · 뒤 초와 차이를 표로. 뒤가 앞보다 작지 않은 파일은 까닭(부하 · 재는 흔들림 · 그 파일의 r1 수)을 적는다 — AC5 는 그 파일에 사용자 승인을 요구하므로 보고에 「승인 필요」 로 표시한다.
 - [ ] **Step 2: §5 점검을 기대는 꼴마다 한다** — 결과를 여덟 줄로 보고에 싣는다.
   1. 지움을 막는 문서: `git diff --name-status --diff-filter=DR origin/main...HEAD` 가 비었다 — 지우거나 옮긴 파일이 없어 해당 없음(AC9).
-  2. 다른 테스트가 실행 · 목록 요구: 고친 파일 열 개의 이름마다 `git grep -l -F <이름> -- 'plugins/*/tests' 'shared/tests'` 로 모은 테스트를 돈다.
+  2. 다른 테스트가 실행 · 목록 요구: 고친 파일 열 개의 이름마다 `git grep -l -F <이름> -- 'plugins/*/tests/*' 'shared/tests'` 로 모은 테스트를 돈다.
   3. python import: 고친 `.py` 가 없어 해당 없음.
   4. 테스트를 시험하는 테스트: 2 의 목록 가운데 고친 파일을 겨누는 것.
   5. `# guards:` 선언: `bash plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh`.

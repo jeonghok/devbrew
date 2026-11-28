@@ -49,6 +49,9 @@ fi
 export DOCREVIEW_PROF_SD
 # r1 의 1라운드 원장은 키(엔진 사본 · 프로필 · 문서)마다 한 번 짓고 복사해 쓴다 — cases.sh 의 r1 템플릿 길.
 # 키에 엔진 사본의 경로가 들어 변이 사본은 깨끗한 사본의 템플릿을 받지 않는다. 폴더는 위 trap 이 함께 지운다.
+# 같은 변이 사본에서 같은 키의 둘째 r1 은 변이된 엔진이 첫째 r1 에 지은 원장의 복사본을 받는다 — 새로 지은
+# 둘째 r1 에서만(환경 변수 · 시계처럼 키 밖 입력이 달라야) 드러나는 init · begin-round 변이는 보이지 않는다.
+# 그런 셀을 더하면 그 셀의 run_case 호출에서 DOCREVIEW_R1_TEMPLATES 를 비운다(run_case 는 비우지 않는다).
 DOCREVIEW_R1_TEMPLATES="$BASE_MUT/r1-templates"; mkdir -p "$DOCREVIEW_R1_TEMPLATES"
 export DOCREVIEW_R1_TEMPLATES
 
@@ -339,8 +342,9 @@ mut 1/1 expired_hold_allowed case_AC22_expired_escape_hatch sed_state \
 mut 1/1 redecide_guard_widened case_AC22_nonexpired_states_still_refused sed_state \
   's/if state not in ("open", "expired"):/if False:/'
 # ㉒ 재결정이 자기 자신의 낡은 포인터를 지우는 것(설계 §6.4 규칙②)을 지운다. 4-space
-#    들여쓰기로 앵커해 `cmd_observe_diff` 의 8-space pop(⑰ 이 잡는 그 줄)과 구별한다 —
-#    둘 다 똑같이 `d.pop("superseded_by", None)` 라 들여쓰기가 유일한 변별기다.
+#    들여쓰기와 줄 끝(`$`)으로 앵커해 `observe_ledger`(`cmd_observe_diff` 가 부른다)의
+#    8-space pop(⑰ 이 잡는 그 줄)과 구별한다 — 둘 다 `d.pop("superseded_by", None)` 를
+#    담는다(그쪽 줄에는 지금 줄끝 주석이 붙어 있다).
 #    `case_AC22_stale_pointer_cleared_via_redecide` 의 중간 단언(재결정 «직후», 다음
 #    라운드 관측 전)만 이 pop 을 격리해서 잰다 — 그 관측-시점 pop 은 다음 라운드까지
 #    기다려야 걸리므로 이 창을 못 잡는다.

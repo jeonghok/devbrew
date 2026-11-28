@@ -1429,10 +1429,11 @@ print(bool(choices) and expected == offered)
 ' "$SCRIPTS" "$3" "$2" "$line"
 }
 # 「제안 = 수용」 등식 — 한 state 안에 세 부류(평범한 open · expired(비후속) · 재상승
-# 후속)를 모두 만들고 각각을 잰다. 셋 다 이제 렌더 텍스트로 비교한다(open 둘은
-# `_rg_decide` 의 「대안:」 줄, expired 는 `_rg_expired` 의 인라인 괄호 — `_rg_expired` 가 «따로» 하드코딩한 열거가 `decide_choices` 와 갈려도 렌더 텍스트
-# 검사가 그 축을 잡는다). `dc_choices` 로도
-# 한 번 더 재는 것은 렌더 파싱과 무관하게 함수 자체가 맞는지 보는 이중 확인이다.
+# 후속)를 모두 만들고 각각을 잰다. 셋 다 렌더 텍스트로 비교한다(open 둘은
+# `_rg_decide` 의 「대안:」 줄, expired 는 `_rg_expired` 의 인라인 괄호 — `_rg_expired` 가
+# «따로» 하드코딩한 열거가 `decide_choices` 와 갈려도 렌더 텍스트 검사가 그 축을
+# 잡는다). `dc_choices` 로도 한 번 더 재는 것은 렌더 파싱과 무관하게 함수 자체가
+# 맞는지 보는 이중 확인이다.
 case_choices_offered_equal_accepted() {
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
   py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' >/dev/null
@@ -1949,7 +1950,7 @@ case_AC27_unknown_verdict_coerced() {
   assert_eq "$(jget "$d/fin.json" 'd["adjudication_coerced"] >= 1')" "True" "AC27(1b): 어휘 밖 verdict 는 조용히 confirm 이 되지 않고 coerced 로 계수된다"
   rm -rf "$d" "$rt"
 }
-# AC27 의 쌍둥이 공백— 재비판이 `same_as` 로 존재하지 않는 대상(전 라운드
+# AC27 의 쌍둥이 공백 — 재비판이 `same_as` 로 존재하지 않는 대상(전 라운드
 # id·오타 등)을 지목하면, union-find 의 `if x in parent and y in parent:` 가드가
 # 병합만 조용히 스킵하고 원장 어디에도 안 남았다. f1 은 known
 # item 이라 unknown-f hold 를 안 타므로 union-find 단계까지 실제로 도달한다 — 그
