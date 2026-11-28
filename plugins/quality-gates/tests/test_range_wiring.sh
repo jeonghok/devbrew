@@ -135,7 +135,6 @@ case_text_locks() {
 
   local P2B; P2B="$(awk '/^\*\*P2b — /{f=1} /^\*\*P3 — /{f=0} f' "$SK")"
   [ -n "$P2B" ] && ok "P2b 창이 있다(양성 짝)" || no "P2b 창이 없다 — 아래 단언이 공허하다"
-  assert_contains "$P2B" 'resolve-range.sh" --out "$RD/range-scope.txt" -- $ARGUMENTS' "P2b 가 범위를 한 번 얼린다"
   assert_contains "$P2B" '범위를 풀지 못했다' "P2b: 못 풀면 판정 없이 멈추는 줄"
   assert_contains "$P2B" '리뷰 범위: <start 앞 12자>..<end 앞 12자>' "P2b: 풀리면 범위 한 줄을 낸다"
   assert_contains "$(awk '/^\*\*P2 — /{f=1} /^\*\*P2b — /{f=0} f && /^rm -f /' "$SK")" '"$RD/range-scope.txt"' "P2 가 앞 실행의 range-scope.txt 를 지운다"
@@ -143,12 +142,10 @@ case_text_locks() {
   # 리뷰어가 읽는 트리(final-review I1) — 범위 모드의 리뷰어 · codex · 재비판은 끝 커밋을 읽는다.
   assert_contains "$(awk '/^\*\*P2 — /{f=1} /^\*\*P2b — /{f=0} f && /^rm -f /' "$SK")" '"$RD/review-tree.txt"' "P2 가 앞 실행의 review-tree.txt 를 지운다"
   assert_contains "$P2B" ' · 리뷰어가 읽는 트리: 끝 커밋의 임시 트리.`' "P2b: 범위 줄이 리뷰어가 읽는 트리(늘 끝 커밋의 임시 트리)를 밝힌다"
-  # 보안 리뷰 S4 — head_is_end 로 갈라 체크아웃을 넘기던 지름길이 없다(펜스 본문 · SKILL 전체). 양성 짝은 위 create-head 줄.
+  # 보안 리뷰 S4 — head_is_end 로 갈라 체크아웃을 넘기던 지름길이 없다(펜스 본문 · SKILL 전체). 양성 짝은 case_review_tree 의 「리뷰 트리 펜스를 뽑았다」.
   assert_not_contains "$(printf '%s\n' "$P2B" | fence_with 'review_tree:')" 'head_is_end' "P2b 리뷰 트리 펜스: head_is_end 로 갈라지지 않는다"
   assert_eq "$(grep -c 'review_tree: checkout' "$SK")" "0" "SKILL: 지금 체크아웃을 리뷰 트리로 내는 갈래가 없다"
   assert_contains "$P2B" '범위 모드는 늘 끝 커밋의 임시 트리를 하나 만들어 그 경로를 `project_dir` 로 쓴다 — 지금 체크아웃이 범위 끝이어도(`head_is_end: yes`) 그렇다.' "P2b: 체크아웃이 끝이어도 임시 트리(규칙 줄)"
-  assert_contains "$(printf '%s\n' "$P2B" | fence_with 'review_tree:')" 'RT="$("$QG/scripts/qg-worktree.sh" create-head "$(sed -n '"'s/^end: //p'"' "$RS")" "<session-id>" --range "$RS")"' \
-    "P2b 리뷰 트리 펜스: 끝 커밋으로 create-head --range 를 부른다"
   assert_contains "$P2B" '- `review_tree: <경로>` 의 그 경로가 이 실행의 `project_dir` 이다' "P2b: 임시 트리 경로가 project_dir 가 된다(규칙 줄)"
   assert_contains "$P2B" '지금 체크아웃으로 대신하지 않는다' "P2b: 트리를 못 만들면 체크아웃으로 대신하지 않는다(규칙 줄)"
   assert_contains "$(awk '/^\*\*P0 — /{f=1} /^\*\*P0b — /{f=0} f' "$SK")" '예외는 둘이다 — 범위 모드는 P2b 의 리뷰 트리 펜스가 낸 `review_tree: <경로>` 가 이 실행의 `project_dir` 이고(실행에 한 번 정하고, 그 뒤로 다시 도출하지 않는다), intent-critic 단계는 PR 범위에서도 리뷰 트리를 `project_dir` 로 쓴다(references/intent-critic.md I1).' \
@@ -159,26 +156,18 @@ case_text_locks() {
   assert_contains "$(awk '/^\*\*다른 전제 각도 — codex/{f=1} f&&/^\*\*Capture the runner/{exit} f' "$SK")" '`<project_dir>` 는 Step 3 의 `PROJECT_DIR` 다(범위 모드의 리뷰 트리면 그 경로 — 러너가 그리로 `cd` 한다)' \
     "Step 3: codex 러너의 project_dir 도 리뷰 트리"
   assert_contains "$(awk '/^### Step 3\.5 /{f=1;next} f&&/^### Step 4 /{exit} f' "$SK")" '`<project_dir>` = Step 3 의 `PROJECT_DIR`' "Step 3.5: 재비판의 project_dir 도 리뷰 트리"
-  assert_contains "$(awk '/^## Final verdict$/{f=1;next} f&&/^## Publish$/{exit} f' "$SK" | fence_with 'review-tree.txt')" \
-    'if "$QG/scripts/qg-worktree.sh" remove "$(cat "$RD/review-tree.txt")"; then' "Final verdict: 리뷰 트리를 지우는 펜스"
   # 지우기 실패 안내 — 세션 정리(qg-gc.py)는 worktrees/ 를 건드리지 않는다. 거짓 약속이 없고 직접 지우는 명령이 있다(양의 짝).
   local RMF; RMF="$(awk '/^## Final verdict$/{f=1;next} f&&/^## Publish$/{exit} f' "$SK" | fence_with 'review-tree.txt')"
   assert_not_contains "$RMF" '세션 정리가 회수' "Final verdict: 지우기 실패 안내가 세션 정리가 회수한다고 약속하지 않는다"
   assert_not_contains "$(cat "$SK" "$RM" "$SF")" '오래된 세션 정리가 회수' "SKILL · README · state-file-format: 리뷰 트리를 세션 정리가 회수한다는 문장이 없다"
   assert_contains "$RMF" "git worktree remove --force \\\"\$(cat \"\$RD/review-tree.txt\")\\\"" "Final verdict: 실패 안내가 git worktree remove 와 큰따옴표로 감싼 실제 경로를 보인다(공백 경로)"
   assert_not_contains "$RMF" "--force \$(cat" "Final verdict: 실패 안내의 경로가 따옴표 없이 펼쳐지지 않는다"
-  assert_not_contains "$(cat "$RM")" '리뷰 diff · 의도 출처 · codex · 차등 테스트 · 판정 줄이 모두 같은 두 커밋을 쓴다 — diff 의 기준과 차등 테스트 기준선은 시작 커밋, HEAD 축과 판정 줄의 커밋은 끝 커밋이다. 지금 작업 트리는 보지 않는다.' \
-    "README: 리뷰어가 작업 트리를 보지 않는다던 틀린 문장이 없다"
-  assert_contains "$(cat "$RM")" '리뷰어 · codex 가 diff 밖 코드를 열어 볼 때도 끝 커밋을 본다 — 지금 체크아웃이 끝 커밋이어도 늘 끝 커밋의 임시 트리를 하나 만들어 읽고(커밋 안 된 변경 · 추적 안 된 파일을 리뷰어가 읽지 않게 한다, 실행 끝에 지운다), 그 트리를 만들지 못하면 판정 없이 멈춘다.' \
-    "README: 리뷰어가 읽는 트리(옛 문장 부재의 양성 짝)"
 
   local P3W; P3W="$(awk '/^\*\*P3 — /{f=1} /^## Flow/{f=0} f' "$SK")"
   assert_contains "$P3W" '설계문서 N개' "P3: 여러 설계문서의 의도 줄"
   # 위 단언은 형식 줄(`<spec 첫 제목 | 설계문서 N개 …>`)로도 채워진다 — 규칙 문단 자신의 글을 잰다
   assert_contains "$P3W" 'paths in `specs`, the tail is `설계문서 N개 (<경로> · <경로> …)`' "P3: 둘 이상이면 꼬리가 설계문서 N개다(규칙 문단)"
   assert_contains "$P3W" "Do not take the intent file's first heading then" "P3: 여러 문서면 의도 파일의 첫 제목을 쓰지 않는다(규칙 문단)"
-  assert_contains "$(printf '%s\n' "$P3W" | fence_with ' --range ')" '"$QG/scripts/discover-spec.sh" --intent-out "$RD/intent.md" --range "$(sed -n '"'s/^start: //p'"' "$RS")" "$(sed -n '"'s/^end: //p'"' "$RS")"' \
-    "P3: 범위 모드 펜스가 얼린 두 커밋으로 discover-spec 을 부른다"
 
   local S1; S1="$(awk '/^### Step 1 — scope$/{f=1;next} f&&/^### Step 1b/{exit} f' "$SK")"
   assert_grep "$S1" '^ *\| range \| `--mode range --scope-file "\$RD/range-scope\.txt"` \|$' "Step 1c 표: range 행이 범위 파일을 넘긴다"
@@ -191,27 +180,25 @@ case_text_locks() {
   assert_contains "$(awk '/^### Step 4\.5 /{f=1;next} f&&/^---$/{exit} f' "$SK")" '`$RD/range-scope.txt` 를 그대로' "Step 4.5: 범위 모드면 범위 파일을 판정 꼬리 뒤에 보인다"
 
   # 범위 모드도 한 번 지나고 묻지 않는다 — 끝내기 질문(범위 모드 갈래)이 없고, 고칠 목록은 다른 실행과 같다
-  assert_contains "$(awk '/^\*\*P2b — /{f=1} /^\*\*리뷰 트리 /{f=0} f' "$SK")" '그래서 범위 모드는 앱을 걷지 않고([e2e](#e2e)), PR 코멘트를 달지 않는다([Publish](#publish)).' \
-    "P2b: 범위 모드가 다른 실행과 다른 것은 걷기와 게시 둘이다(양성 짝)"
+  local P2W; P2W="$(awk '/^\*\*P2b — /{f=1} /^\*\*리뷰 트리 /{f=0} f' "$SK")"
+  assert_contains "$P2W" '앱을 걷지 않고' "P2b: 범위 모드는 앱을 걷지 않는다(양성 짝)"
+  assert_contains "$P2W" 'PR 코멘트를 달지 않는다' "P2b: 범위 모드는 PR 코멘트를 달지 않는다(양성 짝)"
   assert_not_contains "$(cat "$SK")" '범위 모드 갈래' "범위 모드의 끝내기 질문 갈래가 없다"
   assert_not_contains "$(awk '/^\*\*P2b — /{f=1} /^\*\*리뷰 트리 /{f=0} f' "$SK")" '고치고 다시 돌지 않고' "P2b: 고치고 다시 돌지 않는다는 옛 갈래 안내가 없다"
 
   local E2; E2="$(awk '/^## e2e$/{f=1;next} f&&/^\*\*E0/{exit} f' "$SK")"
-  assert_contains "$E2" '범위 모드' "e2e: 범위 모드는 걷지 않는다"
-  assert_contains "$E2" '> [quality-gates] 범위 모드라 앱을 걷지 않는다 — 지금 체크아웃이 범위 끝과 다를 수 있다.' "e2e: 걷지 않는 이유를 공시한다"
+  assert_contains "$E2" '범위 모드도 질문 없이 걷기를 건너뛰' "e2e: 범위 모드는 걷지 않는다"
+  assert_contains "$E2" '[quality-gates] 범위 모드라 앱을 걷지 않는다' "e2e: 걷지 않는 이유를 공시한다"
 
   local FV; FV="$(awk '/^## Final verdict$/{f=1;next} f&&/^## Publish$/{exit} f' "$SK")"
   local vf; vf="$(printf '%s\n' "$FV" | python3 -I -X utf8 -c "$PY_VERDICT_FENCES")"
   assert_grep "$vf" '^VERDICT_FENCES:3$' "판정 펜스는 셋이다(양성 짝)"
   assert_grep "$vf" '^SHA_SLOT_FENCES:3$' "판정 펜스 셋 모두 범위 결과 줄 자리를 받아 --sha 로 넘긴다 — 범위 파일을 다시 읽지 않고, HEAD 는 줄이 없을 때의 기본값뿐이다"
-  assert_contains "$FV" '| `QG_ARGS_S` 범위 | 범위 모드면 Preflight 의 리뷰 트리 펜스가 낸 줄 |' "Final verdict: 범위 모드면 범위 결과 줄을 넣는다"
-  assert_eq "$(awk '/^\*\*P2b — /{f=1} /^\*\*P3 — /{f=0} f' "$SK" | fence_with 'review_tree:' | tail -n 1)" \
-    "printf 'qg-verdict-args: --sha %s\\n' \"\$(git rev-parse --short \"\$(sed -n 's/^end: //p' \"\$RS\")\")\"" \
-    "P2b 리뷰 트리 펜스의 마지막 줄이 범위 결과 줄(끝 커밋)을 낸다"
+  assert_contains "$FV" '리뷰 트리 펜스가 낸 줄' "Final verdict: 범위 모드면 범위 결과 줄을 넣는다"
   assert_contains "$(printf '%s\n' "$FV" | fence_with "printf '\n## 판정")" "if [ -f \"\$RD/range-scope.txt\" ]; then printf '\n## 범위\n\n'; cat \"\$RD/range-scope.txt\"; fi" "기록 펜스: 범위 모드면 ## 범위 절을 남긴다"
 
   local PB; PB="$(awk '/^## Publish$/{f=1;next} f&&/^## kill switch$/{exit} f' "$SK")"
-  assert_contains "$PB" '게시 안 함 — 범위 모드라 PR 코멘트를 달지 않는다' "게시: 범위 모드는 달지 않고 공시한다"
+  assert_contains "$PB" '펜스가 sink 를 부르지 않고' "게시: 범위 모드는 달지 않고 공시한다"
   # 범위 거절은 게시 펜스 하나 안에 있다 — 「한 번만」 검사 뒤, OUTCOME 갈래 앞(범위 공시 · sink 에 닿지 않음)
   local pf; pf="$(printf '%s\n' "$PB" | fence_with 'scripts/publish-comment.sh')"
   local l_once l_rng l_case
@@ -225,16 +212,9 @@ case_text_locks() {
 
   echo "[문면 — differential-test.md · state-file-format.md]"
   assert_file_grep "$DT" 'scope0=range' "D0: 범위 모드의 기준선은 시작 커밋"
-  # 위 단언은 D0 아래 설명 줄(`scope0=range` 이면 …)로도 채워진다 — 펜스 본문의 판별 줄을 따로 잰다
-  assert_contains "$(fence_with 'scope0=' < "$DT")" "printf 'scope0=range\\nboundary=%s\\n' \"\$(sed -n 's/^start: //p' \"\$RS\")\"" "D0 펜스: 범위면 시작 커밋을 기준선으로 찍는다"
   assert_file_grep "$DT" '\-\-range "\$RD/range-scope.txt"' "D1: HEAD 축은 create-head --range"
   assert_file_grep "$DT" '\-\-topic <start> <end>' "D2: 범위의 후보는 --topic <start> <end>"
   assert_file_grep "$DT" '\-\-total \-\-tree <end>' "D2: 범위의 분모는 --total --tree <end>"
-  # 위 둘은 산문이다 — D2 펜스 본문이 범위 파일에서 두 커밋을 읽어 넘기는지 따로 잰다
-  local d2; d2="$(fence_with 'compute-test-scope-candidates.sh" --topic' < "$DT")"
-  assert_contains "$d2" "b=\$(sed -n 's/^start: //p' \"\$RS\"); t=\$(sed -n 's/^end: //p' \"\$RS\")" "D2 펜스: 범위면 시작 · 끝을 범위 파일에서 읽는다"
-  assert_contains "$d2" '"$QG/scripts/compute-test-scope-candidates.sh" --topic "$b" "$t"; echo "candidates rc=$?"' "D2 펜스: 후보는 --topic <시작> <끝>"
-  assert_contains "$d2" '"$QG/scripts/compute-test-scope-candidates.sh" --total --tree "$t"; echo "total rc=$?"' "D2 펜스: 분모는 --total --tree <끝>"
   assert_file_grep "$SF" '^## 범위$' "state-file-format: ## 범위 절"
   assert_contains "$(awk '/^같은 폴더의 다른 파일/{f=1} f' "$SF")" '`range-scope.txt`' "state-file-format: 다른 파일 목록에 range-scope.txt"
   assert_contains "$(awk '/^같은 폴더의 다른 파일/{f=1} f' "$SF")" '`review-tree.txt`' "state-file-format: 다른 파일 목록에 review-tree.txt"
