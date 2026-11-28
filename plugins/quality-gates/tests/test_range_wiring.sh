@@ -22,6 +22,7 @@ export PYTHONDONTWRITEBYTECODE=1
 
 ROOT=$(mktemp -d)
 TPL=$(mktemp -d)   # 픽스처 견본(아래 「끝에서 끝 사슬」) — 케이스 폴더 ROOT 밖에 둔다
+[ -n "$TPL" ] && [ -d "$TPL" ] || { echo "FAIL: mktemp"; rm -rf "$ROOT"; exit 1; }
 trap 'rm -rf "$ROOT" "$TPL"' EXIT
 
 # 펜스 사전 — SKILL · DT 의 ```bash 펜스를 python 한 번으로 뽑아 $ROOT/fences/<번호> 에 둔다(들여쓰기를 걷어 낸 본문).
@@ -64,15 +65,16 @@ while [ "$_k" -lt "$NFENCE" ]; do
   _k=$((_k+1))
 done
 # 펜스 뽑기 — stdin 의 글에서 본문에 needle 이 든 첫 ```bash 펜스(들여쓰기를 걷어 낸 본문). 사전에서 원문이 stdin 에
-# 통째로 들고 본문에 needle 이 든 펜스 가운데 stdin 에서 가장 앞선 것을 낸다.
+# 통째로 들고 본문에 needle 이 든 펜스 가운데 stdin 에서 가장 앞선 것을 낸다. stdin 은 SK · DT 를 줄 단위로 그대로
+# 자른 창만 받는다 — 창이 펜스를 자르면 그 펜스는 찾지 못한다(빈 출력).
 fence_with() {
-  local in k pre pos best=-1 bestpos=-1
-  in="$(cat)"
+  local inp k pre pos best=-1 bestpos=-1
+  inp="$(cat)"
   k=0
   while [ "$k" -lt "$NFENCE" ]; do
     case "${FENCE_BODY[k]}" in *"$1"*)
-      case "$in" in *"${FENCE_RAW[k]}"*)
-        pre="${in%%"${FENCE_RAW[k]}"*}"; pos=${#pre}
+      case "$inp" in *"${FENCE_RAW[k]}"*)
+        pre="${inp%%"${FENCE_RAW[k]}"*}"; pos=${#pre}
         if [ "$bestpos" -lt 0 ] || [ "$pos" -lt "$bestpos" ]; then bestpos=$pos; best=$k; fi ;;
       esac ;;
     esac
@@ -315,9 +317,11 @@ E=$(git -C "$A" rev-parse HEAD)
 git clone -q "$A" "$R"
 git -C "$R" checkout -q --detach "$S"
 rm -rf "$R/.git/logs"   # 클론의 reflog 는 견본 경로(clone: from …)를 담는다 — 사본에 싣지 않는다
+unset A R   # mkfix 를 부르지 않은 케이스가 견본을 쓰지 않고 set -u 로 멈추게
 
 mkfix() {
   local d; d=$(mktemp -d "$ROOT/fix.XXXXXX")
+  [ -n "$d" ] && [ -d "$d" ] || { echo "FAIL: mktemp"; exit 1; }
   cp -R "$TPL/." "$d/" || exit 1
   A="$d/A"; R="$d/R"
   git -C "$R" remote set-url origin "$A"
