@@ -273,6 +273,16 @@ PR 을 나누는 길 셋을 견줬고 사용자가 A 를 골랐다(2026-11-26 �
 | `conductor_ledger.py` `_has_kind` 의 「줄 없음」 갈래에서, 꼴을 못 읽은 계획 검토 줄을 재는 테스트 | 원래부터 없다 — 옛 테스트도 재지 않았다(잃은 것이 아니다) | 없음 — 다음에 `_has_kind` 의 「줄 없음」 확인을 고치는 일(§4 대상 밖) — 다음에 `_has_kind` 나 그 테스트를 고치는 세션이 받는다 |
 | `test_team_status.sh` 의 `trap 'rm -rf "$T"'` 이 끝날 때의 `$T` 만 지워, 묶음 안에서 멈추면 바깥 임시 폴더가 남는다(이번 PR 전부터) | PR 1 의 범위 밖이다 | 없음 — 다음에 `test_team_status.sh` 의 임시 폴더 정리를 고치는 일(§4 대상 밖) — 다음에 그 파일의 trap 을 고치는 세션이 받는다 |
 | `docs/removed-tests.md` 의 케이스 칸에 칸 구분자 ` · ` 가 섞인 줄(`15 · 16` 등) | 계획이 정한 글이고, 지금 그 파일을 읽는 스크립트가 없다 | 없음 — 그 파일을 기계로 읽는 일이 생길 때 |
+| PR 5a · PR 5 판정 표의 「#347 머지 뒤 다시 읽음」 16행과 K1 의 셋(`test_intent_critic.py` `TestFilteredListed` · `test_plain_readme.sh` 남김 행 · `test_governance_no_capability_caps.sh` 부분 핀) | #347(끄기 변수 은퇴)이 같은 파일을 고친다 · 사용자 「묶음 A를 먼저 PR로 (권장)」(2026-11-28) | E4 PR 5b(#347 뒤) |
+| PR 5a · `test_differential_procedure.sh` :73–77 지움 | 받는 쪽 `test_e2e_docs.sh` 가 `new_failures:` 부재를 재지 않아 옛 테스트만 잡는 변이가 있다 · `test_e2e_docs.sh` 는 #347 이 고치는 파일이다 | E4 PR 5b(#347 뒤) — `test_e2e_docs.sh` 부재 목록에 `new_failures:` 를 먼저 더하고 지운다 |
+| PR 5a · spec-distill 주석 둘(`plugins/spec-distill/tests/test_brief_review_meta.sh:21` · `test_readme_sync.sh:14`)이 지운 `test_artifact_metadata.sh` 를 가리킨다 | #347 이 그 두 파일을 고친다 | E4 PR 5b(#347 뒤) |
+| PR 5a · `test_intent_critic.py` `TestRender` 두 케이스 · `TestRecordSilentDrops` · `TestRecordUnreadAnswers` 의 판정(K9) | #347 이 짝(`test_intent_return.py`)을 고쳐 다시 읽어야 한다 | E4 PR 5b(#347 뒤) |
+| PR 5a · `test_agent_color.sh` 가 `awk '{print $2}'` 로 둘째 낱말만 봐 지운 `^color: (…)$` 보다 느슨하다(`color: blue extra` 통과) | 받는 쪽 고침은 판정 표 밖이다 | 없음 — 표 밖 강화 |
+| PR 5a · `test_findings_parser.sh` Fixture 4 가 `reason:` 만 재고 `codex_failed:` 깃발은 재지 않는다 | 옛 테스트부터 있던 틈이고 표 밖이다 | 없음 — 표 밖 강화 |
+| PR 5a · PR 5 판정 표 84행 「고치면 잃는 확인」 칸이 실제 손실(네 머리 밖 절의 지움 · 순서)보다 좁게 적혔다 · 125행 banner 의 「지금 지키는 것」(UNGATED 원장)은 SKILL 고지 문장을 재지 않아 기록 줄은 「없음 — 받아들임」 으로 적었다 | 승인된 표의 글을 고치지 않는다 | 없음 — 표 기록 보정 메모 |
+| PR 5a · `shared/tests/test_copy_of_contract.sh` 의 축 1a · 1c 도 지운 `copies_agree` 층④ 의 몫을 진다(기록 줄은 (b) 만 댄다) | PR 6 이 그 파일 구조를 고친다 | E4 PR 6 |
+| PR 5a · `test_entry_safety_e1_e6.sh` E6 은 구성원 하나라 형제 합치기 길에서 훅을 재지 않는다(지운 `topic_head` 훅 케이스도 같았다) | 잃은 것이 아니고 표 밖이다 | 없음 — 표 밖 강화 |
+| PR 5a · `shared/tests/test_adjudication_wiring.sh` `COMP_BASELINE`(:330–423)의 이력 · 낡은 줄 인용 | PR 6 의 폴더다 | E4 PR 6 |
 
 ## 번호 대조
 
