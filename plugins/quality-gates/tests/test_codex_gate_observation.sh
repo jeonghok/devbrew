@@ -280,6 +280,11 @@ for i in "${!GATED_RUNNER[@]}"; do
     no "$label: 사본의 감지기가 심볼릭 링크가 아니다 — 감지기 부재 시나리오를 건너뛴다"
     continue
   fi
+  # 지우기 전에 링크가 사본 안에서 풀려야 한다 — 이미 풀리지 않는 사본이면 「부재」 를 지우기가 아니라 사본이 만든다.
+  if [ ! -e "$_ACTIVE_DETECTOR_ORIG" ]; then
+    no "$label: 사본 링크가 풀리지 않는다 — 감지기 부재 시나리오를 건너뛴다"
+    continue
+  fi
   _ACTIVE_DETECTOR_TARGET="$(readlink "$_ACTIVE_DETECTOR_ORIG")"
   rm -f "$_ACTIVE_DETECTOR_ORIG"
   NODETECT_CAP="$SCRATCH/g-$label-nodetect"
