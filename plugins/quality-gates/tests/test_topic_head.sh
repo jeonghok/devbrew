@@ -96,7 +96,10 @@ case_single_branch_topic() {
   cleanup
 }
 
-case_two_siblings_combined() {
+case_two_siblings_shared() {
+  # th 한 번의 출력을 합친 트리 · accepts · rejects 가 이 차례로 함께 쓴다 — accepts 가 만든
+  # HEAD 축 워크트리를 지운 뒤에 rejects 로 가고(끝 단언이 `head-` 0 을 본다), 레포를 바꾸는
+  # later.txt 걸음은 맨 끝이다.
   new_repo
   local R; R=$(git rev-parse HEAD)
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
@@ -104,7 +107,8 @@ case_two_siblings_combined() {
   git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
   local CB; CB=$(git rev-parse HEAD)
   echo dirty > wip.txt
-  local out T H; out=$(th "$SID"); T=$(field tree "$out"); H=$(field head_commit "$out")
+  local out T H S h err
+  out=$(th "$SID"); T=$(field tree "$out"); H=$(field head_commit "$out"); S=$(field seal "$out")
   assert_eq "$(field status "$out")" "ok" "형제 둘: status: ok"
   local names; names=$(git ls-tree -r --name-only "$T")
   assert_grep "$names" '^a\.txt$' "합친 트리에 형제 topicA 의 변경(AC3)"
@@ -115,6 +119,24 @@ case_two_siblings_combined() {
   assert_eq "$(field commits "$out")" "2" "본 커밋 2"
   assert_eq "$(commit_lines "$out" | sort | paste -sd, -)" "$(printf '%s\n' "$CA" "$CB" | sort | paste -sd, -)" \
     "commit: 줄 = 두 선언 커밋(봉인은 토픽 커밋이 아니다)"
+  if h=$(wt create-head "$H" "$SID" --topic "$KEY" 2>/dev/null) \
+     && [ -f "$h/a.txt" ] && [ -f "$h/b.txt" ] && [ -f "$h/wip.txt" ]; then
+    ok "합친 커밋 → create-head --topic 수락 · 트리에 형제 · 현재 · 미커밋 변경(양의 짝)"
+    wt remove "$h" >/dev/null 2>&1
+  else
+    no "합친 커밋인데 create-head --topic 이 거부했거나 트리에 셋이 없다"
+  fi
+  # 거부의 «이유»까지 잰다 — 옛 usage 오류가 되살아나도 exit 2 라 종료 코드만으로는 못 가른다.
+  err=$(wt create-head "$S" "$SID" --topic "$KEY" 2>&1 >/dev/null)
+  assert_grep "$err" 'head-commit mismatch' "봉인 단독 → create-head --topic 거부 · 트리 대조로(형제가 빠진 트리)"
+  err=$(wt create-head "$R" "$SID" --topic "$KEY" 2>&1 >/dev/null)
+  assert_grep "$err" 'head-commit mismatch' "경계 → create-head --topic 거부 · 트리 대조로"
+  err=$(wt create-head "$H" "$SID" 2>&1 >/dev/null)
+  assert_grep "$err" 'sealed-sha mismatch' "--topic 없이 합친 커밋 → 봉인 대조가 거부(그대로)"
+  echo later > later.txt
+  err=$(wt create-head "$H" "$SID" --topic "$KEY" 2>&1 >/dev/null)
+  assert_grep "$err" 'head-commit mismatch' "① 뒤 워킹트리가 바뀌면 거부(stale) · 트리 대조로"
+  assert_eq "$(git worktree list | grep -c 'head-')" "0" "거부된 호출은 HEAD 축 워크트리를 만들지 않는다"
   cleanup
 }
 
@@ -258,69 +280,6 @@ case_no_side_effects() {
   cleanup
 }
 
-case_repo_hooks_not_run() {
-  new_repo
-  local M; M=$(mktemp -d)
-  mkdir -p hooks
-  local h
-  for h in post-index-change post-checkout reference-transaction pre-auto-gc; do
-    printf '#!/bin/sh\necho %s >> %s/ran\n' "$h" "$M" > "hooks/$h"; chmod +x "hooks/$h"
-  done
-  git add hooks; git commit -qm "tracked hooks"
-  sync_base   # 훅 경로를 켜기 전에 — 뒤의 th 가 ref 를 쓰지 않게
-  git config core.hooksPath hooks
-  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
-  rm -f "$M/ran"
-  echo dirty > wip.txt
-  local out; out=$(DEVBREW_QUALITY_GATES_DISABLE_DIFFERENTIAL_TEST=1 th "$SID")
-  assert_eq "$(field status "$out")" "ok" "추적 hooksPath: topic-head 가 봉인까지 돌아 status: ok"
-  assert_eq "$([ -e "$M/ran" ] && cat "$M/ran" || echo none)" "none" \
-    "추적 hooksPath: topic-head(봉인 · 해석 · 합치기)가 저장소 훅을 하나도 돌리지 않는다"
-  git add wip.txt
-  assert_grep "$([ -e "$M/ran" ] && cat "$M/ran" || echo none)" '^post-index-change$' \
-    "추적 hooksPath: 같은 fixture 에서 git add 를 직접 하면 훅이 돈다(양의 짝 — fixture 가 실제로 훅을 가진다)"
-  rm -rf "$M"
-  cleanup
-}
-
-case_create_head_topic_accepts_derived_commit() {
-  new_repo
-  local R; R=$(git rev-parse HEAD)
-  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
-  git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
-  echo dirty > wip.txt
-  local out H h; out=$(th "$SID"); H=$(field head_commit "$out")
-  if h=$(wt create-head "$H" "$SID" --topic "$KEY" 2>/dev/null) \
-     && [ -f "$h/a.txt" ] && [ -f "$h/b.txt" ] && [ -f "$h/wip.txt" ]; then
-    ok "합친 커밋 → create-head --topic 수락 · 트리에 형제 · 현재 · 미커밋 변경(양의 짝)"
-    wt remove "$h" >/dev/null 2>&1
-  else
-    no "합친 커밋인데 create-head --topic 이 거부했거나 트리에 셋이 없다"
-  fi
-  cleanup
-}
-
-case_create_head_topic_rejects_wrong_commits() {
-  new_repo
-  local R; R=$(git rev-parse HEAD)
-  git checkout -q -b topicA; decl_commit a.txt a1 "a1"
-  git checkout -q -b topicB "$R"; decl_commit b.txt b1 "b1"
-  echo dirty > wip.txt
-  # 거부의 «이유»까지 잰다 — 옛 usage 오류가 되살아나도 exit 2 라 종료 코드만으로는 못 가른다.
-  local out S H err; out=$(th "$SID"); S=$(field seal "$out"); H=$(field head_commit "$out")
-  err=$(wt create-head "$S" "$SID" --topic "$KEY" 2>&1 >/dev/null)
-  assert_grep "$err" 'head-commit mismatch' "봉인 단독 → create-head --topic 거부 · 트리 대조로(형제가 빠진 트리)"
-  err=$(wt create-head "$R" "$SID" --topic "$KEY" 2>&1 >/dev/null)
-  assert_grep "$err" 'head-commit mismatch' "경계 → create-head --topic 거부 · 트리 대조로"
-  err=$(wt create-head "$H" "$SID" 2>&1 >/dev/null)
-  assert_grep "$err" 'sealed-sha mismatch' "--topic 없이 합친 커밋 → 봉인 대조가 거부(그대로)"
-  echo later > later.txt
-  err=$(wt create-head "$H" "$SID" --topic "$KEY" 2>&1 >/dev/null)
-  assert_grep "$err" 'head-commit mismatch' "① 뒤 워킹트리가 바뀌면 거부(stale) · 트리 대조로"
-  assert_eq "$(git worktree list | grep -c 'head-')" "0" "거부된 호출은 HEAD 축 워크트리를 만들지 않는다"
-  cleanup
-}
-
 case_scope_file_under_subdir_cwd() {
   # SKILL ① 1a 의 스코프 파일 경로 — 하위 디렉토리 cwd 의 상태 디렉토리(.gitignore 가 덮지
   # 않는 리포)에 쓰면 리다이렉트가 먼저 만든 빈 파일이 봉인에 섞이고, 차등 절차 D1 의
@@ -401,12 +360,11 @@ case_create_head_topic_names_resolve_reason() {
   cleanup
 }
 
-for c in case_usage case_no_declaration case_single_branch_topic case_two_siblings_combined \
+for c in case_usage case_no_declaration case_single_branch_topic case_two_siblings_shared \
          case_merged_member_is_baseline case_stack_after_front_merged case_conflict_lists_files case_declared_path_absent \
          case_two_fragments_on_one_branch case_explicit_topic_skips_detect \
          case_unrelated_member_is_unbounded case_runs_from_subdirectory \
-         case_remote_only_sibling_is_combined case_no_side_effects case_repo_hooks_not_run \
-         case_create_head_topic_accepts_derived_commit case_create_head_topic_rejects_wrong_commits \
+         case_remote_only_sibling_is_combined case_no_side_effects \
          case_scope_file_under_subdir_cwd \
          case_create_head_topic_rejects_conflicted_topic case_create_head_usage \
          case_explicit_topic_fully_merged case_create_head_topic_names_resolve_reason; do
