@@ -249,7 +249,7 @@ assert_contains "$(out)" "이미 있어 쓰지 않았다" "AC5: plan 12 — 23 �
 assert_contains "$(out)" "${SID}:${U23}#1" "AC5: plan 12 — 고른 답은 23 의 답이다"
 assert_eq "$(intent_lines)" "$N23" "AC5: plan 12 — 그대로"
 
-# 24b — 관문 이름이 둘 이상 든 질문(AC5 · 13796c12)
+# 24b — 관문 이름이 둘 이상 든 질문(AC5)
 answer "${SKIPH} — spec 승인 과 계획 검토 plan 2 를 건너뛸까요" "건너뛴다"
 assert_eq "$(led record --human "걸음 건너뜀" --roadmap "$RM" --job E1 --gate "spec 승인")" "1" "AC5: 관문 이름이 둘 이상인 질문의 답 — 1"
 assert_contains "$(out)" "그 질문에 관문 이름이 둘 이상 있다(spec 승인 · 계획 검토 plan 2) — 관문마다 따로 묻는다" "AC5: 관문 이름 둘 — 사유"

@@ -329,7 +329,7 @@ class Match(SeededRepo):
         rows[-2]["message"]["content"][0]["input"] = {"questions": "자리표시"}
         path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
 
-    def test_unreadable_call_at_the_cited_entry_is_unchecked(self):   # 과제 2 — 읽지 못한 호출은 답이 아니다. 그 자리를 가리킨 줄은 「어긋남」 이 아니다
+    def test_unreadable_call_at_the_cited_entry_is_unchecked(self):   # 읽지 못한 호출은 답이 아니다. 그 자리를 가리킨 줄은 「어긋남」 이 아니다
         raw = self.approve(self.tip)
         self.assertEqual(self.v(raw), H.PASS)                               # 양성 대조 — 같은 준비에서 깨기 전에는 지난다
         self.break_last_call()
@@ -362,7 +362,7 @@ class Match(SeededRepo):
         SF.add_answer(self.conf, S, [(H.head(JOB, "0" * 8) + " — 다른 판", "수정 필요")])
         self.assertEqual(self.v(real), H.PASS)
 
-    def test_a_gate_word_in_the_requestion_does_not_hide_it(self):   # 검수 지적 — 「spec 승인」 낱말을 넣어 다시 물은 「수정 필요」
+    def test_a_gate_word_in_the_requestion_does_not_hide_it(self):   # 「spec 승인」 낱말을 넣어 다시 물은 「수정 필요」 도 어긋남이다
         real = self.approve(self.tip)
         SF.add_answer(self.conf, S, [(H.head(JOB, H.parse(real).rev) + " — spec 승인 다시 확인", "수정 필요")])
         self.assertEqual(self.v(real), H.MISMATCH)

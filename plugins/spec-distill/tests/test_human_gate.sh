@@ -275,7 +275,7 @@ check 1 "33: 브랜치를 지워도 멈춘다" --job E2 --stage implement
 assert_contains "$(err)" "implement-1.md" "33: 자취는 기본 브랜치의 implement 결과 파일이다"
 assert_contains "$(err)" "머지됐다" "33: 머지됐다"
 
-# ── 결과 대조(job_results.py check)의 관문 — 과제 11. 묶음마다 새 레포 · 새 과제 ──
+# ── 결과 대조(job_results.py check)의 관문 — 묶음마다 새 레포(견본 T1–T3 또는 new 에서 뜬다) ──
 e1_state() {  # feature/tm-e1 에 설계 · 계획 1(두 판) · 구현 결과 1 을 끝까지 올린다. 사람 줄은 적지 않는다. PLAN_R1 은 계획의 첫 판
   g checkout -q -b feature/tm-e1 main
   put "$E1/design.md" "$(printf '# 설계\n\n본문 하나\n\n## Acceptance Criteria\n\n- AC1: 자리표시\n')"
