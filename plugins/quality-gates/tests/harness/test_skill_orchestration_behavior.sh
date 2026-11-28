@@ -55,6 +55,8 @@ fi
 #   - SKILL title major == plugin.json major (every skills/*/SKILL.md)
 #   - verifier-writable checks in the security-reviewer persona and the re-critic code profile
 #   - code-recritic dispatch shape (profile before the fence · diff slot · fail-closed · zero-findings clause · format-patch ban)
+#   - Surface findings (Step 4.5) precedes the lowered-findings decision question
+#   - check-review-scope.sh invoked · review-scope ownership honesty norm · degraded scope advisory
 #   - changes-exist floor (scope-empty) and the removed routing surface staying gone
 #   - NG6: allowed-tools has no Skill
 #   - differential-procedure anchors (scope note between D2 and D3 · authoritative sentence · false banner absent)

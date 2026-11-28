@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test_runtime_contract_invariance.sh — create-baseline + 기존 계약 바이트 무변경.
-# AC7 AC21 AC22 AC24 AC25 AC26 · T5 T18
+# AC7 AC24 AC25 AC26 · T5 T18
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"

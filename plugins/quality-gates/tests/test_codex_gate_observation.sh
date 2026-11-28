@@ -233,7 +233,7 @@ for i in "${!GATED_RUNNER[@]}"; do
     *) no "$label: 바닥 미달 → codex ${n}회" ;;
   esac
 
-  # 감지기 부재(F5) — detect_codex.sh 심볼릭 링크가 dangling 이 되면(예: 배포가
+  # 감지기 부재 — detect_codex.sh 심볼릭 링크가 dangling 이 되면(예: 배포가
   # target 없이 나가면) 게이트 스크립트 자체가 안 돈다 — 그 상태에서도 codex 를 부르면
   # 안 된다. PATH 는 "가용" 시나리오와 동일하게 codex 가 정상 해석되도록 둔다 — PATH
   # 문제가 아니라 감지기 부재 자체가 codex 호출을 막는지를 격리해서 잰다.
