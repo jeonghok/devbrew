@@ -193,6 +193,19 @@ def _frozen(value):
     return value
 
 
+_MEMO_PATH = ((ot, "_git"), (ot, "other_work"), (ot, "_intent_docs"), (ot, "_branch_unit"),
+              (ot.io_, "_run_git"), (ot.io_, "read_tree"), (ot.subprocess, "run"))
+_MEMO_REAL = tuple(getattr(owner, name) for owner, name in _MEMO_PATH)
+
+
+def _assert_unpatched():
+    """메모가 지나는 함수가 불러올 때의 원본이다 — 아니면 mock 값이 메모에 남는다."""
+    for (owner, name), real in zip(_MEMO_PATH, _MEMO_REAL):
+        if getattr(owner, name) is not real:
+            raise AssertionError("메모 도우미를 mock 안에서 부르지 않는다 — %s.%s 가 바뀌었다"
+                                 % (getattr(owner, "__name__", owner), name))
+
+
 def tearDownModule():
     if _TEMPLATE:
         _TEMPLATE["tmp"].cleanup()
@@ -223,6 +236,7 @@ class _Fixture(unittest.TestCase):
 
     def _once(self, key, compute):
         """같은 키의 결과는 이 클래스에서 한 번만 계산하고 깊은 복사로 내준다(고친 시험이 다음에 새지 않게)."""
+        _assert_unpatched()
         memo = type(self)._memo
         if key not in memo:
             memo[key] = compute()
