@@ -265,6 +265,10 @@ PR 을 나누는 길 셋을 견줬고 사용자가 A 를 골랐다(2026-11-26 �
 | 덜 또렷한 문장 · 긴 흐름에서 평가의 흔들림과 값 재기(E3 미룸) | 평가 케이스를 더하지 않는다(§4) | 없음 — 평가 케이스를 더하는 일 |
 | §4 의 대상에 들지 않는 「둠」 단위의 재판정 | 값 순서로 가다 멈춘다(사용자 2026-11-26) | 없음 — §9 의 숫자를 보고 사용자가 다시 정할 수 있다 |
 | 준비물 셋 밖의 「구조를 고침」 가운데 진단의 초가 20 미만인 83개(약 380초) | 하나에 평균 5초 미만이다(사용자 2026-11-26) | 없음 — §9 의 숫자를 보고 사용자가 다시 정할 수 있다 |
+| PR 3 · `cases.sh` r1 템플릿 키에 엔진 내용 · `DEVBREW_DOCREVIEW_*` 값이 없다 — 바깥에서 켠 폴더를 엔진을 고친 뒤 다시 쓰거나 r1 앞에 환경 변수를 붙인 케이스가 생기면 낡은 원장을 받고, 같은 폴더를 병행으로 나누면 `$$` 임시 이름이 부딪는다 | 지금은 그 쓰임이 없다 — 켜는 여섯 파일은 실행마다 새 폴더 · 행렬은 실행마다 `$BASE_MUT` · `cases.sh` 머리가 엔진 환경 변수를 지우고 r1 앞에 붙인 케이스 0 | 없음 — 다음에 r1 템플릿을 바깥 폴더로 오래 쓰거나 r1 에 환경 변수를 붙이는 케이스를 더하는 일 |
+| PR 3 · 복사본이 새로 지은 원장과 같은지(다시 적기의 `log_line` · 시작 표식 옮김 · begin-round 종료 0 만 저장)를 늘 지키는 확인이 없다 — 골든을 템플릿을 켠 채 돌릴 때만 보인다 | 지금 판정에 닿지 않는다 — 켜는 여섯 파일은 원장 로그 · 실패 원장의 표준 오류를 읽지 않고, 행렬은 traceback 있음/없음으로 가른다 | 없음 — 다음에 `cases.sh` 의 r1 템플릿 길을 고치는 일(그때 케이스 하나) |
+| PR 3 · `case_AC38_audit_row10_11_entry_flags`(`cases.sh`) 가 `dmc` 를 지우지 않아 `test_docreview_state.sh` 실행마다 `docreview-XXXXXX` 폴더 하나가 남는다 | 승인 표에 없는 기존 동작 — 이 PR 은 표에 없는 확인을 고치지 않는다 | E4 PR 6(shared/tests 정리) 판정 표 후보 — §4 대상에 들지 않으면 없음 |
+| PR 3 · 공유 잠금은 잠금 밖 세션의 스위트를 막지 못해 PR 마다 앞 · 뒤 초 재기가 겹친다(PR 3 의 −1.5초 언저리 셋은 흔들림 범위) | 지휘 도구 · 잠금이라 경로 예약 밖이다 | E4 §9 의 마지막 재기(지휘자가 겹치지 않은 바퀴를 잰다) |
 
 ## 번호 대조
 
@@ -375,3 +379,26 @@ PR 을 나누는 길 셋을 견줬고 사용자가 A 를 골랐다(2026-11-26 �
 | 169bbe6f#r3.1 | 참고(ambiguity) #3-준비물-pr-셋 — 준비물 PR 은 같이 쓰는 준비물 도우미에 한 번 짓기를 얹는다. 그런데 대상 목록 밖에서 그 도우미를 쓰는 테스트를 어떻게 다룰지 정하지 않았다. 바뀐 도우미는 판정 표에 없는 테스트의 동작까지 바꾸는데, 표에 없는 테스트는 고치지 않는다는 규칙과 부딪친다. — 고치면: §3 에 한 줄을 더한다 — 같이 쓰는 도우미를 고치면 대상 밖에서 그 도우미를 쓰는 테스트를 판정 표의 「기대는 곳」 칸에 적고, 그 테스트들도 그 PR 에서 돌려 통과를 본다. 그 테스트들의 확인은 바꾸지 않는다. 도우미를 바꾸지 않고 옆에 「한 번 지어 복사」 진입점을 더하는 길이 있으면 그 길을 먼저 쓴다. |
 - spec 승인 · 2026-11-26 · 「승인 — 계획 담당자에게 (권장)」
 - 판정 표 승인 · 2026-11-27 · PR 1(팀 레포 준비물) 「승인 (권장)」 · PR 3(문서 리뷰 원장 도우미) 「승인 (권장)」 — 표는 지휘 상태 폴더 files/relay/E4/table-pr1-final.md · table-pr3-final.md(읽은 담당자 A · 다시 읽은 담당자 B — 서로 다른 하위 agent). 앞선 답: 중복 확인 묶음은 대표 넷으로 줄이고 사유 확인은 test_human_judge.py 로 옮긴다 · test_human_gate.sh 는 15 · 16 만 지운다 · 값 읽기 묶기(④)는 하지 않는다
+
+## 판정
+
+### docs/superpowers/plans/2026-11-27-test-prune-docreview.md
+
+- Ruling: suite/timing lock uses dispatcher's command with --wait 7200 — dispatcher instruction overrides plan GC --wait 3600 — cost if wrong: longer wait only.
+- Ruling: Task 1 has no diff; no task review — verification-only task; its output is baseline files checked later by T2–T4 comparisons — cost if wrong: a bad baseline surfaces as mismatches in T3/T4.
+- Ruling: models — fable(most capable) for T2,T3,T4,T5 impl+review and final review (template contract / matrix / security range per dispatcher); opus T8 impl, fable T8 review (matrix file comments); sonnet T1,T7 impl, opus T7 review; opus T6 impl+review, T9 impl; sonnet T10.
+- Ruling: c9b81f16 trailer says Co-Authored-By Claude Fable 5.2 not the dispatcher's Opus 5.5 — left as is (no history rewrite allowed by dispatcher; truthful attribution) — later implementers told to use Opus 5.5 verbatim; reported to conductor — cost if wrong: one commit trailer differs.
+- Ruling: accept I1 — add "notice 0 lines" assertion on second r1 stderr in case_r1_template_isolated and case_r1_template_round_start_after_call — spec AC5 requires ① files not rebuilding per case; plan's cases can't see silent fallback; adds assertions only, no table/AC/visible-behavior change (K6 extension, report to conductor) — cost if wrong: +2 assertions in state Total.
+- Ruling: Fable-model implementers keep their own truthful Co-Authored-By (Fable 5.2) — they refuse agent override of their session attribution; Opus 5.5 line applies to commits by Opus-run agents — report to conductor which commits carry which trailer — cost if wrong: trailer mismatch on some commits, fixable only by history rewrite (forbidden).
+- Ruling: models from Task 4 review onward — opus for implement/fix/task review/final review; sonnet allowed for light tasks (record/measure: 1,7,10); no fable — user standing rule relayed by coordinator — T2/T3 not re-reviewed; final opus review covers them. Future commits carry the actual model's trailer.
+- Ruling: accept +2 (shape assertion + exact compare) — brief Step 2 explicitly keeps the Step 1 shape assertion; spec authority unaffected — cost if wrong: one extra assertion.
+- Ruling: Task 8 dispatched in parallel with Task 7 review — disjoint files (T7 cases.sh only; T8 nine test files), pathspec commits, norm compare per file at own B8 — cost if wrong: interleaved commit range for reviews (package T8 by its own commits).
+- Ruling: fix plan text pathspec 'plugins/*/tests' → 'plugins/*/tests/*' in the final fix wave — git pathspec dir-glob matches nothing (known trap); plan file is in the allowed changed-file list; docs only, no version bump — cost if wrong: one extra docs line diff.
+- Ruling: single fix wave = (1) mutations.sh:341-343 ㉒ comment correction (2) plan :298 ×2 · :342 pathspec → 'plugins/*/tests/*' (3) mutations.sh:50-51 one-sentence comment on the second-r1 blind spot, worded as an accurate limitation/guidance (not claiming behavior run_case lacks) (4) cases.sh:1432 · :1952 wording — comments/docs only, no table/AC/behavior change — cost if wrong: comment churn.
+- Ruling: 미룸 rows R1–R4 (key lacks engine content/env + $$ temp name; no standing "copy == fresh" lock (log_line/K2/K3); case_AC38 leaves dmc; shared lock does not prevent timing overlap) go to the conductor to add to the design doc ## 미룸 — design doc edits belong to the conductor per plan — cost if wrong: rows land one step later.
+- Ruling: keep this plan's SDD workspace (not rm -rf) — conductor and final report reference task reports/reviews there and backed it up; git-ignored — cost if wrong: stale git-ignored folder until conductor deletes it.
+
+## 구현 대조 — docs/superpowers/plans/2026-11-27-test-prune-docreview.md
+
+- 구현 대조: 구현 대조: 경고 17개 — 보고에 없는 AC 7개 · 미룸 표에 없는 미룸/빠짐 0개 · 받는 곳 없는 미룸 10개 · 받는 곳 검사 불가 0개 · 빠짐 0개 (경고는 모두 「받는 곳 없는 미룸」 — 설계문서 미룸 표의 받는 곳이 「없음 — …」 · 「E4 PR 6」 · 「E4 §9」 꼴이라 규칙(에픽 · PR #숫자)에 안 맞는다 · 지휘자가 사용자에게 보였다)
+- 보고: AC 10개(이 PR 몫 AC1 · AC2 · AC5 · AC7 · AC9–AC14) 중 구현됨 10 · 미룸 0 · 빠짐 0 — AC8 은 사라진 확인이 없어 줄이 없다 · AC3 · AC4 · AC6 · AC15–AC17 은 다른 PR 몫
