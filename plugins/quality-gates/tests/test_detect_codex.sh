@@ -8,14 +8,7 @@ PROBE="$PLUGIN_ROOT/scripts/detect_codex.sh"
 CONF="$PLUGIN_ROOT/scripts/codex-killswitch.conf"
 MOCKS="$SCRIPT_DIR/mocks"
 TMP="$(mktemp -d -t qg-detect-codex-test-XXXXXX)"
-CONF_BACKUP="$TMP/codex-killswitch.conf.orig"
-[ -f "$CONF" ] && cp -p "$CONF" "$CONF_BACKUP"
-restore_conf() { [ -f "$CONF_BACKUP" ] && cp -p "$CONF_BACKUP" "$CONF"; }
-# N5 잔여 위험(round 2): SIGKILL은 EXIT trap을 못 받는다 — 그때는 추적 중인
-# codex-killswitch.conf가 malformed 값(CRLF/공백만)으로 덮인 채 남는다. 테스트
-# 실패로는 안 깨진다(복원이 판정보다 먼저, no()는 exit하지 않는다). git checkout --
-# 로 복구 가능하고 데이터 손실은 없다 — 다음 사람이 워킹트리가 왜 더러운지 알도록 남긴다.
-trap 'restore_conf; rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP"' EXIT
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
@@ -104,18 +97,27 @@ echo "=== Case 12: 이웃 플러그인 변수 잔존 없음 ==="
 assert_file_absent "$CONF" 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX|DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX' "이웃 변수 잔존 없음"
 
 # F2 의 compounding — malformed conf 가 fail-closed 하는지 (리뷰를 빠져나간 버그를
-# 그것을 잡았어야 할 검사 파일에 새로 넣어 닫는다). 원본을 cp -p 로 바이트 복원한다
-# (git checkout -- 아님 — 워킹트리의 다른 무관 변경을 건드리지 않기 위해).
+# 그것을 잡았어야 할 검사 파일에 새로 넣어 닫는다). 추적 conf 는 덮지 않는다 —
+# 링크를 푼 감지기 사본을 $TMP/probe 에 두고, 감지기가 dirname "${BASH_SOURCE[0]}"
+# 로 찾는 형제 conf 자리에 망가진 값을 쓴다.
+mkdir -p "$TMP/probe"
+cp -L "$PROBE" "$TMP/probe/detect_codex.sh"
+
 echo "=== Case 13: malformed conf(CRLF) 는 fail-closed 다 ==="
-printf 'CODEX_KILL_SWITCH_VAR=DEVBREW_QUALITY_GATES_DISABLE_CODEX\r\n' > "$CONF"
-out="$(bash "$PROBE" 2>&1)"
-restore_conf
+printf 'CODEX_KILL_SWITCH_VAR=DEVBREW_QUALITY_GATES_DISABLE_CODEX\r\n' > "$TMP/probe/codex-killswitch.conf"
+out="$(bash "$TMP/probe/detect_codex.sh" 2>&1)"
 assert_grep "$out" 'skip_reason: killswitch_config_invalid' "malformed conf(CRLF) fail-closed"
 
 echo "=== Case 14: malformed conf(공백만) 는 fail-closed 다 ==="
-printf 'CODEX_KILL_SWITCH_VAR="   "\n' > "$CONF"
-out="$(bash "$PROBE" 2>&1)"
-restore_conf
+printf 'CODEX_KILL_SWITCH_VAR="   "\n' > "$TMP/probe/codex-killswitch.conf"
+out="$(bash "$TMP/probe/detect_codex.sh" 2>&1)"
 assert_grep "$out" 'skip_reason: killswitch_config_invalid' "malformed conf(공백만) fail-closed"
+
+# 13 · 14 의 양의 짝 — 같은 사본 옆에 정상 conf 를 두면 invalid 가 아니다. 사본이 형제
+# conf 를 읽지 못하면 killswitch_config_missing 이 나므로 available 로 판정한다.
+echo "=== Case 15: 정상 conf 를 둔 사본은 killswitch_config_invalid 가 아니다 ==="
+cp "$CONF" "$TMP/probe/"
+out="$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=test bash "$TMP/probe/detect_codex.sh" 2>&1)"
+assert_grep "$out" 'codex_available: true' "정상 conf 사본은 형제 conf 를 읽고 invalid 가 아니다"
 
 finish

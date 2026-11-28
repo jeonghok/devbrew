@@ -22,19 +22,6 @@ pass=0; fail=0
 # 안쪽 실행(CODEX_COMPAT_INNER=1)은 셋째 확인만 돈다.
 INNER="${CODEX_COMPAT_INNER:-}"
 
-# Check 1: kill switch produces skip
-if [[ -z "$INNER" ]]; then
-out="$(DEVBREW_QUALITY_GATES_DISABLE_CODEX=1 bash "$PLUGIN_ROOT/scripts/detect_codex.sh")"
-if echo "$out" | grep -q 'skip_reason: kill_switch'; then
-  echo "  PASS: kill switch -> codex_available: false"
-  pass=$((pass + 1))
-else
-  echo "  FAIL: kill switch did not produce skip"
-  echo "$out" | sed 's/^/    /'
-  fail=$((fail + 1))
-fi
-fi
-
 # Check 2 (v2.13.0 availability-floor contract): SKILL.md documents codex as a
 # Tier B availability-floor — dispatched every non-trivia iteration when
 # detect_codex is true, regardless of scope/depth, with an unavailable-degrade
