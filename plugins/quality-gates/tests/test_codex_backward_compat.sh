@@ -129,7 +129,8 @@ if [[ -z "$INNER" ]]; then
   printf '%s\n' 'echo "  ✗ red-b"; exit 1' > "$C4_TMP/tests/test_fake_red2.sh"
   printf '%s\n' 'exit 0' > "$C4_TMP/tests/test_fake_green.sh"
   printf '%s\n' 'echo quiet; exit 1' > "$C4_TMP/tests/test_fake_quiet.sh"
-  # 거절 갈래(빈 지문 · 자기 등재)에 등재할 지문 — 실제 지문 · 빈 지문과 겹치지 않는 고정 값.
+  # 자기 등재 갈래에 등재할 지문 — 실제 지문 · 빈 지문과 겹치지 않는 고정 값.
+  # 빈 지문 갈래는 등재값을 빈 지문 그대로 두어, 등재값과 같아도 매치가 아님을 잰다.
   C4_ANY_HEX='1111111111111111111111111111111111111111111111111111111111111111'
   # 지문은 안쪽이 잴 때와 같은 경로 치환을 받도록 이 파일의 fingerprint 로, 같은 임시 사본 경로에서 잰다.
   c4_inner() {   # 안쪽 원장 내용(표준 입력) → 출력 + 마지막 줄 `rc=<n>`
@@ -155,7 +156,7 @@ if [[ -z "$INNER" ]]; then
     *"stale 등재"*"rc=1") : ;;
     *) c4_fail="${c4_fail}  FAIL: 다시 돌리는 갈래 — 통과하는 등재가 stale 등재로 실패하지 않았다"$'\n' ;;
   esac
-  out_d="$(printf '%s\n' "test_fake_quiet.sh $C4_ANY_HEX" | c4_inner)"
+  out_d="$(printf '%s\n' "test_fake_quiet.sh $EMPTY_DIGEST_SHA256" | c4_inner)"
   case "$out_d" in
     *"빈지문"*"rc=1") : ;;
     *) c4_fail="${c4_fail}  FAIL: 다시 돌리는 갈래 — 빈 지문이 빈지문으로 실패하지 않았다"$'\n' ;;
