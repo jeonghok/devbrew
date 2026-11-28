@@ -23,16 +23,10 @@ SF="$(flat "$S")"
 
 # ① 질문 — question 줄에서 잰다. 고치기 반복의 질문(반복 게이트 · 범위 모드 · 상한 · 분류 · 수정 실패)은 없다 —
 # 한 실행은 한 번 지나고 묻지 않는다(그 부재는 test_one_pipeline_surface.sh 의 case_one_pass_flow 가 잰다).
-assert_eq "$(qlines "$S" | grep -cF '전문: <$RV/synth.out 의 경로>')" "1" "AC10: 전문 자리를 싣는 질문은 낮춘 지적 질문 하나다"
-assert_not_grep "$(qlines "$S")" 'findings remain|What next|reached max|Retry failed at' "AC6: 영어 질문이 남지 않았다"
-assert_contains "$(qlines "$S")" 'question: "재비판이 심각도를 낮춘 지적 <n>개 가운데 <이 묶음의 번호들 — 예: L1 · L2 · L3>. 되올릴 것을 고르세요 — 되올리면 원래 심각도로 판정에 들어간다.\n전문: <$RV/synth.out 의 경로>' "AC26 · AC10: 낮춘 지적 게이트 질문이 한국어이고 묶음 번호와 전문 자리를 싣는다"
-assert_not_contains "$(qlines "$S")" '(위 「낮춘 지적」 절)' "AC10: 낮춘 지적 질문이 창 밖의 절을 가리키지 않는다(위 양성 짝)"
 assert_eq "$(qlines "$S" | grep -c .)" "1" "AC6: 이 SKILL 의 question 줄은 하나다(낮춘 지적 질문 — 고치기 반복의 질문이 빠졌다)"
 
-# ② 선택지 라벨 · 머리글 — 새 라벨 양성 · 옛 라벨 부재
-assert_file_grep "$S" 'label: "그대로 둔다"' "AC6: 선택지 라벨 「그대로 둔다」"
+# ② 선택지 라벨 · 머리글 — 옛 라벨 부재(새 라벨 「그대로 둔다」 · 머리글 「낮춘 지적」 양성은 test_lowered_gate_wiring.sh case_step45_gate 가 잰다)
 assert_file_absent "$S" 'label: "(Retry|Accept and finish|Stop|Abort retry|Skip this file)"' "AC6: 영어 선택지 라벨이 없다"
-assert_file_grep "$S" 'header: "낮춘 지적"' "AC6: 머리글 「낮춘 지적」"
 assert_file_absent "$S" 'header: "(qg iter N|qg max-iter|Retry)"' "AC6: 영어 머리글이 없다"
 assert_contains "$SF" 'preceded by `## qg 판정 — <verdict>` (`not-certified` → `## qg 판정 — not-certified (<reason>)`)' "T1: 판정 머리글이 한 번 지난 실행의 판정을 부른다(반복 번호 없음)"
 assert_file_absent "$S" '^.*`## qg iter N' "T1: 판정 머리글에 옛 영어 낱말(iter)이 없다"

@@ -45,7 +45,6 @@ if [[ "$iter_q" -ne 0 ]]; then
   exit 1
 fi
 echo "PASS V2b (lowered-findings question: 1 · iteration-gate question: 0)"
-assert_file_grep "$S" 'label: "그대로 둔다"' "lowered gate option"
 assert_file_absent "$S" 'label: "(고치고 다시 돌기|지금 판정으로 끝내기|한 번 더 돌기)"' "iteration-gate options are gone (위 양성 짝)"
 
 # V7 removed in v1.32.1 (see header). Runtime NEEDS_RESOLUTION decision
