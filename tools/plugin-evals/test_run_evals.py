@@ -314,7 +314,15 @@ class RunEvalsTest(unittest.TestCase):
             "CLOUD_ML_REGION": "global",
             "VERTEX_REGION_CLAUDE_HAIKU_4_5": "us-east5",
         }
-        azure = {"AZURE_TENANT_ID": "some-tenant"}
+        azure = {
+            "AZURE_TENANT_ID": "some-tenant",
+            "IDENTITY_ENDPOINT": "http://127.0.0.1:41000/msi/token",
+            "IDENTITY_HEADER": "<REDACTED>",
+            "IDENTITY_SERVER_THUMBPRINT": "some-thumbprint",
+            "IMDS_ENDPOINT": "http://127.0.0.1:40342",
+            "MSI_ENDPOINT": "http://127.0.0.1:41001/msi/token",
+            "MSI_SECRET": "<REDACTED>",
+        }
         creds = dict(aws, **google)
         creds.update(azure)
         for selector, chosen, opened in (

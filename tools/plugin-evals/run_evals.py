@@ -50,7 +50,10 @@ PROVIDER_VARS = (
     (("CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD"),
      ("GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT",
       "CLOUD_ML_REGION"), ("VERTEX_REGION_",)),
-    (("CLAUDE_CODE_USE_FOUNDRY",), (), ("AZURE_",)),
+    # Azure 관리 ID 의 이름은 MSAL Node 의 ManagedIdentityEnvironmentVariableNames 에서 왔다.
+    (("CLAUDE_CODE_USE_FOUNDRY",),
+     ("IDENTITY_ENDPOINT", "IDENTITY_HEADER", "IDENTITY_SERVER_THUMBPRINT",
+      "IMDS_ENDPOINT", "MSI_ENDPOINT", "MSI_SECRET"), ("AZURE_",)),
 )
 # Claude Code 가 켬으로 읽는 값(대소문자 무관). 0 · false · no · off · 빈 값은 끔이다.
 TRUTHY = ("1", "true", "yes", "on")
