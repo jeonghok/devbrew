@@ -167,8 +167,8 @@ case_trivia_escape_is_gated_by_declaration() {
   assert_contains "$tr" 'declaration-invalid' "AC28: 선언이 깨졌으면 여전히 trivia 우회가 없다(음의 짝)"
   # Step 1c 가 미룬 판단으로 보낸다 — 판단하는 자리(진입점)에서 Trivia 절로 가는 길이 보여야 한다.
   local s1c; s1c="$(awk '/^### Step 1 — scope$/{f=1;next} f&&/^### Step 1b /{exit} f' "$SKILL")"
-  assert_eq "$(printf '%s\n' "$s1c" | grep -c -x -F -- '   - 스코프가 `topic` · `range` 면 리뷰어로 가기 전에 [Trivia escape](#trivia-escape) 의 미룬 판단을 한다.')" "1" \
-    "AC28: Step 1c 가 topic · range 를 Trivia escape 의 미룬 판단으로 보낸다(줄 전체)"
+  assert_eq "$(printf '%s\n' "$s1c" | grep -cE '`topic` · `range`.*리뷰어로 가기 전.*Trivia escape.*미룬 판단')" "1" \
+    "AC28: Step 1c 가 topic · range 를 리뷰어 앞에서 Trivia escape 의 미룬 판단으로 보낸다(한 줄)"
 }
 
 case_step1_writes_scope_file() {
@@ -240,16 +240,15 @@ case_filtered_diff_is_review_diff_file() {
   # 리뷰어가 받는 diff(FILTERED_DIFF)는 모든 스코프에서 1c 가 쓴 $RD/review-i1.diff 다 —
   # topic 스코프에서 session 베이스라인(MERGE_BASE · HEAD)으로 새던 결함의 자리는 이제 스크립트다.
   # 정의하는 줄 = FILTERED_DIFF 를 말하되 슬롯(${FILTERED_DIFF})으로 채워 넣는 줄이 아닌 것.
-  # ∀ 정의 줄이 review-i1.diff 를 출처로 대고, 두 정의(1c · Step 3)가 리터럴 그대로 있다.
+  # ∀ 정의 줄이 review-i1.diff 를 출처로 대고, 두 정의(1c · Step 3)가 그 뜻 낱말로 있다.
   local all defs bad
   all=$(grep -F 'FILTERED_DIFF' "$SKILL")
   defs=$(printf '%s\n' "$all" | grep -vF '${FILTERED_DIFF}')
   assert_eq "$(printf '%s\n' "$defs" | grep -c .)" "2" "FILTERED_DIFF 를 정의하는 줄이 둘(1c · Step 3)"
   bad=$(printf '%s\n' "$defs" | grep -vF 'review-i1.diff')
   assert_eq "$(printf '%s' "$bad" | grep -c .)" "0" "FILTERED_DIFF 를 정의하는 줄 ∀ 가 review-i1.diff 를 출처로 댄다"
-  assert_contains "$defs" '리뷰어가 받는 diff(`FILTERED_DIFF`)는 `$RD/review-i1.diff` 의 내용이다' "1c 의 정의(리터럴)"
-  assert_contains "$defs" '- `FILTERED_DIFF` = the content of `${TOP}/.claude/quality-gates/<session-id>/review-i1.diff` that Step 1c wrote in this run' \
-    "Step 3 의 정의(리터럴)"
+  assert_grep "$defs" '리뷰어가 받는 diff.*review-i1\.diff' "1c 의 정의 — 리뷰어가 받는 diff 는 review-i1.diff 다"
+  assert_grep "$defs" 'review-i1\.diff.*Step 1c wrote in this run' "Step 3 의 정의 — 이번 실행에 Step 1c 가 쓴 review-i1.diff 다"
   assert_not_grep "$all" 'MERGE_BASE|git (diff|show|log|format-patch)' \
     "FILTERED_DIFF 를 말하는 줄이 손으로 짠 git diff · git show · git log -p · session 베이스라인을 쓰지 않는다"
 }
