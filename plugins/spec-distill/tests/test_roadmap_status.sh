@@ -850,6 +850,7 @@ printf 'import subprocess\nsubprocess.run(["ls"])\n' > "$T/ctl_run.py"
 sc_add run - "$T/ctl_run.py"
 printf 'import conductor_state\n' > "$T/ctl_local.py"
 sc_add local "$S" "$T/ctl_local.py"
+assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctl_local.py")" "잠긴 파일 밖 로컬 모듈 import conductor_state" "양성 대조: 묶음 없이 부른 정적 검사도 LOCAL_DIR 로 잠긴 파일 밖 로컬 모듈 import 를 잡는다(열일곱 스크립트를 보는 경로)"
 # 상태 계산은 잠긴 파일 밖에서 읽기 함수만 이름으로 가져온다(PR 캐시 · origin 소유자) — 허용 밖 이름 · 모듈째 import · 다른 파일은 잡는다
 mkdir -p "$T/ctlrs/save" "$T/ctlrs/whole" "$T/ctlrs/ghjson" "$T/ctlmods"
 assert_contains "$(cat "$RS")" "from conductor_state import MachineError, machine_path, parse_machine" "양의 짝: 상태 계산이 PR 캐시 읽기 함수를 이름으로 가져온다"
