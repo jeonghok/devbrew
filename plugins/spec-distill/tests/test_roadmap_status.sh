@@ -38,9 +38,78 @@ spec_doc() {     # spec_doc <source_interview> <번호 대조 첫 칸>
 js() {           # js <json 파일> <파이썬 식 — r 이 보고서>. 식은 이 테스트가 쓴 고정 문자열뿐이다.
   python3 -c 'import json,sys; r=json.load(open(sys.argv[1],encoding="utf-8")); print(eval(sys.argv[2]))' "$1" "$2"
 }
-stage() { js "$1" "next(b['stage'] for b in r['blocks'] if b['id']=='$2')"; }
-warns() { js "$1" "' | '.join(next(b['warnings'] for b in r['blocks'] if b['id']=='$2'))"; }
-notes() { js "$1" "' | '.join(next(b['notes'] for b in r['blocks'] if b['id']=='$2'))"; }
+# 보고 읽기 캐시 — stage · warns · notes · reason 은 `print(next(b[<칸>] for b in r['blocks'] if b['id']==<번호>))`
+# (목록 칸은 ' | ' 로 이음) 을 찍던 js 와 같은 표준 출력을 낸다. 블록 · 칸이 없거나 식이 예외면 빈 출력 · rc 1.
+# 보고의 글(cksum)이 같은 동안 python 은 한 번만 돈다 — 블록 번호 · 칸마다 찍을 글을 $T/jcache/<cksum>/<이름>.<칸> 에 둔다.
+cat > "$T/jcache.py" <<'PY'
+import json, os, re, sys
+PICK = {"stage": lambda b: b["stage"], "warnings": lambda b: " | ".join(b["warnings"]),
+        "notes": lambda b: " | ".join(b["notes"]), "reason": lambda b: b["reason"]}
+
+
+def printed(r, bid, col):
+    try:
+        return str(PICK[col](next(b for b in r["blocks"] if b["id"] == bid))) + "\n"
+    except Exception:
+        return None
+
+
+try:
+    report = json.load(open(sys.argv[2], encoding="utf-8"))
+except Exception:
+    report = None
+if sys.argv[1] == "one":   # 파일 이름으로 못 쓰는 번호 — 캐시 없이 하나만
+    one = printed(report, sys.argv[3], sys.argv[4])
+    sys.stdout.write(one or "")
+    sys.exit(0 if one is not None else 1)
+dest = sys.argv[3]
+part = "%s.part%d" % (dest, os.getpid())
+os.makedirs(part)
+seen = set()
+for blk in (report or {}).get("blocks", []) if isinstance(report, dict) else []:
+    bid = blk.get("id") if isinstance(blk, dict) else None
+    if not isinstance(bid, str) or bid in seen or not re.fullmatch(r"[A-Za-z0-9-]+", bid):
+        continue
+    seen.add(bid)
+    base = "".join("_" + c if c.islower() else c for c in bid)   # 대소문자를 가리지 않는 파일 시스템
+    for col in PICK:
+        text = printed(report, bid, col)
+        if text is not None:
+            with open(os.path.join(part, "%s.%s" % (base, col)), "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(text)
+os.replace(part, dest)
+PY
+_jc_name() {  # _jc_name <블록 번호> — 캐시 파일 이름을 _JC_N 에(소문자 앞에 _). 영문 · 숫자 · - 밖의 글자면 rc 1
+  local s="$1" c
+  _JC_N=""
+  [ -n "$s" ] || return 1
+  while [ -n "$s" ]; do
+    c="${s%"${s#?}"}"; s="${s#?}"
+    case "$c" in
+      [ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-]) _JC_N="${_JC_N}${c}" ;;
+      [abcdefghijklmnopqrstuvwxyz]) _JC_N="${_JC_N}_${c}" ;;
+      *) return 1 ;;
+    esac
+  done
+}
+jcache() {  # jcache <json 파일> <블록 번호> <stage|warnings|notes|reason>
+  local key dir
+  _jc_name "$2" || { python3 -I "$T/jcache.py" one "$1" "$2" "$3"; return; }
+  key="$(cksum < "$1")" || return 1
+  dir="$T/jcache/${key// /_}"
+  [ -d "$dir" ] || { mkdir -p "$T/jcache" && python3 -I "$T/jcache.py" build "$1" "$dir"; } || return 1
+  [ -f "$dir/${_JC_N}.$3" ] && cat "$dir/${_JC_N}.$3"
+}
+stage() { jcache "$1" "$2" stage; }
+warns() { jcache "$1" "$2" warnings; }
+notes() { jcache "$1" "$2" notes; }
+reason() { jcache "$1" "$2" reason; }
+printf '{"blocks": [{"id": "Z1", "stage": "가", "reason": "까"}]}\n' > "$T/fresh.json"
+assert_eq "$(stage "$T/fresh.json" Z1)" "가" "보고 캐시: 처음 읽은 값"
+printf '{"blocks": [{"id": "Z1", "stage": "나", "reason": "따"}]}\n' > "$T/fresh.json"
+assert_eq "$(stage "$T/fresh.json" Z1)" "나" "보고 캐시: 같은 경로를 같은 초에 다시 쓰면 새 글을 읽는다"
+assert_eq "$(reason "$T/fresh.json" Z1)" "따" "보고 캐시: 같은 경로를 다시 쓰면 다른 칸(reason)도 새 글을 읽는다"
+assert_eq "$(stage "$T/fresh.json" Z9; echo "rc=$?")" "rc=1" "보고 캐시: 블록이 없으면 빈 출력"
 
 # ── 픽스처: brief · audit · 묶음 · 로드맵 ─────────────────────────────────────
 write_brief() {  # write_brief <디렉토리>
@@ -418,16 +487,15 @@ assert_eq "$(js "$T/crash.json" "r['handoffs']")" "None" "내부 오류 보고�
 
 # ── 5. 읽기 전용(AC7) — 정적 검사 + 실행 전후 비교, 각각 양성 대조 ──────────────
 static_check() {  # static_check <파일...> — 쓰기 · 네트워크 · 허용 밖 git · 이름 import 를 찾으면 줄을 낸다. 끝에 CHECKED n.
+  # static_check --batch <목록> <출력 폴더> — 목록 한 줄(<이름>\t<LOCAL_DIR 또는 ->\t<파일>[\t<파일>…])마다 python 한 프로세스
+  # 안에서 상태를 새로 하고, `LOCAL_DIR=<값> static_check <파일…>` 이 따로 냈을 출력을 <출력 폴더>/<이름>.out 에 쓴다.
   python3 - "$@" <<'PY'
 import ast, os, sys
 WRITE_ATTRS = {"write_text", "write_bytes", "unlink", "rmdir", "mkdir", "rename", "replace",
                "touch", "chmod", "remove", "makedirs", "rmtree", "symlink_to", "system", "popen"}
 NET_MODS = {"socket", "urllib", "http", "requests", "ftplib", "smtplib", "shutil"}
 READ_GIT = {"show", "rev-parse", "log", "diff", "merge-base", "cat-file", "grep", "ls-tree", "config"}  # config 는 --get 꼴만(아래)
-LOCAL = set()
-if os.environ.get("LOCAL_DIR"):
-    LOCAL = {f[:-3] for f in os.listdir(os.environ["LOCAL_DIR"]) if f.endswith(".py")}
-ARGS = {os.path.basename(a)[:-3] for a in sys.argv[1:]}
+LOCAL, ARGS = set(), set()   # 묶음마다 fresh() 가 새로 둔다
 # 상태 계산이 잠긴 파일 밖에서 이름으로만 가져오는 읽기 함수 — PR 캐시 읽기 · 적은 번호 읽기 · origin 소유자 읽기
 READERS = {"conductor_state": {"MachineError", "machine_path", "parse_machine",
                                "EPIC_PR", "RECORDED_MISSING", "recorded_cache_row", "recorded_number", "TRUST"},
@@ -449,6 +517,21 @@ METHOD_OK = {"strip", "lstrip", "rstrip", "split", "rsplit", "partition", "rpart
              "match", "fullmatch", "search", "finditer", "findall", "sub", "resolve", "exists", "is_file", "is_dir",
              "is_symlink", "read_text", "relative_to", "with_suffix", "insert", "isascii", "isalnum", "isdigit"}
 _MODS, _IMPORT_SCANNED = {}, set()
+
+
+def fresh(local_dir, paths):
+    """묶음 하나를 돌기 전 — 모듈 수준 가변 상태(LOCAL_DIR 환경 · LOCAL · ARGS · 모듈 캐시 둘)를 그 묶음 값으로 새로 둔다.
+    그 밖의 모듈 수준 값(허용 · 금지 목록 · READERS)은 읽기만 하고, 세는 값 · 반복 변수는 check() 안에 산다."""
+    global LOCAL, ARGS, _MODS, _IMPORT_SCANNED
+    if local_dir is None:
+        os.environ.pop("LOCAL_DIR", None)
+    else:
+        os.environ["LOCAL_DIR"] = local_dir
+    LOCAL = set()
+    if os.environ.get("LOCAL_DIR"):
+        LOCAL = {f[:-3] for f in os.listdir(os.environ["LOCAL_DIR"]) if f.endswith(".py")}
+    ARGS = {os.path.basename(a)[:-3] for a in paths}
+    _MODS, _IMPORT_SCANNED = {}, set()
 
 
 def module(mod):
@@ -648,107 +731,140 @@ def reader_writes(mod, names):
     return out
 
 
-count = 0
-for path in sys.argv[1:]:
-    count += 1
-    tree = ast.parse(open(path, encoding="utf-8").read())
-    allowed, shape_ok = None, True
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "GIT_ALLOWED" for t in node.targets):
-            v = node.value
-            lit = v.args[0] if isinstance(v, ast.Call) and getattr(v.func, "id", "") == "frozenset" and v.args else None
-            if isinstance(lit, (ast.Set, ast.List)) and all(isinstance(e, ast.Constant) and isinstance(e.value, str) for e in lit.elts):
-                allowed = {e.value for e in lit.elts}
-            else:
-                shape_ok = False
-    uses_subprocess = any(isinstance(n, ast.Import) and any(a.name == "subprocess" for a in n.names)
-                          for n in ast.walk(tree))
-    if not shape_ok:
-        print("%s: GIT_ALLOWED 모양이 frozenset({...}) 가 아니다" % path)
-    elif uses_subprocess and (allowed is None or not allowed <= READ_GIT):
-        print("%s: GIT_ALLOWED 가 없거나 읽기 명령 밖을 담는다: %r" % (path, allowed))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "subprocess":
-            print("%s:%d: subprocess 를 이름으로 import" % (path, node.lineno))
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            mods = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""]
-            for mod in mods:
-                if mod.split(".")[0] in NET_MODS:
-                    print("%s:%d: 네트워크 · 파일 조작 모듈 %s" % (path, node.lineno, mod))
-                if mod.split(".")[0] in LOCAL and mod.split(".")[0] not in ARGS:
-                    names = {a.name for a in node.names} if isinstance(node, ast.ImportFrom) else None
-                    if (os.path.basename(path) == "roadmap_status.py" and mod in READERS and names is not None
-                            and names <= READERS[mod]):
-                        for line in reader_writes(mod, names):   # 이름으로 허용한 읽기 함수 — 그 몸과 부르는 같은 모듈 함수에 쓰기가 없다
-                            print("%s:%d: %s" % (path, node.lineno, line))
-                    else:
-                        print("%s:%d: 잠긴 파일 밖 로컬 모듈 import %s" % (path, node.lineno, mod))
-        if isinstance(node, ast.Call):
-            f = node.func
-            name = getattr(f, "attr", getattr(f, "id", ""))
-            pos = node.args[0].elts if node.args and isinstance(node.args[0], ast.List) else list(node.args)
-            for i, arg in enumerate(pos):
-                if isinstance(arg, ast.Constant) and arg.value == "config":
-                    nxt = pos[i + 1] if i + 1 < len(pos) else None
-                    if not (isinstance(nxt, ast.Constant) and nxt.value == "--get"):
-                        print("%s:%d: git config 를 --get 꼴 밖으로 부른다" % (path, node.lineno))
-            if name in WRITE_ATTRS:
-                print("%s:%d: 쓰기 호출 %s" % (path, node.lineno, name))
-            if name == "open":
-                if isinstance(f, ast.Attribute):
-                    pos = node.args[0] if node.args else None      # x.open(mode, ...)
+def check(paths):
+    count = 0
+    for path in paths:
+        count += 1
+        tree = ast.parse(open(path, encoding="utf-8").read())
+        allowed, shape_ok = None, True
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "GIT_ALLOWED" for t in node.targets):
+                v = node.value
+                lit = v.args[0] if isinstance(v, ast.Call) and getattr(v.func, "id", "") == "frozenset" and v.args else None
+                if isinstance(lit, (ast.Set, ast.List)) and all(isinstance(e, ast.Constant) and isinstance(e.value, str) for e in lit.elts):
+                    allowed = {e.value for e in lit.elts}
                 else:
-                    pos = node.args[1] if len(node.args) > 1 else None  # open(path, mode, ...)
-                mode = pos.value if isinstance(pos, ast.Constant) else ""
-                for kw in node.keywords:
-                    if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
-                        mode = kw.value.value
-                if set(str(mode)) & set("wax+"):
-                    print("%s:%d: 쓰기 모드 open" % (path, node.lineno))
-            if name in ("run", "Popen", "call", "check_output", "check_call") and getattr(getattr(f, "value", None), "id", "") == "subprocess":
-                first = node.args[0] if node.args else None
-                head = first.elts[0] if isinstance(first, ast.List) and first.elts else None
-                if not (isinstance(head, ast.Constant) and head.value == "git"):
-                    print("%s:%d: git 이 아닌 subprocess" % (path, node.lineno))
-print("CHECKED %d" % count)
+                    shape_ok = False
+        uses_subprocess = any(isinstance(n, ast.Import) and any(a.name == "subprocess" for a in n.names)
+                              for n in ast.walk(tree))
+        if not shape_ok:
+            print("%s: GIT_ALLOWED 모양이 frozenset({...}) 가 아니다" % path)
+        elif uses_subprocess and (allowed is None or not allowed <= READ_GIT):
+            print("%s: GIT_ALLOWED 가 없거나 읽기 명령 밖을 담는다: %r" % (path, allowed))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "subprocess":
+                print("%s:%d: subprocess 를 이름으로 import" % (path, node.lineno))
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                mods = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""]
+                for mod in mods:
+                    if mod.split(".")[0] in NET_MODS:
+                        print("%s:%d: 네트워크 · 파일 조작 모듈 %s" % (path, node.lineno, mod))
+                    if mod.split(".")[0] in LOCAL and mod.split(".")[0] not in ARGS:
+                        names = {a.name for a in node.names} if isinstance(node, ast.ImportFrom) else None
+                        if (os.path.basename(path) == "roadmap_status.py" and mod in READERS and names is not None
+                                and names <= READERS[mod]):
+                            for line in reader_writes(mod, names):   # 이름으로 허용한 읽기 함수 — 그 몸과 부르는 같은 모듈 함수에 쓰기가 없다
+                                print("%s:%d: %s" % (path, node.lineno, line))
+                        else:
+                            print("%s:%d: 잠긴 파일 밖 로컬 모듈 import %s" % (path, node.lineno, mod))
+            if isinstance(node, ast.Call):
+                f = node.func
+                name = getattr(f, "attr", getattr(f, "id", ""))
+                pos = node.args[0].elts if node.args and isinstance(node.args[0], ast.List) else list(node.args)
+                for i, arg in enumerate(pos):
+                    if isinstance(arg, ast.Constant) and arg.value == "config":
+                        nxt = pos[i + 1] if i + 1 < len(pos) else None
+                        if not (isinstance(nxt, ast.Constant) and nxt.value == "--get"):
+                            print("%s:%d: git config 를 --get 꼴 밖으로 부른다" % (path, node.lineno))
+                if name in WRITE_ATTRS:
+                    print("%s:%d: 쓰기 호출 %s" % (path, node.lineno, name))
+                if name == "open":
+                    if isinstance(f, ast.Attribute):
+                        pos = node.args[0] if node.args else None      # x.open(mode, ...)
+                    else:
+                        pos = node.args[1] if len(node.args) > 1 else None  # open(path, mode, ...)
+                    mode = pos.value if isinstance(pos, ast.Constant) else ""
+                    for kw in node.keywords:
+                        if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
+                            mode = kw.value.value
+                    if set(str(mode)) & set("wax+"):
+                        print("%s:%d: 쓰기 모드 open" % (path, node.lineno))
+                if name in ("run", "Popen", "call", "check_output", "check_call") and getattr(getattr(f, "value", None), "id", "") == "subprocess":
+                    first = node.args[0] if node.args else None
+                    head = first.elts[0] if isinstance(first, ast.List) and first.elts else None
+                    if not (isinstance(head, ast.Constant) and head.value == "git"):
+                        print("%s:%d: git 이 아닌 subprocess" % (path, node.lineno))
+    print("CHECKED %d" % count)
+
+
+def batch(list_path, out_dir):
+    """목록 한 줄마다 상태를 새로 하고 그 파일들을 따로 돌렸을 출력을 <출력 폴더>/<이름>.out 에 쓴다. 죽은 묶음 수를 낸다."""
+    import contextlib, traceback
+    dead = 0
+    for line in open(list_path, encoding="utf-8").read().splitlines():
+        name, local_dir, *paths = line.split("\t")
+        with open(os.path.join(out_dir, name + ".out"), "w", encoding="utf-8", newline="\n") as fh, \
+                contextlib.redirect_stdout(fh):
+            try:
+                fresh(None if local_dir == "-" else local_dir, paths)
+                check(paths)
+            except Exception:
+                dead += 1
+                print("정적 검사 묶음 %s 이 죽었다:" % name, file=sys.stderr)
+                traceback.print_exc()
+    return dead
+
+
+if sys.argv[1:2] == ["--batch"]:
+    sys.exit(1 if batch(sys.argv[2], sys.argv[3]) else 0)
+fresh(os.environ.get("LOCAL_DIR"), sys.argv[1:])
+check(sys.argv[1:])
 PY
 }
 out="$(LOCAL_DIR="$S" static_check "$RS" "$S/check_bundle_coverage.py" "$S/roadmap_model.py" "$S/team_layout.py" "$S/spec_review_bundle.py" "$S/repo_defaults.py" "$S/section6.py" "$S/brief_body.py" "$S/team_check.py" "$S/team_files.py" "$S/workflow_superpowers.py" "$S/job_results.py" "$S/team_status.py" "$S/branch_tip.py" "$S/human_lines.py" "$S/session_record.py" "$S/legacy_names.py")"; rc=$?
 assert_eq "$rc" "0" "정적 검사기가 죽지 않았다(rc 0)"
 assert_eq "$(printf '%s\n' "$out" | grep -v '^CHECKED ')" "" "정적: 열일곱 스크립트에 쓰기 · 네트워크 · git 밖 subprocess · 허용 밖 git · 이름 import · 잠긴 파일 밖 로컬 import 가 없다"
 assert_eq "$(printf '%s\n' "$out" | grep '^CHECKED ')" "CHECKED 17" "정적 검사가 열일곱 스크립트를 셌다"
+# 아래 양성 대조는 정적 검사를 묶음 실행 하나(python 한 프로세스)로 돈다 — sc_add 가 목록에 한 줄을 더하고,
+# 단언은 묶음 실행 뒤 <이름>.out 을 읽는다. 묶음마다 모듈 캐시 · LOCAL_DIR 를 새로 한다(fresh).
+TAB="$(printf '\t')"
+SC_LIST="$T/sc.list"; SC_OUT="$T/sc-out"; : > "$SC_LIST"; mkdir -p "$SC_OUT"
+sc_add() {  # sc_add <이름> <LOCAL_DIR 또는 -> <파일...>
+  local IFS="$TAB"
+  printf '%s\n' "$*" >> "$SC_LIST"
+}
+sc_out() { cat "$SC_OUT/$1.out" 2>/dev/null; }   # sc_out <이름> — 그 묶음의 정적 검사 출력
 sed 's/GIT_ALLOWED = frozenset({"show",/GIT_ALLOWED = frozenset({"fetch", "show",/' "$RS" > "$T/mut_fetch.py"
-assert_contains "$(static_check "$T/mut_fetch.py")" "GIT_ALLOWED" "양성 대조: fetch 를 허용 목록에 넣으면 정적 검사가 잡는다"
+sc_add fetch - "$T/mut_fetch.py"
 printf 'from pathlib import Path\nPath("x").write_text("y", encoding="utf-8")\nimport urllib.request\n' > "$T/mut_write.py"
-out="$(static_check "$T/mut_write.py")"
-assert_contains "$out" "쓰기 호출 write_text" "양성 대조: write_text 를 잡는다"
-assert_contains "$out" "네트워크 · 파일 조작 모듈 urllib.request" "양성 대조: urllib 을 잡는다"
+sc_add write - "$T/mut_write.py"
 sed 's/\["git", \*args\]/[GIT, *args]/' "$S/branch_tip.py" > "$T/mut_tip.py"
-assert_contains "$(static_check "$T/mut_tip.py")" "git 이 아닌 subprocess" "양성 대조: branch_tip.py 사본의 subprocess 호출 머리를 [GIT, *args] 로 바꾸면 정적 검사가 「git 이 아닌 subprocess」 를 낸다"
+sc_add tip - "$T/mut_tip.py"
 printf 'import subprocess\nGIT_ALLOWED = {"show", "fetch"}\n' > "$T/ctl_set.py"
-assert_contains "$(static_check "$T/ctl_set.py")" "GIT_ALLOWED 모양이 frozenset({...}) 가 아니다" "양성 대조: 집합 리터럴 GIT_ALLOWED 를 잡는다"
+sc_add set - "$T/ctl_set.py"
 printf 'open("x", "w", encoding="utf-8")\n' > "$T/ctl_open.py"
-assert_contains "$(static_check "$T/ctl_open.py")" "쓰기 모드 open" "양성 대조: 내장 open 의 쓰기 모드를 잡는다"
+sc_add open - "$T/ctl_open.py"
 printf 'from pathlib import Path\nPath("x").open("w", encoding="utf-8")\n' > "$T/ctl_popen.py"
-assert_contains "$(static_check "$T/ctl_popen.py")" "쓰기 모드 open" "양성 대조: Path.open 의 쓰기 모드를 잡는다"
+sc_add popen - "$T/ctl_popen.py"
 printf 'import subprocess\nsubprocess.run(["ls"])\n' > "$T/ctl_run.py"
-assert_contains "$(static_check "$T/ctl_run.py")" "git 이 아닌 subprocess" "양성 대조: git 밖 subprocess.run 을 잡는다"
+sc_add run - "$T/ctl_run.py"
 printf 'import conductor_state\n' > "$T/ctl_local.py"
-assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctl_local.py")" "잠긴 파일 밖 로컬 모듈 import conductor_state" "양성 대조: 잠긴 파일 밖 로컬 모듈 import 를 잡는다"
+sc_add local "$S" "$T/ctl_local.py"
+assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctl_local.py")" "잠긴 파일 밖 로컬 모듈 import conductor_state" "양성 대조: 묶음 없이 부른 정적 검사도 LOCAL_DIR 로 잠긴 파일 밖 로컬 모듈 import 를 잡는다(열일곱 스크립트를 보는 경로)"
 # 상태 계산은 잠긴 파일 밖에서 읽기 함수만 이름으로 가져온다(PR 캐시 · origin 소유자) — 허용 밖 이름 · 모듈째 import · 다른 파일은 잡는다
-mkdir -p "$T/ctlrs" "$T/ctlmods"
+mkdir -p "$T/ctlrs/save" "$T/ctlrs/whole" "$T/ctlrs/ghjson" "$T/ctlmods"
 assert_contains "$(cat "$RS")" "from conductor_state import MachineError, machine_path, parse_machine" "양의 짝: 상태 계산이 PR 캐시 읽기 함수를 이름으로 가져온다"
 assert_contains "$(cat "$RS")" "from gh_repo import GhStop, origin_slug" "양의 짝: 상태 계산이 origin 소유자 읽기 함수를 이름으로 가져온다"
-printf 'from conductor_state import parse_machine, save\n' > "$T/ctlrs/roadmap_status.py"
-assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctlrs/roadmap_status.py")" "잠긴 파일 밖 로컬 모듈 import conductor_state" "양성 대조: 허용 밖 이름(save)을 함께 가져오면 잡는다"
-printf 'import gh_repo\n' > "$T/ctlrs/roadmap_status.py"
-assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctlrs/roadmap_status.py")" "잠긴 파일 밖 로컬 모듈 import gh_repo" "양성 대조: 모듈째 import 는 잡는다"
-printf 'from gh_repo import gh_json\n' > "$T/ctlrs/roadmap_status.py"
-assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctlrs/roadmap_status.py")" "잠긴 파일 밖 로컬 모듈 import gh_repo" "양성 대조: gh 를 부르는 gh_json 은 잡는다"
+printf 'from conductor_state import parse_machine, save\n' > "$T/ctlrs/save/roadmap_status.py"
+sc_add save "$S" "$T/ctlrs/save/roadmap_status.py"
+printf 'import gh_repo\n' > "$T/ctlrs/whole/roadmap_status.py"
+sc_add whole "$S" "$T/ctlrs/whole/roadmap_status.py"
+printf 'from gh_repo import gh_json\n' > "$T/ctlrs/ghjson/roadmap_status.py"
+sc_add ghjson "$S" "$T/ctlrs/ghjson/roadmap_status.py"
 printf 'from gh_repo import origin_slug\n' > "$T/ctl_other.py"
-assert_contains "$(LOCAL_DIR="$S" static_check "$T/ctl_other.py")" "잠긴 파일 밖 로컬 모듈 import gh_repo" "양성 대조: 허용은 상태 계산 파일에만"
-ctl_reader() {  # ctl_reader <이름> <모듈 파일> <옛 글> <새 글> [<옛 글> <새 글>] — 사본의 읽기 모듈을 바꾸고 정적 검사 출력을 낸다(글의 \n 은 줄바꿈)
-  local d="$T/ctlmods/$1" f="$2"; shift 2
+sc_add other "$S" "$T/ctl_other.py"
+ctl_reader() {  # ctl_reader <이름> <모듈 파일> <옛 글> <새 글> [<옛 글> <새 글>] — 사본의 읽기 모듈을 바꾸고 묶음 목록에 한 줄을 더한다(글의 \n 은 줄바꿈)
+  local n="$1" d="$T/ctlmods/$1" f="$2"; shift 2
   mkdir -p "$d" && cp "$S"/*.py "$d/"
   python3 -I -c 'import sys
 p, pairs = sys.argv[1], sys.argv[2:]
@@ -759,44 +875,31 @@ for old, new in zip(pairs[::2], pairs[1::2]):
         sys.exit("변이 자리 %d개: %r" % (s.count(old), old))
     s = s.replace(old, new)
 open(p, "w", encoding="utf-8").write(s)' "$d/$f" "$@" || { no "변이 적용 안 됨($f)"; return; }
-  LOCAL_DIR="$d" static_check "$RS"
+  sc_add "$n" "$d" "$RS"
 }
-ctl_out="$(ctl_reader own conductor_state.py 'def own_version() -> str:\n' 'def own_version() -> str:\n    Path("x").write_text("y", encoding="utf-8")\n')"
-assert_contains "$ctl_out" "읽기 함수 conductor_state.own_version 에 금지 호출 write_text" "양성 대조: parse_machine 이 부르는 함수의 쓰기까지 따라가 잡는다"
-ctl_out="$(ctl_reader imported conductor_state.py 'def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:\n' 'def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:\n    _atomic_write(Path("."), "x", "y")\n')"
-assert_contains "$ctl_out" "읽기 함수 ledger_marker._atomic_write 에 금지 호출 os.open" "양성 대조: 읽기 함수가 가져온 이름(_atomic_write)을 부르면 그 모듈까지 따라가 잡는다"
-ctl_out="$(ctl_reader argv gh_repo.py '["git", "-C", str(cwd), "remote", "get-url", "origin"]' '["git", "-C", str(cwd), "fetch"]')"
-assert_contains "$ctl_out" "읽기 함수 gh_repo.origin_slug 에 금지 호출 git … remote get-url origin 이 아닌 subprocess" "양성 대조: origin_slug 의 git 이 remote get-url origin 이 아니면 잡는다"
-ctl_out="$(ctl_reader oswrite conductor_state.py 'def own_version() -> str:\n' 'def own_version() -> str:\n    os.write(os.open("x", os.O_WRONLY), b"y")\n')"
-assert_contains "$ctl_out" "금지 호출 os.open" "양성 대조: os.open 을 잡는다"
-assert_contains "$ctl_out" "금지 호출 os.write" "양성 대조: os.write 를 잡는다"
-ctl_out="$(ctl_reader fromalias gh_repo.py 'import sys\n' 'import sys\nfrom subprocess import run as _r\n' 'def origin_slug(cwd: str):\n' 'def origin_slug(cwd: str):\n    _r(["ls"])\n')"
-assert_contains "$ctl_out" "읽기 함수 gh_repo.origin_slug 에 금지 호출 git … remote get-url origin 이 아닌 subprocess" "양성 대조: from subprocess import run as 별칭을 풀어 잡는다"
-ctl_out="$(ctl_reader modalias gh_repo.py 'import sys\n' 'import sys\nimport subprocess as sp\n' 'def origin_slug(cwd: str):\n' 'def origin_slug(cwd: str):\n    sp.call(["ls"])\n')"
-assert_contains "$ctl_out" "읽기 함수 gh_repo.origin_slug 에 금지 호출 git … remote get-url origin 이 아닌 subprocess" "양성 대조: import subprocess as 별칭을 풀어 잡는다"
-ctl_out="$(ctl_reader toplevel gh_repo.py 'ENV_NAMES = ("GH_REPO", "GH_HOST")\n' 'ENV_NAMES = ("GH_REPO", "GH_HOST")\nopen("x", "w", encoding="utf-8").close()\n')"
-assert_contains "$ctl_out" "가져올 때 도는 gh_repo 의" "양성 대조: 읽기 모듈의 가져올 때 도는 문장을 잰다"
-ctl_out="$(ctl_reader toplevel2 ledger_marker.py 'from state_path import SESSION_PATTERN, inside_root  # noqa: E402\n' 'from state_path import SESSION_PATTERN, inside_root  # noqa: E402\nos.makedirs("x")\n')"
-assert_contains "$ctl_out" "가져올 때 도는 ledger_marker 의" "양성 대조: 읽기 모듈이 가져오는 로컬 모듈의 가져올 때 도는 문장도 잰다"
+ctl_reader own conductor_state.py 'def own_version() -> str:\n' 'def own_version() -> str:\n    Path("x").write_text("y", encoding="utf-8")\n'
+ctl_reader imported conductor_state.py 'def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:\n' 'def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:\n    _atomic_write(Path("."), "x", "y")\n'
+ctl_reader argv gh_repo.py '["git", "-C", str(cwd), "remote", "get-url", "origin"]' '["git", "-C", str(cwd), "fetch"]'
+ctl_reader oswrite conductor_state.py 'def own_version() -> str:\n' 'def own_version() -> str:\n    os.write(os.open("x", os.O_WRONLY), b"y")\n'
+ctl_reader fromalias gh_repo.py 'import sys\n' 'import sys\nfrom subprocess import run as _r\n' 'def origin_slug(cwd: str):\n' 'def origin_slug(cwd: str):\n    _r(["ls"])\n'
+ctl_reader modalias gh_repo.py 'import sys\n' 'import sys\nimport subprocess as sp\n' 'def origin_slug(cwd: str):\n' 'def origin_slug(cwd: str):\n    sp.call(["ls"])\n'
+ctl_reader toplevel gh_repo.py 'ENV_NAMES = ("GH_REPO", "GH_HOST")\n' 'ENV_NAMES = ("GH_REPO", "GH_HOST")\nopen("x", "w", encoding="utf-8").close()\n'
+ctl_reader toplevel2 ledger_marker.py 'from state_path import SESSION_PATTERN, inside_root  # noqa: E402\n' 'from state_path import SESSION_PATTERN, inside_root  # noqa: E402\nos.makedirs("x")\n'
 # 닫힌 쪽 추적 — 목록에 없는 호출은 「따라가지 못한 호출」, 클래스는 몸 전체
 OV='def own_version() -> str:\n'
 PM='def parse_machine(text: str, roadmap_rel: str, skip: tuple = ()) -> dict:\n'
-ctl_own() {  # ctl_own <이름> <own_version 첫 줄에 넣을 문장> <기대 문구> <설명>
-  assert_contains "$(ctl_reader "$1" conductor_state.py "$OV" "${OV}    $2\n")" "$3" "양성 대조: $4"
+: > "$T/ctl_own.want"
+ctl_own() {  # ctl_own <이름> <own_version 첫 줄에 넣을 문장> <기대 문구> <설명> — 변이를 목록에 더하고 단언은 묶음 실행 뒤에 한다
+  ctl_reader "$1" conductor_state.py "$OV" "${OV}    $2\n"
+  printf '%s\n' "$1$TAB$3$TAB$4" >> "$T/ctl_own.want"
 }
-ctl_out="$(ctl_reader cls conductor_state.py "$PM" 'class _W:\n    def __init__(self):\n        Path("x").write_text("y", encoding="utf-8")\n\n\n'"${PM}"'    _W()\n')"
-assert_contains "$ctl_out" "읽기 함수 conductor_state._W 에 금지 호출 write_text" "양성 대조: 로컬 클래스를 부르면 클래스 몸(__init__)까지 잰다"
-ctl_out="$(ctl_reader async conductor_state.py "$PM" 'async def _a():\n    pass\n\n\n'"${PM}"'    _a()\n')"
-assert_contains "$ctl_out" "따라가지 못한 호출 _a(async)" "양성 대조: async 함수는 따라가지 못한 호출"
-ctl_out="$(ctl_reader const conductor_state.py 'RECORDED_MISSING = "PR %s 이 PR 캐시에 없다 — 지휘자를 돌려 캐시를 채운다"\n' 'RECORDED_MISSING = MARKER\n')"
-assert_contains "$ctl_out" "따라가지 못한 호출 conductor_state.RECORDED_MISSING" "양성 대조: 가져온 이름이 문자열 상수가 아니면(다른 이름을 묶음) 따라가지 못한 호출"
+ctl_reader cls conductor_state.py "$PM" 'class _W:\n    def __init__(self):\n        Path("x").write_text("y", encoding="utf-8")\n\n\n'"${PM}"'    _W()\n'
+ctl_reader async conductor_state.py "$PM" 'async def _a():\n    pass\n\n\n'"${PM}"'    _a()\n'
+ctl_reader const conductor_state.py 'RECORDED_MISSING = "PR %s 이 PR 캐시에 없다 — 지휘자를 돌려 캐시를 채운다"\n' 'RECORDED_MISSING = MARKER\n'
 RMS='RECORDED_MISSING = "PR %s 이 PR 캐시에 없다 — 지휘자를 돌려 캐시를 채운다"\n'
-ctl_out="$(ctl_reader const2 conductor_state.py "$RMS" "${RMS}"'RECORDED_MISSING = os.remove\n')"
-assert_contains "$ctl_out" "따라가지 못한 호출 conductor_state.RECORDED_MISSING" "양성 대조: 문자열 상수 줄이 있어도 같은 이름을 다시 묶으면(os.remove) 따라가지 못한 호출"
-ctl_out="$(ctl_reader const3 conductor_state.py "$RMS" "${RMS}"'from shutil import rmtree as RECORDED_MISSING\n')"
-assert_contains "$ctl_out" "따라가지 못한 호출 conductor_state.RECORDED_MISSING" "양성 대조: 문자열 상수 줄이 있어도 같은 이름으로 import 하면 따라가지 못한 호출"
-ctl_out="$(ctl_reader const4 conductor_state.py "$RMS" "${RMS}"'for RECORDED_MISSING in (os.remove,):\n    pass\n')"
-assert_contains "$ctl_out" "따라가지 못한 호출 conductor_state.RECORDED_MISSING" "양성 대조: 문자열 상수 줄이 있어도 for 대상으로 다시 묶으면 따라가지 못한 호출"
+ctl_reader const2 conductor_state.py "$RMS" "${RMS}"'RECORDED_MISSING = os.remove\n'
+ctl_reader const3 conductor_state.py "$RMS" "${RMS}"'from shutil import rmtree as RECORDED_MISSING\n'
+ctl_reader const4 conductor_state.py "$RMS" "${RMS}"'for RECORDED_MISSING in (os.remove,):\n    pass\n'
 ctl_own symlink 'os.symlink("a", "b")' "금지 호출 os.symlink" "os 는 허용 목록 밖이면 잡는다(symlink)"
 ctl_own lambda '(lambda: 0)()' "따라가지 못한 호출 Lambda" "모양을 모르는 호출은 따라가지 못한 호출"
 ctl_own method '"".zfill(3)' "따라가지 못한 호출 .zfill" "목록 밖 메서드는 따라가지 못한 호출"
@@ -804,16 +907,58 @@ ctl_own constcall 'SEP()' "따라가지 못한 호출 SEP" "함수 · 클래스�
 ctl_own mode 'open("x", MARKER)' "금지 호출 open(모드 알 수 없음)" "open 모드가 글자가 아니면 잡는다"
 ctl_own getattr 'getattr(os, "remove")' "금지 호출 getattr" "getattr 을 잡는다"
 ctl_own exec 'exec("x = 1")' "금지 호출 exec" "exec 를 잡는다"
-ctl_out="$(ctl_reader pathalias gh_repo.py 'import sys\n' 'import sys\nfrom shutil import rmtree as Path\n' 'def origin_slug(cwd: str):\n' 'def origin_slug(cwd: str):\n    Path("x")\n')"
-assert_contains "$ctl_out" "금지 호출 가져온 이름 Path(shutil)" "양성 대조: Path 허용은 pathlib 의 Path 만"
-ctl_out="$(ctl_reader importlib gh_repo.py 'import sys\n' 'import sys\nimport importlib\n' 'def origin_slug(cwd: str):\n' 'def origin_slug(cwd: str):\n    importlib.import_module("os")\n')"
-assert_contains "$ctl_out" "따라가지 못한 호출 importlib.import_module" "양성 대조: importlib 를 잡는다"
-ctl_out="$(ctl_reader default gh_repo.py 'def gh_exe() -> str:\n' 'def gh_exe(_x=open("x", "w")) -> str:\n')"
-assert_contains "$ctl_out" "가져올 때 도는 gh_repo 의" "양성 대조: 기본 인자 값은 가져올 때 돈다"
-ctl_out="$(ctl_reader guard gh_repo.py 'if __name__ == "__main__":\n' 'if __name__ == "__main__" or True:\n')"
-assert_contains "$ctl_out" "가져올 때 도는 gh_repo 의" "양성 대조: 정확히 __name__ == \"__main__\" 인 블록만 뺀다"
+ctl_reader pathalias gh_repo.py 'import sys\n' 'import sys\nfrom shutil import rmtree as Path\n' 'def origin_slug(cwd: str):\n' 'def origin_slug(cwd: str):\n    Path("x")\n'
+ctl_reader importlib gh_repo.py 'import sys\n' 'import sys\nimport importlib\n' 'def origin_slug(cwd: str):\n' 'def origin_slug(cwd: str):\n    importlib.import_module("os")\n'
+ctl_reader default gh_repo.py 'def gh_exe() -> str:\n' 'def gh_exe(_x=open("x", "w")) -> str:\n'
+ctl_reader guard gh_repo.py 'if __name__ == "__main__":\n' 'if __name__ == "__main__" or True:\n'
 printf 'from subprocess import run\n' > "$T/ctl_from.py"
-assert_contains "$(static_check "$T/ctl_from.py")" "subprocess 를 이름으로 import" "양성 대조: from subprocess import 를 잡는다"
+sc_add from - "$T/ctl_from.py"
+printf 'import subprocess\nGIT_ALLOWED = frozenset({"config"})\nsubprocess.run(["git", "config", "user.name", "x"])\n' > "$T/ctl_config.py"
+sc_add config - "$T/ctl_config.py"
+printf 'import subprocess\nGIT_ALLOWED = frozenset({"config"})\nsubprocess.run(["git", "config", "--get", "remote.origin.url"])\n' > "$T/ctl_config_ok.py"
+sc_add config_ok - "$T/ctl_config_ok.py"
+static_check --batch "$SC_LIST" "$SC_OUT" || no "정적 검사 묶음 실행이 죽었다"
+while IFS="$TAB" read -r n _; do [ -s "$SC_OUT/$n.out" ] || no "정적 검사 묶음 출력 없음: $n"; done < "$SC_LIST"
+assert_contains "$(sc_out fetch)" "GIT_ALLOWED" "양성 대조: fetch 를 허용 목록에 넣으면 정적 검사가 잡는다"
+out="$(sc_out write)"
+assert_contains "$out" "쓰기 호출 write_text" "양성 대조: write_text 를 잡는다"
+assert_contains "$out" "네트워크 · 파일 조작 모듈 urllib.request" "양성 대조: urllib 을 잡는다"
+assert_contains "$(sc_out tip)" "git 이 아닌 subprocess" "양성 대조: branch_tip.py 사본의 subprocess 호출 머리를 [GIT, *args] 로 바꾸면 정적 검사가 「git 이 아닌 subprocess」 를 낸다"
+assert_contains "$(sc_out set)" "GIT_ALLOWED 모양이 frozenset({...}) 가 아니다" "양성 대조: 집합 리터럴 GIT_ALLOWED 를 잡는다"
+assert_contains "$(sc_out open)" "쓰기 모드 open" "양성 대조: 내장 open 의 쓰기 모드를 잡는다"
+assert_contains "$(sc_out popen)" "쓰기 모드 open" "양성 대조: Path.open 의 쓰기 모드를 잡는다"
+assert_contains "$(sc_out run)" "git 이 아닌 subprocess" "양성 대조: git 밖 subprocess.run 을 잡는다"
+assert_contains "$(sc_out local)" "잠긴 파일 밖 로컬 모듈 import conductor_state" "양성 대조: 잠긴 파일 밖 로컬 모듈 import 를 잡는다"
+assert_contains "$(sc_out save)" "잠긴 파일 밖 로컬 모듈 import conductor_state" "양성 대조: 허용 밖 이름(save)을 함께 가져오면 잡는다"
+assert_contains "$(sc_out whole)" "잠긴 파일 밖 로컬 모듈 import gh_repo" "양성 대조: 모듈째 import 는 잡는다"
+assert_contains "$(sc_out ghjson)" "잠긴 파일 밖 로컬 모듈 import gh_repo" "양성 대조: gh 를 부르는 gh_json 은 잡는다"
+assert_contains "$(sc_out other)" "잠긴 파일 밖 로컬 모듈 import gh_repo" "양성 대조: 허용은 상태 계산 파일에만"
+assert_contains "$(sc_out own)" "읽기 함수 conductor_state.own_version 에 금지 호출 write_text" "양성 대조: parse_machine 이 부르는 함수의 쓰기까지 따라가 잡는다"
+assert_contains "$(sc_out imported)" "읽기 함수 ledger_marker._atomic_write 에 금지 호출 os.open" "양성 대조: 읽기 함수가 가져온 이름(_atomic_write)을 부르면 그 모듈까지 따라가 잡는다"
+assert_contains "$(sc_out argv)" "읽기 함수 gh_repo.origin_slug 에 금지 호출 git … remote get-url origin 이 아닌 subprocess" "양성 대조: origin_slug 의 git 이 remote get-url origin 이 아니면 잡는다"
+ctl_out="$(sc_out oswrite)"
+assert_contains "$ctl_out" "금지 호출 os.open" "양성 대조: os.open 을 잡는다"
+assert_contains "$ctl_out" "금지 호출 os.write" "양성 대조: os.write 를 잡는다"
+assert_contains "$(sc_out fromalias)" "읽기 함수 gh_repo.origin_slug 에 금지 호출 git … remote get-url origin 이 아닌 subprocess" "양성 대조: from subprocess import run as 별칭을 풀어 잡는다"
+assert_contains "$(sc_out modalias)" "읽기 함수 gh_repo.origin_slug 에 금지 호출 git … remote get-url origin 이 아닌 subprocess" "양성 대조: import subprocess as 별칭을 풀어 잡는다"
+assert_contains "$(sc_out toplevel)" "가져올 때 도는 gh_repo 의" "양성 대조: 읽기 모듈의 가져올 때 도는 문장을 잰다"
+assert_contains "$(sc_out toplevel2)" "가져올 때 도는 ledger_marker 의" "양성 대조: 읽기 모듈이 가져오는 로컬 모듈의 가져올 때 도는 문장도 잰다"
+assert_contains "$(sc_out cls)" "읽기 함수 conductor_state._W 에 금지 호출 write_text" "양성 대조: 로컬 클래스를 부르면 클래스 몸(__init__)까지 잰다"
+assert_contains "$(sc_out async)" "따라가지 못한 호출 _a(async)" "양성 대조: async 함수는 따라가지 못한 호출"
+assert_contains "$(sc_out const)" "따라가지 못한 호출 conductor_state.RECORDED_MISSING" "양성 대조: 가져온 이름이 문자열 상수가 아니면(다른 이름을 묶음) 따라가지 못한 호출"
+assert_contains "$(sc_out const2)" "따라가지 못한 호출 conductor_state.RECORDED_MISSING" "양성 대조: 문자열 상수 줄이 있어도 같은 이름을 다시 묶으면(os.remove) 따라가지 못한 호출"
+assert_contains "$(sc_out const3)" "따라가지 못한 호출 conductor_state.RECORDED_MISSING" "양성 대조: 문자열 상수 줄이 있어도 같은 이름으로 import 하면 따라가지 못한 호출"
+assert_contains "$(sc_out const4)" "따라가지 못한 호출 conductor_state.RECORDED_MISSING" "양성 대조: 문자열 상수 줄이 있어도 for 대상으로 다시 묶으면 따라가지 못한 호출"
+while IFS="$TAB" read -r n want why; do
+  assert_contains "$(sc_out "$n")" "$want" "양성 대조: $why"
+done < "$T/ctl_own.want"
+assert_contains "$(sc_out pathalias)" "금지 호출 가져온 이름 Path(shutil)" "양성 대조: Path 허용은 pathlib 의 Path 만"
+assert_contains "$(sc_out importlib)" "따라가지 못한 호출 importlib.import_module" "양성 대조: importlib 를 잡는다"
+assert_contains "$(sc_out default)" "가져올 때 도는 gh_repo 의" "양성 대조: 기본 인자 값은 가져올 때 돈다"
+assert_contains "$(sc_out guard)" "가져올 때 도는 gh_repo 의" "양성 대조: 정확히 __name__ == \"__main__\" 인 블록만 뺀다"
+assert_contains "$(sc_out from)" "subprocess 를 이름으로 import" "양성 대조: from subprocess import 를 잡는다"
+assert_contains "$(sc_out config)" "git config 를 --get 꼴 밖으로 부른다" "양성 대조: config 를 --get 없이 부르면 잡는다"
+assert_not_contains "$(sc_out config_ok)" "config 를 --get 꼴 밖" "양의 짝: config --get 꼴은 통과"
 # 네트워크 축 — 원격 대조(ls-remote)는 repo_defaults.py 의 NET_GIT_ALLOWED 하나 · check_remote_head 안에서만 쓰고,
 # 상태 계산 · 상태줄(roadmap_status · control_plane)은 check_remote_head 를 부르지 않는다.
 net_check() {  # net_check <파일...> — 네트워크 축 위반을 찾으면 줄을 낸다. 끝에 CHECKED n.
@@ -870,10 +1015,6 @@ printf 'import subprocess\nNET_GIT_ALLOWED = frozenset({"ls-remote"})\n' > "$T/r
 assert_contains "$(net_check "$T/roadmap_status.py")" "NET_GIT_ALLOWED 는 repo_defaults.py 에만 둔다" "양성 대조: 다른 파일의 네트워크 목록을 잡는다"
 printf 'def f(top):\n    return _git(top, "ls-remote", "origin", allowed=frozenset({"ls-remote"}))\n' > "$T/ctl_allowed.py"
 assert_contains "$(net_check "$T/ctl_allowed.py")" "git 허용 목록(allowed=)을 check_remote_head 밖에서 바꾼다" "양성 대조: 허용 목록을 글자로 넘겨 우회하면 잡는다"
-printf 'import subprocess\nGIT_ALLOWED = frozenset({"config"})\nsubprocess.run(["git", "config", "user.name", "x"])\n' > "$T/ctl_config.py"
-assert_contains "$(static_check "$T/ctl_config.py")" "git config 를 --get 꼴 밖으로 부른다" "양성 대조: config 를 --get 없이 부르면 잡는다"
-printf 'import subprocess\nGIT_ALLOWED = frozenset({"config"})\nsubprocess.run(["git", "config", "--get", "remote.origin.url"])\n' > "$T/ctl_config_ok.py"
-assert_not_contains "$(static_check "$T/ctl_config_ok.py")" "config 를 --get 꼴 밖" "양의 짝: config --get 꼴은 통과"
 for sub in fetch push update-ref; do
   out="$(cd "$S" && python3 -c 'import sys; import roadmap_status as r
 try:
@@ -1254,7 +1395,7 @@ g branch -q -D feature/k1b
 assert_eq "$(stage "$T/rm3b.json" K1)" "일부 머지 1/3" "AC5: 첫 머지 뒤 남은 예정 브랜치 때문에 머지됨이 아니다"
 assert_contains "$(js "$T/rm3b.json" "next(b['reason'] for b in r['blocks'] if b['id']=='K1')")" "다음 브랜치 없음: feature/k1b" "다음 예정 브랜치 이름을 보인다"
 
-# ── R5 수정 1 — 산출물에 `## 번호 대조` 머리가 둘이면 그 블록만 검사 불가 ────────────────────
+# ── 산출물에 `## 번호 대조` 머리가 둘이면 그 블록만 검사 불가 ────────────────────
 g checkout -q main
 mkdir -p "$W/docs/rm4"
 bundle docs/rm4 P1 "C1, S1"; bundle docs/rm4 Q1 "C1, S1"
@@ -1273,7 +1414,7 @@ assert_contains "$(warns "$T/rm4.json" P1)" "번호 대조 검사 불가(" "산�
 assert_contains "$(js "$T/rm4.json" "' | '.join(r['unknown_reasons'])")" "P1 산출물 번호 대조 절" "산출물 머리 중복이 검사 불가 사유로 올라온다"
 assert_contains "$(warns "$T/rm4.json" P1)" "받는 곳 없는 미룸 1개" "번호 대조 머리가 깨져도 미룸 표 검사는 이어진다"
 
-# ── R5 수정 2 · 3 · 5 — 기본 브랜치를 받아온 뒤 · 결정 기록 머지 줄 · 구현 끝 · 다른 spec 트레일러 ────────
+# ── 기본 브랜치를 받아온 뒤 · 결정 기록 머지 줄 · 구현 끝 · 다른 spec 트레일러 ────────
 g checkout -q main
 mkdir -p "$W/docs/rm5"
 for b in Z5 V5 X5 H5 G5 J5 K5 L5 M5 N5 O5 S5; do bundle docs/rm5 "$b" "C1, S1"; done
@@ -1335,24 +1476,24 @@ g checkout -q -b feature/j5a main; commit_file src/j5a.txt j5a "j5a"
 g checkout -q main; g merge -q --squash feature/j5a; g commit -qm "squash j5a"; g branch -q -D feature/j5a; g push -q origin main
 g checkout -q main; g fetch -q origin
 (cd "$W" && python3 "$RS" --json docs/rm5/roadmap.md > "$T/rm5.json")
-assert_eq "$(stage "$T/rm5.json" Z5)" "일부 머지 1/2" "수정 2: 기본 브랜치를 받아온 브랜치는 남의 트레일러로 구현 중이 되지 않는다"
-assert_contains "$(js "$T/rm5.json" "next(b['reason'] for b in r['blocks'] if b['id']=='Z5')")" "feature/z5b — 계획" "수정 2: 계획 단계로 읽는다"
+assert_eq "$(stage "$T/rm5.json" Z5)" "일부 머지 1/2" "기본 브랜치를 받아온 브랜치는 남의 트레일러로 구현 중이 되지 않는다"
+assert_contains "$(js "$T/rm5.json" "next(b['reason'] for b in r['blocks'] if b['id']=='Z5')")" "feature/z5b — 계획" "계획 단계로 읽는다"
 assert_eq "$(stage "$T/rm5.json" V5)" "계획" "다른 spec 을 가리키는 트레일러는 구현 중이 아니다"
-assert_eq "$(stage "$T/rm5.json" X5)" "구현 중" "수정 5: 계획 둘 중 하나만 구현 대조 절이 있으면 구현 끝이 아니다"
+assert_eq "$(stage "$T/rm5.json" X5)" "구현 중" "계획 둘 중 하나만 구현 대조 절이 있으면 구현 끝이 아니다"
 assert_not_contains "$(js "$T/rm5.json" "next(b['reason'] for b in r['blocks'] if b['id']=='X5')")" "트레일러" "구현 중 근거는 구현 대조 절만 말한다(트레일러를 붙이지 않는다)"
-assert_eq "$(stage "$T/rm5.json" H5)" "일부 머지 1/2" "수정 3: 결정 기록 머지 줄은 ref 가 사라진 브랜치에만 닿는다"
-assert_contains "$(warns "$T/rm5.json" H5)" "결정 기록의 머지 줄이 feature/h5b 를 가리키지 않아 적용하지 않았다" "수정 3: 줄이 부르지 않은 브랜치를 경고한다"
-assert_eq "$(stage "$T/rm5.json" G5)" "대기" "수정 3: 일부 머지인 에픽에 의존하면 준비가 아니다"
-assert_eq "$(stage "$T/rm5.json" M5)" "설계 중" "수정 3: 줄이 부른 브랜치가 남아 있으면 머지로 세지 않는다"
-assert_contains "$(warns "$T/rm5.json" M5)" "결정 기록의 머지 줄을 feature/m5a 에 적용하지 않았다 — 브랜치가 남아 있다" "수정 3: 이름이 적힌 브랜치가 남아 있으면 남아 있다 경고"
-assert_eq "$(stage "$T/rm5.json" J5)" "일부 머지 1/2" "수정 3: 아직 만들지 않은 예정 브랜치는 머지 줄에 이름이 없으면 머지가 아니다"
-assert_contains "$(warns "$T/rm5.json" J5)" "결정 기록의 머지 줄이 feature/j5b 를 가리키지 않아 적용하지 않았다" "수정 3: 이름 없는 브랜치 경고"
-assert_eq "$(stage "$T/rm5.json" N5)" "머지됨" "수정: 머지 줄은 쌓인다 — 브랜치마다 한 줄이면 여러 브랜치 블록이 머지됨"
-assert_eq "$(stage "$T/rm5.json" O5)" "준비" "수정: 머지됨인 N5 에 의존하면 준비"
-assert_eq "$(stage "$T/rm5.json" K5)" "대기" "수정 3: J5 에 의존하는 에픽은 준비가 아니다"
-assert_eq "$(stage "$T/rm5.json" L5)" "준비" "수정 3: 브랜치 이름이 없는 머지 줄은 여러 브랜치 블록을 머지로 만들지 않는다"
-assert_contains "$(warns "$T/rm5.json" L5)" "feature/l5a 를 가리키지 않아 적용하지 않았다" "수정 3: 이름 없는 머지 줄 경고(앞 브랜치)"
-assert_contains "$(warns "$T/rm5.json" L5)" "feature/l5b 를 가리키지 않아 적용하지 않았다" "수정 3: 이름 없는 머지 줄 경고(뒤 브랜치)"
+assert_eq "$(stage "$T/rm5.json" H5)" "일부 머지 1/2" "결정 기록 머지 줄은 ref 가 사라진 브랜치에만 닿는다"
+assert_contains "$(warns "$T/rm5.json" H5)" "결정 기록의 머지 줄이 feature/h5b 를 가리키지 않아 적용하지 않았다" "줄이 부르지 않은 브랜치를 경고한다"
+assert_eq "$(stage "$T/rm5.json" G5)" "대기" "일부 머지인 에픽에 의존하면 준비가 아니다"
+assert_eq "$(stage "$T/rm5.json" M5)" "설계 중" "줄이 부른 브랜치가 남아 있으면 머지로 세지 않는다"
+assert_contains "$(warns "$T/rm5.json" M5)" "결정 기록의 머지 줄을 feature/m5a 에 적용하지 않았다 — 브랜치가 남아 있다" "이름이 적힌 브랜치가 남아 있으면 남아 있다 경고"
+assert_eq "$(stage "$T/rm5.json" J5)" "일부 머지 1/2" "아직 만들지 않은 예정 브랜치는 머지 줄에 이름이 없으면 머지가 아니다"
+assert_contains "$(warns "$T/rm5.json" J5)" "결정 기록의 머지 줄이 feature/j5b 를 가리키지 않아 적용하지 않았다" "이름 없는 브랜치 경고"
+assert_eq "$(stage "$T/rm5.json" N5)" "머지됨" "머지 줄은 쌓인다 — 브랜치마다 한 줄이면 여러 브랜치 블록이 머지됨"
+assert_eq "$(stage "$T/rm5.json" O5)" "준비" "머지됨인 N5 에 의존하면 준비"
+assert_eq "$(stage "$T/rm5.json" K5)" "대기" "J5 에 의존하는 에픽은 준비가 아니다"
+assert_eq "$(stage "$T/rm5.json" L5)" "준비" "브랜치 이름이 없는 머지 줄은 여러 브랜치 블록을 머지로 만들지 않는다"
+assert_contains "$(warns "$T/rm5.json" L5)" "feature/l5a 를 가리키지 않아 적용하지 않았다" "이름 없는 머지 줄 경고(앞 브랜치)"
+assert_contains "$(warns "$T/rm5.json" L5)" "feature/l5b 를 가리키지 않아 적용하지 않았다" "이름 없는 머지 줄 경고(뒤 브랜치)"
 assert_eq "$(js "$T/rm5.json" "next(b['branch'] for b in r['blocks'] if b['id']=='S5')")" "feature/s5a · feature/s5b" "보고서의 branch 는 하위 항목 목록도 한 줄 글로 낸다"
 
 # ── R5 AC8 · AC9 · AC43 — 판정 보관본 · 넘김 · 동시 가능 · 선택 칸 ──────────────────────────
@@ -1570,7 +1711,6 @@ PY
 }
 write_machine "$MD30/machine.md" docs/rm30/roadmap.md "$T/rows30"
 (cd "$W" && python3 "$RS" --json --roadmap-file docs/rm30/roadmap.md > "$T/rm30.json"); rc=$?
-reason() { js "$1" "next(b['reason'] for b in r['blocks'] if b['id']=='$2')"; }
 assert_eq "$(stage "$T/rm30.json" S30)" "머지됨" "AC14: squash 머지(머지 커밋 없음) + PR 캐시 → 손 머지 줄 없이 머지됨"
 assert_contains "$(reason "$T/rm30.json" S30)" "PR #31 머지됨(mergeCommit ${S30_MC:0:8})" "AC14: 근거는 내 레포 PR — 뒤에 적힌 같은 이름의 fork 줄(#90)이 아니다"
 assert_not_contains "$(notes "$T/rm30.json" S30)" "PR 상태 미확인" "AC14: 캐시에 줄이 있으면 「PR 상태 미확인」 이 없다"

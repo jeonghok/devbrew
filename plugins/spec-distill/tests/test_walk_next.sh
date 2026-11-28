@@ -22,7 +22,7 @@ no_conf() { KEEP_CONF="$CLAUDE_CONFIG_DIR" && mkdir -p "$T/claude-empty" && expo
 back_conf() { export CLAUDE_CONFIG_DIR="$KEEP_CONF"; }
 
 # ── 줄 묶음 A — 설계 흐름(E1 · E3)과 설계 없는 흐름(E2) ──
-new_repo "$T0/a" && ok "A: 팀 레포를 세웠다(${TM})" || { no "A: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+repo_copy "$T0/a" new && ok "A: 팀 레포를 세웠다(${TM})" || { no "A: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 E1="$TM/jobs/E1"
 
 assert_eq "$(wn --job E1)" "0" "w1: 브랜치가 없어도 0"
@@ -146,7 +146,7 @@ assert_eq "$(wn --job E2)" "3" "w13: 설계 없는 흐름의 일부 머지 · �
 empty_out "w13"
 
 # ── 줄 묶음 B — 레포 표 · 꺼짐 · 갈라짐 · 사용법 · 로드맵 밖 과제 ──
-new_repo "$T0/b" && ok "B: 팀 레포를 세웠다" || { no "B: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+repo_copy "$T0/b" new && ok "B: 팀 레포를 세웠다" || { no "B: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 E1="$TM/jobs/E1"
 mkdir -p "$W/docs"
 sed -e 's/| spec 승인 |/| — |/' -e 's/| 계획 검토 |/| — |/' -e 's/| 흐름 승인 |/| — |/' -e 's/^| 계획 | worker | plan |/| 계획 | worker | — |/' \
@@ -223,7 +223,7 @@ assert_eq "$(line 흐름)" "설계 없는 흐름" "b10: 설계 없는 흐름"
 assert_eq "$(line '지금 걸음')" "방향 확인" "b10: 흐름 승인 줄이 없으면 방향 확인"
 
 # ── 줄 묶음 C — 모두 머지: 로드맵 결정 기록의 머지 줄이 블록을 머지됨으로 두면 브랜치 끝이 남아 있어도 끝 걸음이다 ──
-new_repo "$T0/c" && ok "C: 팀 레포를 세웠다" || { no "C: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
+repo_copy "$T0/c" new && ok "C: 팀 레포를 세웠다" || { no "C: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 for br in feature/tm-e3 feature/tm-e2; do
   g checkout -q -b "$br" main && g commit -q --allow-empty -m "$br 시작" && push_br "$br"
 done

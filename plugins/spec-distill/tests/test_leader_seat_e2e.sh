@@ -12,7 +12,7 @@ T="$(mktemp -d)" || exit 1
 T0="$T"
 trap 'rm -rf "$T0"' EXIT
 . "$ROOT/plugins/spec-distill/tests/fixtures/team_repo.sh"
-new_repo "$T0/a" && ok "팀 레포를 세우고 지휘 표지를 쥐었다(${TM})" || { no "팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+repo_copy "$T0/a" new && ok "팀 레포를 세우고 지휘 표지를 쥐었다(${TM})" || { no "팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
 
 for k in "user.name t" "user.email t@example.invalid" "commit.gpgsign false"; do git -C "$W" config $k; done   # 상태 브랜치 쓰기는 스크립트가 커밋한다
 printf '.claude/\n' >> "$W/.git/info/exclude"
@@ -165,7 +165,7 @@ status "$T/s.json" >/dev/null
 assert_not_contains "$(stale_notes)" "implement-plan-1-2.md" "11 이어 쓴 결과에는 묶음 낡음이 없다"
 
 note "# 12 — 새 레포: sync 가 같아진 사본을 지운다 · 올릴 것은 남긴다 · 갈라짐을 알린다 · 남의 고침이면 지우지 않는다(AC17)"
-new_repo "$T0/b" && ok "둘째 팀 레포를 세우고 지휘 표지를 쥐었다" || { no "둘째 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+repo_copy "$T0/b" new && ok "둘째 팀 레포를 세우고 지휘 표지를 쥐었다" || { no "둘째 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
 for k in "user.name t" "user.email t@example.invalid" "commit.gpgsign false"; do git -C "$W" config $k; done
 printf '.claude/\n' >> "$W/.git/info/exclude"
 csync() { (cd "$W" && python3 "$S/conductor_status.py" --root "$W" sync --roadmap "$RM" --session "$SID") > "$T/cs.txt" 2>&1; echo $?; }
@@ -245,7 +245,7 @@ assert_not_contains "$(cat "$T/cs.txt")" "확인되지 않은 남의 고침" "18
 assert_eq "$(on_tip "$RULES") $(on_tip "$TM/rules-base.md")" "없다 없다" "18 확인한 뒤에는 같아진 사본을 지운다"
 
 note "# 19 — 대기 줄: 상태 브랜치 자리의 같은 줄 둘 → flush 가 결정 기록에 하나 · pending.md 에서 둘 다 뺀다(AC16 · 다중집합)"
-new_repo "$T0/c" && ok "셋째 팀 레포를 세우고 지휘 표지를 쥐었다" || { no "셋째 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+repo_copy "$T0/c" new && ok "셋째 팀 레포를 세우고 지휘 표지를 쥐었다" || { no "셋째 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
 for k in "user.name t" "user.email t@example.invalid" "commit.gpgsign false"; do git -C "$W" config $k; done
 printf '.claude/\n' >> "$W/.git/info/exclude"
 PEND="$TM/pending.md"; INTENT="$TM/jobs/E1/INTENT.md"
@@ -273,7 +273,7 @@ assert_eq "$(decided "결정 · 2026-11-20 · 같은 결정")" "1" "19 결정 �
 assert_eq "$(seen_pend | grep -c '^- E1 · 지휘 기록 · ')" "0" "19 pending.md 의 E1 지휘 기록 줄이 모두 빠졌다"
 
 note "# 20 — 브랜치 전 기계 상태의 사람 줄 · 보통 줄 + 남이 심은 사람 줄 · 보통 줄 → flush 는 보통 줄(기계 상태)만 옮긴다(M15 · M16 · I6)"
-new_repo "$T0/d" && ok "넷째 팀 레포를 세우고 지휘 표지를 쥐었다" || { no "넷째 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+repo_copy "$T0/d" new && ok "넷째 팀 레포를 세우고 지휘 표지를 쥐었다" || { no "넷째 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
 for k in "user.name t" "user.email t@example.invalid" "commit.gpgsign false"; do git -C "$W" config $k; done
 printf '.claude/\n' >> "$W/.git/info/exclude"
 assert_eq "$(pend "spec 승인 · 2026-11-20 · 기계 사람 줄")" "0" "20 브랜치 전 사람 줄은 기계 상태로 rc 0 — $(cat "$T/led.txt")"
@@ -325,7 +325,7 @@ assert_eq "$(cat "$T/led.txt")" "[spec-distill] 사람 줄(spec 승인)은 recor
 assert_eq "$(cksum < "$W/$INTENT")" "$BEFORE" "21 결정 기록은 그대로"
 
 note "# 22 — 끝에서 끝 ①: rules-add → 묶음 → job sync → rules-add → 묶음 낡음은 앞 결과에만(AC15)"
-new_repo "$T0/e" && ok "다섯째 팀 레포를 세우고 지휘 표지를 쥐었다" || { no "다섯째 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
+repo_copy "$T0/e" new && ok "다섯째 팀 레포를 세우고 지휘 표지를 쥐었다" || { no "다섯째 팀 레포를 세우지 못했다 — $(cat "$T/out.txt")"; finish; }
 for k in "user.name t" "user.email t@example.invalid" "commit.gpgsign false"; do git -C "$W" config $k; done
 printf '.claude/\n' >> "$W/.git/info/exclude"
 B="$(g rev-parse origin/main)"
