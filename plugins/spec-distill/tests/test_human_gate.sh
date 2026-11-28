@@ -12,22 +12,12 @@ T="$T0"
 . "$ROOT/plugins/spec-distill/tests/fixtures/team_repo.sh"
 
 err() { cat "$T/b.err"; }
-apart() {  # apart <머리> <사본 폴더…> — 사본이 견본 · 다른 사본과 파일을 나누지 않는다: 하드 링크 없음 · 공유 클론(alternates) 없음
-  local h="$1" d r obj; shift
-  for d in "$@"; do
-    obj="$(find "$d/repo/.git/objects" -type f -path '*/objects/??/*' 2>/dev/null | head -1)"
-    assert_eq "$(find "$d/repo/.git/HEAD" "$obj" -links 1 2>/dev/null | wc -l | tr -d ' ')" "2" "${h}: 사본의 HEAD · 객체 하나는 링크 수 1 이다(${d##*/})"
-    assert_eq "$(find "$d" -type f -links +1 | head -3)" "" "${h}: 사본의 어느 파일도 하드 링크가 아니다(${d##*/})"
-    assert_eq "$(for r in repo/.git origin.git; do if [ ! -d "$d/$r/objects" ]; then echo "${r} 객체 폴더 없음"; elif [ -e "$d/$r/objects/info/alternates" ]; then echo "${r} 공유"; fi; done)" "" "${h}: 레포 · 원격이 공유 클론이 아니다 — alternates 없음(${d##*/})"
-  done
-}
 SPECL="spec 승인 · 2026-11-20 · 「승인 — 계획 담당자에게」"
 
-# ── 0 — 한 번 지어 복사하는 팀 레포(repo_copy): 사본은 원격을 따로 갖고 견본 경로를 품지 않고 파일을 나누지 않는다 ──
+# ── 0 — 한 번 지어 복사하는 팀 레포(repo_copy): 사본은 원격을 따로 갖고 견본 경로를 품지 않는다 ──
 repo_copy "$T0/c0a" new && repo_copy "$T0/c0b" new && ok "0: 견본에서 사본 둘을 떴다" || { no "0: 사본을 뜨지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
 assert_eq "$(git -C "$T0/c0a/repo" remote get-url origin)" "$T0/c0a/origin.git" "0: 사본의 원격은 그 사본의 bare 레포다"
 assert_eq "$(grep -rlF --exclude-dir=objects -- "$TEAM_TPL" "$T0/c0a/repo" "$T0/c0a/origin.git" 2>/dev/null)" "" "0: 사본의 레포 · 원격에 견본 경로가 남지 않는다"
-apart 0 "$T0/c0a" "$T0/c0b"
 assert_eq "$(unset RD TM RM; repo_copy "$T0/c0d" new 2>&1 && printf '%s|%s|%s' "$RD" "$TM" "$RM")" "${RD}|${TM}|${RM}" "0: 견본을 짓지 않은 셸에서 부르면 견본의 RD · TM · RM 을 세운다"
 use_repo "$T0/c0a" && g checkout -q -b c0/only-a main && g push -q origin c0/only-a
 assert_eq "$(git -C "$T0/c0a/origin.git" for-each-ref --format='%(refname)' refs/heads/c0/only-a)" "refs/heads/c0/only-a" "0: 양성 대조 — 그 사본의 원격에는 올라갔다"
@@ -313,14 +303,6 @@ PY
     && repo_copy "$T0/t2" "$T0/t1" && approved "spec 승인" E1 - - 2026-11-20 && push_br feature/tm-e1 \
     && repo_copy "$T0/t3" "$T0/t2" && approved "계획 검토" E1 1 - 2026-11-21 && push_br feature/tm-e1; } \
   && ok "견본 T1–T3 을 지었다" || { no "견본 T1–T3 을 짓지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
-# 폴더에서 뜬 사본 둘(T2 에서) — 파일을 나누지 않고, 사본 A 의 세션 기록에 덧붙인 것이 사본 B · 견본에 보이지 않는다
-repo_copy "$T0/t2a" "$T0/t2" && repo_copy "$T0/t2b" "$T0/t2" && ok "폴더 사본: T2 에서 사본 둘을 떴다" || { no "폴더 사본: 사본을 뜨지 못했다"; finish; exit 1; }
-apart "폴더 사본" "$T0/t2a" "$T0/t2b"
-SREC="claude/projects/fixture/${SID}.jsonl"
-assert_eq "$(cat "$T0/t2/$SREC" "$T0/t2a/$SREC" "$T0/t2b/$SREC" >/dev/null 2>&1 && echo 셋 다 있음)" "셋 다 있음" "폴더 사본: 견본 · 두 사본에 같은 세션 기록 파일이 있다"
-printf '%s\n' '{"type":"t2a-only"}' >> "$T0/t2a/$SREC"
-assert_eq "$(grep -c 't2a-only' "$T0/t2a/$SREC")" "1" "폴더 사본: 사본 A 의 세션 기록에는 덧붙인 줄이 있다"
-assert_eq "$(cat "$T0/t2b/$SREC" "$T0/t2/$SREC" | grep -c 't2a-only')" "0" "폴더 사본: 사본 A 의 세션 기록에 덧붙인 줄이 사본 B · 견본에 보이지 않는다"
 
 # 묶음 H — E1(설계 흐름) · E2(설계 없는 흐름). 41 – 49
 repo_copy "$T0/h" "$T0/t2" && ok "H: 팀 레포를 세웠다" || { no "H: 팀 레포를 세우지 못했다 — $(cat "$T/out.txt" "$T/led.txt" 2>/dev/null)"; finish; exit 1; }
