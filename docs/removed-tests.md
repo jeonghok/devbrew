@@ -18,3 +18,4 @@
 - 2026-11-28 · plugins/quality-gates/tests/test_agent_model_unpinned_sweep.sh · 케이스 2 · 지키던 것: README 모델 절 문장 전체 · 판정: 첫째 줄(지키는 것을 댈 수 없다) · 지금 지키는 것: 없음 — 받아들임 · PR #<번호>
 - 2026-11-28 · plugins/quality-gates/tests/test_artifact_critic_frontmatter.sh · :10 · 지키던 것: color 8색 · 판정: 둘째 줄(같은 것을 다른 테스트가 지킨다) · 지금 지키는 것: plugins/quality-gates/tests/test_agent_color.sh · PR #<번호>
 - 2026-11-28 · plugins/quality-gates/tests/test_artifact_adversarial_frontmatter.sh · :10 · 지키던 것: color 8색 · 판정: 둘째 줄(같은 것을 다른 테스트가 지킨다) · 지금 지키는 것: plugins/quality-gates/tests/test_agent_color.sh · PR #<번호>
+- 2026-11-28 · plugins/quality-gates/tests/test_codex_backward_compat.sh · Check 1 · 지키던 것: 스위치를 켜면 detect_codex 가 skip_reason: kill_switch · 판정: 둘째 줄(같은 것을 다른 테스트가 지킨다) · 지금 지키는 것: plugins/quality-gates/tests/test_detect_codex.sh Case 3 · PR #<번호>
