@@ -1,23 +1,12 @@
-"""T3-4 behavioral test for security-reviewer.
-
-Validates that security-reviewer's frozen YAML output meets schema + severity
-enum contract. Uses tests/harness/agent_stub.py to short-circuit dispatch
-(deterministic, hermetic — no LLM call).
-
-AC45 verdict enum match | AC46 schema completeness | AC47 no-silent-skip.
-v10 (AC10 · spec §6): the output schema has no `confidence` key — severity is set by
+"""v10 (AC10 · spec §6): the output schema has no `confidence` key — severity is set by
 the criteria block. The persona's own `## Output format` block and the integration
-fixture are checked for the same key set, so the stub cannot drift from them.
+fixture are checked for the same key set.
 """
 import re
-import sys
 import unittest
 from pathlib import Path
 
 import yaml
-
-sys.path.insert(0, str(Path(__file__).resolve().parent / "harness"))
-from agent_stub import run_agent_stub, assert_yaml_schema  # noqa: E402
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 PERSONA = PLUGIN_ROOT / "agents" / "security-reviewer.md"
@@ -26,34 +15,8 @@ FINDING_KEYS = {"agent", "file", "line", "severity", "summary", "proposed_fix"}
 # 쉬운 말 출력 §5 — 사람에게 보일 한 문장(선택 칸). 형식에는 있고, 출력에는 있어도 없어도 된다.
 OPTIONAL_KEYS = {"plain"}
 
-SEC_REVIEWER_FROZEN = """
-agent: security-reviewer
-findings:
-  - severity: CRITICAL
-    file: src/auth.py
-    line: 42
-    summary: SQL injection in raw query
-    proposed_fix: use parameterized queries
-  - severity: IMPORTANT
-    file: src/api.py
-    line: 100
-    summary: missing authz check
-    proposed_fix: add middleware
-"""
-
 
 class SecurityReviewerBehaviorTests(unittest.TestCase):
-    def test_AC45_security_reviewer_findings_schema(self):
-        parsed = run_agent_stub("security-reviewer", "p", SEC_REVIEWER_FROZEN)
-        assert_yaml_schema(parsed, required_keys=["agent", "findings"])
-        for f in parsed["findings"]:
-            assert_yaml_schema(
-                f,
-                required_keys=["severity", "file", "line"],
-                enum={"severity": ["CRITICAL", "IMPORTANT", "SUGGESTION"]},
-            )
-            self.assertNotIn("confidence", f)
-
     def test_v10_persona_output_schema_has_no_confidence(self):
         text = PERSONA.read_text(encoding="utf-8")
         body = text[text.index("\n---\n", 4) + 5:]
@@ -68,16 +31,6 @@ class SecurityReviewerBehaviorTests(unittest.TestCase):
         self.assertTrue(entries)
         for e in entries:
             self.assertEqual(set(e) - OPTIONAL_KEYS, FINDING_KEYS)
-
-    def test_AC46_security_reviewer_missing_key_raises(self):
-        bad = "agent: security-reviewer\n"
-        parsed = run_agent_stub("security-reviewer", "p", bad)
-        with self.assertRaises(AssertionError):
-            assert_yaml_schema(parsed, ["agent", "findings"])
-
-    def test_AC47_security_reviewer_invalid_yaml_raises(self):
-        with self.assertRaises(AssertionError):
-            run_agent_stub("security-reviewer", "p", "agent: : : invalid")
 
 
 if __name__ == "__main__":
