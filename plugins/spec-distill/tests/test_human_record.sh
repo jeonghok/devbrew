@@ -51,7 +51,7 @@ assert_eq "$(rec)" "1" "AC5: 머리로 시작하는 답이 없으면 1"
 assert_contains "$(out)" "$HEAD1" "AC5: 사유가 기다린 머리를 보인다"
 assert_eq "$(g status --short -- "$TM")" "" "AC5: 답이 없으면 INTENT.md 가 그대로다"
 
-# 3 — 머리 앞에 글자가 붙은 질문(Review Focus 3)
+# 3 — 머리 앞에 글자가 붙은 질문
 answer " $HEAD1 — 질문" "$PASSL"
 answer "**$HEAD1** 질문" "$PASSL"
 assert_eq "$(rec)" "1" "AC5: 머리 앞에 공백 · 굵게 표시가 붙은 질문의 답으로는 쓰지 않는다"
@@ -175,7 +175,7 @@ assert_eq "$(led ask-head --human "spec 승인" --roadmap "$RM" --job E1)" "0" "
 assert_eq "$(out)" "$HEAD1" "AC4: 본문만 견준다 — 머리 그대로"
 g checkout -q -- "$E1/design.md"
 
-# 17 · 18 — 쓸 브랜치가 아닌 worktree(Review Focus 5)
+# 17 · 18 — 쓸 브랜치가 아닌 worktree
 g checkout -q main
 assert_eq "$(led ask-head --human "spec 승인" --roadmap "$RM" --job E1)" "1" "AC7: 다른 브랜치에서 부르면 1"
 assert_contains "$(out)" "feature/tm-e1" "AC7: 다른 브랜치 — 가야 할 브랜치 이름"

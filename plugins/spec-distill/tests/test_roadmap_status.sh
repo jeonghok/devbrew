@@ -1394,7 +1394,7 @@ g branch -q -D feature/k1b
 assert_eq "$(stage "$T/rm3b.json" K1)" "일부 머지 1/3" "AC5: 첫 머지 뒤 남은 예정 브랜치 때문에 머지됨이 아니다"
 assert_contains "$(js "$T/rm3b.json" "next(b['reason'] for b in r['blocks'] if b['id']=='K1')")" "다음 브랜치 없음: feature/k1b" "다음 예정 브랜치 이름을 보인다"
 
-# ── R5 수정 1 — 산출물에 `## 번호 대조` 머리가 둘이면 그 블록만 검사 불가 ────────────────────
+# ── 산출물에 `## 번호 대조` 머리가 둘이면 그 블록만 검사 불가 ────────────────────
 g checkout -q main
 mkdir -p "$W/docs/rm4"
 bundle docs/rm4 P1 "C1, S1"; bundle docs/rm4 Q1 "C1, S1"
@@ -1413,7 +1413,7 @@ assert_contains "$(warns "$T/rm4.json" P1)" "번호 대조 검사 불가(" "산�
 assert_contains "$(js "$T/rm4.json" "' | '.join(r['unknown_reasons'])")" "P1 산출물 번호 대조 절" "산출물 머리 중복이 검사 불가 사유로 올라온다"
 assert_contains "$(warns "$T/rm4.json" P1)" "받는 곳 없는 미룸 1개" "번호 대조 머리가 깨져도 미룸 표 검사는 이어진다"
 
-# ── R5 수정 2 · 3 · 5 — 기본 브랜치를 받아온 뒤 · 결정 기록 머지 줄 · 구현 끝 · 다른 spec 트레일러 ────────
+# ── 기본 브랜치를 받아온 뒤 · 결정 기록 머지 줄 · 구현 끝 · 다른 spec 트레일러 ────────
 g checkout -q main
 mkdir -p "$W/docs/rm5"
 for b in Z5 V5 X5 H5 G5 J5 K5 L5 M5 N5 O5 S5; do bundle docs/rm5 "$b" "C1, S1"; done

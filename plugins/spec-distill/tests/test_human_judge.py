@@ -353,7 +353,7 @@ class Match(SeededRepo):
         self.assertIn(H.LATER_ANSWER, got.why)
         self.assertIn("수정 필요", got.why)
 
-    def test_same_label_again_or_other_questions_do_not_stop_it(self):   # Review Focus 5 — 양성 대조
+    def test_same_label_again_or_other_questions_do_not_stop_it(self):   # 양성 대조
         real = self.approve(self.tip)
         l = H.parse(real)
         SF.add_answer(self.conf, S, [(H.head(JOB, l.rev) + " — 다시 승인", "승인 — 계획 담당자에게 (권장)")])

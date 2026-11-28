@@ -302,7 +302,7 @@ back "$RECEIVED_AT"
 MAIN0="$(g rev-parse origin/main)"
 g checkout -q main && put src/e1/z.txt z && g commit -qm "기본 브랜치의 다른 변경" && g push -q origin main
 g checkout -q feature/tm-e1 && g merge -q --no-edit main && g push -q origin HEAD && restat || fail_step "기본 브랜치 merge"
-assert_eq "$(st E1)" "구현 끝" "받음: 기본 브랜치를 merge 한 커밋만 있으면 구현 끝 그대로(Review Focus 4)"
+assert_eq "$(st E1)" "구현 끝" "받음: 기본 브랜치를 merge 한 커밋만 있으면 구현 끝 그대로"
 assert_not_contains "$(notes E1)" "받은 뒤 바뀜" "받음: 합쳐 들어온 고칠 자리 변경(src/e1/z.txt)은 세지 않는다"
 back "$RECEIVED_AT"
 g checkout -q main && back "$MAIN0" && g checkout -q feature/tm-e1
@@ -507,29 +507,29 @@ SH3_E2="$(js "$T/shallow3.json" "[(b['stage'], b['reason'].startswith('얕은 �
 assert_eq "$SH3_E2" "('알 수 없음', True)" "깊이 3 얕은 클론 — 일부 머지가 아닌 블록(E2)도 알 수 없음 · 근거는 「얕은 클론이라」 로 시작"
 rm -rf "$SH3"
 
-# Review Focus 5 — 기본 브랜치를 모르는 레포: 블록이 모두 알 수 없음(3)이고 죽지 않는다
+# 기본 브랜치를 모르는 레포: 블록이 모두 알 수 없음(3)이고 죽지 않는다
 g remote set-head origin -d
 NO_RC=0; (cd "$W" && python3 "$RS" --roadmap-file "$RM" --json) > "$T/nohead.json" 2> "$T/nohead.err" || NO_RC=$?
-assert_eq "${NO_RC} · $(js "$T/nohead.json" "sorted(set(b['stage'] for b in r['blocks']))")" "3 · ['알 수 없음']" "Review Focus 5: origin/HEAD 가 없으면 블록이 모두 알 수 없음(3)"
-assert_not_contains "$(cat "$T/nohead.err")" "Traceback" "Review Focus 5: 표준 오류에 Traceback 이 없다"
-assert_not_contains "$(js "$T/nohead.json" "r['unknown_reasons']")" "내부 오류" "Review Focus 5: 계산이 죽지 않았다(내부 오류 없음)"
-assert_eq "$(js "$T/nohead.json" "sorted(set(b['reason'] for b in r['blocks']))")" "['기본 브랜치를 못 읽었다']" "Review Focus 5: 블록 사유는 기본 브랜치를 못 읽었다"
-assert_contains "$(js "$T/nohead.json" "r['unknown_reasons']")" "기본 브랜치를 알 수 없다 — origin/HEAD 가 없다" "Review Focus 5: 보고의 검사 불가 사유는 origin/HEAD 가 없다"
+assert_eq "${NO_RC} · $(js "$T/nohead.json" "sorted(set(b['stage'] for b in r['blocks']))")" "3 · ['알 수 없음']" "origin/HEAD 가 없으면 블록이 모두 알 수 없음(3)"
+assert_not_contains "$(cat "$T/nohead.err")" "Traceback" "표준 오류에 Traceback 이 없다"
+assert_not_contains "$(js "$T/nohead.json" "r['unknown_reasons']")" "내부 오류" "계산이 죽지 않았다(내부 오류 없음)"
+assert_eq "$(js "$T/nohead.json" "sorted(set(b['reason'] for b in r['blocks']))")" "['기본 브랜치를 못 읽었다']" "블록 사유는 기본 브랜치를 못 읽었다"
+assert_contains "$(js "$T/nohead.json" "r['unknown_reasons']")" "기본 브랜치를 알 수 없다 — origin/HEAD 가 없다" "보고의 검사 불가 사유는 origin/HEAD 가 없다"
 g remote set-head origin main
 g checkout -q main
 
-# Review Focus 5 — 얕은 클론: 과제 브랜치의 받음 · 진행을 셀 이력이 없다 → 그 블록은 알 수 없음(3) · 죽지 않는다
+# 얕은 클론: 과제 브랜치의 받음 · 진행을 셀 이력이 없다 → 그 블록은 알 수 없음(3) · 죽지 않는다
 SH="$T/shallow"
 git clone -q --no-local --depth 1 --no-single-branch "file://$T/origin.git" "$SH" && git -C "$SH" remote set-head origin main \
   || no "얕은 클론을 만들지 못했다"
-assert_eq "$(git -C "$SH" rev-parse --is-shallow-repository)" "true" "Review Focus 5: 픽스처가 정말 얕은 클론이다"
+assert_eq "$(git -C "$SH" rev-parse --is-shallow-repository)" "true" "픽스처가 정말 얕은 클론이다"
 SH_RC=0; (cd "$SH" && python3 "$RS" "$RM" --json) > "$T/shallow.json" 2> "$T/shallow.err" || SH_RC=$?
 assert_eq "${SH_RC} · $(js "$T/shallow.json" "[(b['id'], b['stage']) for b in r['blocks'] if b['id'] in ('E1', 'E2')]")" "3 · [('E1', '알 수 없음'), ('E2', '알 수 없음')]" \
-  "Review Focus 5: 얕은 클론이면 브랜치가 있는 블록은 알 수 없음(3)"
-assert_contains "$(js "$T/shallow.json" "[b['reason'] for b in r['blocks'] if b['id']=='E2'][0]")" "얕은 클론이라" "Review Focus 5: 얕은 클론의 사유"
-assert_contains "$(js "$T/shallow.json" "[b['reason'] for b in r['blocks'] if b['id']=='E1'][0]")" "얕은 클론이라" "Review Focus 5: 얕은 클론의 사유 — 브랜치가 있는 다른 블록(E1)도"
-assert_not_contains "$(cat "$T/shallow.err")" "Traceback" "Review Focus 5: 얕은 클론에서 죽지 않는다(Traceback 없음)"
-assert_not_contains "$(js "$T/shallow.json" "r['unknown_reasons']")" "내부 오류" "Review Focus 5: 얕은 클론에서 죽지 않는다(내부 오류 없음)"
+  "얕은 클론이면 브랜치가 있는 블록은 알 수 없음(3)"
+assert_contains "$(js "$T/shallow.json" "[b['reason'] for b in r['blocks'] if b['id']=='E2'][0]")" "얕은 클론이라" "얕은 클론의 사유"
+assert_contains "$(js "$T/shallow.json" "[b['reason'] for b in r['blocks'] if b['id']=='E1'][0]")" "얕은 클론이라" "얕은 클론의 사유 — 브랜치가 있는 다른 블록(E1)도"
+assert_not_contains "$(cat "$T/shallow.err")" "Traceback" "얕은 클론에서 죽지 않는다(Traceback 없음)"
+assert_not_contains "$(js "$T/shallow.json" "r['unknown_reasons']")" "내부 오류" "얕은 클론에서 죽지 않는다(내부 오류 없음)"
 
 # team 의 시작 흔적(compute 의 started) — PR 캐시에 그 브랜치 줄이 있고 로컬 · origin ref 가 없을 때만 불린다(E3)
 MAIN_END="$(g rev-parse HEAD)"
