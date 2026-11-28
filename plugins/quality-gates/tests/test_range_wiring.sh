@@ -139,10 +139,10 @@ case_text_locks() {
   assert_contains "$P2B" '리뷰 범위: <start 앞 12자>..<end 앞 12자>' "P2b: 풀리면 범위 한 줄을 낸다"
   assert_contains "$(awk '/^\*\*P2 — /{f=1} /^\*\*P2b — /{f=0} f && /^rm -f /' "$SK")" '"$RD/range-scope.txt"' "P2 가 앞 실행의 range-scope.txt 를 지운다"
 
-  # 리뷰어가 읽는 트리(final-review I1) — 범위 모드의 리뷰어 · codex · 재비판은 끝 커밋을 읽는다.
+  # 리뷰어가 읽는 트리 — 범위 모드의 리뷰어 · codex · 재비판은 끝 커밋을 읽는다.
   assert_contains "$(awk '/^\*\*P2 — /{f=1} /^\*\*P2b — /{f=0} f && /^rm -f /' "$SK")" '"$RD/review-tree.txt"' "P2 가 앞 실행의 review-tree.txt 를 지운다"
   assert_contains "$P2B" ' · 리뷰어가 읽는 트리: 끝 커밋의 임시 트리.`' "P2b: 범위 줄이 리뷰어가 읽는 트리(늘 끝 커밋의 임시 트리)를 밝힌다"
-  # 보안 리뷰 S4 — head_is_end 로 갈라 체크아웃을 넘기던 지름길이 없다(펜스 본문 · SKILL 전체). 양성 짝은 case_review_tree 의 「리뷰 트리 펜스를 뽑았다」.
+  # 보안 — head_is_end 로 갈라 체크아웃을 넘기던 지름길이 없다(펜스 본문 · SKILL 전체). 양성 짝은 case_review_tree 의 「리뷰 트리 펜스를 뽑았다」.
   assert_not_contains "$(printf '%s\n' "$P2B" | fence_with 'review_tree:')" 'head_is_end' "P2b 리뷰 트리 펜스: head_is_end 로 갈라지지 않는다"
   assert_eq "$(grep -c 'review_tree: checkout' "$SK")" "0" "SKILL: 지금 체크아웃을 리뷰 트리로 내는 갈래가 없다"
   assert_contains "$P2B" '범위 모드는 늘 끝 커밋의 임시 트리를 하나 만들어 그 경로를 `project_dir` 로 쓴다 — 지금 체크아웃이 범위 끝이어도(`head_is_end: yes`) 그렇다.' "P2b: 체크아웃이 끝이어도 임시 트리(규칙 줄)"
@@ -220,7 +220,7 @@ case_text_locks() {
   assert_contains "$(awk '/^같은 폴더의 다른 파일/{f=1} f' "$SF")" '`review-tree.txt`' "state-file-format: 다른 파일 목록에 review-tree.txt"
 }
 
-# 범위 모드의 리뷰어가 읽는 트리(final-review I1 · 보안 리뷰 S4) — 체크아웃이 시작이든 끝이든, 커밋 안 된 변경과
+# 범위 모드의 리뷰어가 읽는 트리(보안) — 체크아웃이 시작이든 끝이든, 커밋 안 된 변경과
 # 추적 안 된 파일이 있어도 리뷰어는 늘 끝 커밋의 임시 트리를 읽는다. P2b · 리뷰 트리 · 지우기 펜스를 그대로 돌린다.
 case_review_tree() {
   echo "[리뷰 트리 — 펜스]"

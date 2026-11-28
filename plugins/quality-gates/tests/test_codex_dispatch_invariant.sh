@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
-# AC2 (v2.13.0) — codex is a Tier B availability-floor: dispatched whenever
+# AC2 — codex is a Tier B availability-floor: dispatched whenever
 # detect_codex is true, regardless of diff scope. SKILL.md prose invariant
-# (proxy — real LLM dispatch is manual self-dogfood). Rewritten from the
-# pre-2.13.0 `codex_manifest.codex_available == true/false` phase1_agents
-# fallback structure, which the scope-driven rewrite removed.
+# (proxy — real LLM dispatch is manual self-dogfood).
 set -u
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SKILL_REAL="$REPO_ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
 
-# Task 31 fix round 1 (F1): case 5(c5_bad) 는 pre-2.13.0 codex_manifest 폴백 산문이
-# "스킬 어디에도" 없다는 전량 불변식이다. 차등 테스트 절차가
-# references/differential-test.md 로 옮겨진 뒤에도 그 산문이 거기서 되살아나면 안 되므로,
-# 분할 전과 동일한 논리적 문서로 재구성해 그 위에서 돈다. case 1-4의 윈도우 검사는
-# 전부 다른 전제 각도(codex) 섹션만 앵커하므로 영향받지 않는다.
+# case 5(c5_bad) 는 pre-2.13.0 codex_manifest 폴백 산문이 "스킬 어디에도" 없다는 전량
+# 불변식이다 — 차등 테스트 절차가 사는 references/differential-test.md 에서 그 산문이
+# 되살아나도 잡도록, 그 파일을 SKILL.md 포인터 자리에 되접은 논리적 문서 위에서 돈다.
+# case 1-4의 윈도우 검사는 전부 다른 전제 각도(codex) 섹션만 앵커하므로 영향받지 않는다.
 # 재구성 실패는 조용히 원본으로 폴백하지 않고 FAIL 한다.
 . "$REPO_ROOT/plugins/quality-gates/tests/lib/reconstruct-skill.sh"
 if ! SKILL="$(reconstruct_skill_md "$SKILL_REAL")"; then
@@ -42,15 +39,15 @@ else
   no "2: codex-angle window lacks a scope-independence claim (s=$tb_start e=$tb_end)"
 fi
 
-# 3. codex dispatched via run_codex_reviewer.sh (script-based, T3-3 unchanged).
+# 3. codex dispatched via run_codex_reviewer.sh (script-based).
 if grep -qF 'run_codex_reviewer.sh' "$SKILL"; then
   ok "3: run_codex_reviewer.sh invocation present"
 else
   no "3: SKILL missing run_codex_reviewer.sh invocation"
 fi
 
-# 4. Floor dispatch blocks still thread project_dir (contract preserved through rewrite).
-# PR4a: adversarial dropped from this loop. The re-critic (code-recritic, Step 3.5)
+# 4. Floor dispatch blocks thread project_dir.
+# The re-critic (code-recritic, Step 3.5) is not in this loop: it
 # carries project_dir as a `<project_dir>` slot, not a `project_dir:` field —
 # shared/tests/test_agent_input_slots.sh measures that delivery.
 c4_bad=0
@@ -73,7 +70,7 @@ for stale in 'codex_manifest.codex_available == false' 'codex_manifest.codex_ava
 done
 [ "$c5_bad" -eq 0 ] && ok "5: stale codex_manifest fallback prose absent (scope-driven rewrite)"
 
-# 6. codex 를 못 쓰면 빼고 계속 간다(옛 test_codex_backward_compat.sh Check 2c).
+# 6. codex 를 못 쓰면 빼고 계속 간다 — SKILL 이 그 degrade 경로를 적는다.
 if grep -qE 'If codex is unavailable, continue without it' "$SKILL"; then
   ok "6: codex-unavailable degrade path documented"
 else

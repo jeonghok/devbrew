@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AC1 — 6-case probe verification.
+# AC1 — detect_codex.sh probe verification: 판정(available · skip_reason)마다 한 케이스 · kill switch conf.
 
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -78,17 +78,15 @@ else
   no "AC7: timeout_binary_missing skip_reason not emitted"
 fi
 
-# 합집합(AC25): sd 사본에만 있던 케이스를 가져온다. 두 사본이 **어느 쪽도 합집합이
-# 아닌** 상태였고, 그래서 한쪽에만 있는 케이스는 반대쪽 사본의 회귀를 못 잡았다.
+# AC25 — 이웃 플러그인의 kill switch 변수는 이 감지기를 끄지 않는다.
 echo "=== Case 10: 이웃 플러그인 kill switch 변수는 무효해야 한다 ==="
 out="$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=test DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 bash "$PROBE")"
 assert_grep "$out" 'codex_available: true' "foreign kill switch inert"
 
-# 재조준(F1/C1 수정, 2026-08-17): `$PROBE`는 이제 정본 shared/codex/detect_codex.sh
-# 를 가리키는 심볼릭 링크다 — 본문에는 어느 kill switch 변수명도 리터럴로 없다
-# (형제 conf 로 이동했다). 예전처럼 `$PROBE` 본문을 grep 하면 자기 변수도 못 찾아
-# 양(positive)이 조용히 RED 되고, 이웃 변수도 못 찾아 음(negative)이 조용히 vacuous
-# 통과가 된다 — 두 축 다 형제 conf `$CONF` 로 재조준한다. conf 부재는
+# `$PROBE`는 정본 shared/codex/detect_codex.sh 를 가리키는 심볼릭 링크다 — 본문에는
+# 어느 kill switch 변수명도 리터럴로 없다(형제 conf 에 있다). `$PROBE` 본문을 grep 하면
+# 자기 변수도 못 찾아 양(positive)이 조용히 RED 되고, 이웃 변수도 못 찾아 음(negative)이
+# 조용히 vacuous 통과가 된다 — 두 축 다 형제 conf `$CONF` 를 잰다. conf 부재는
 # assert_file_grep/assert_file_absent 계약대로 fail-closed(no()) 다.
 echo "=== Case 11: kill switch 변수명 (conf grep) ==="
 assert_file_grep "$CONF" 'CODEX_KILL_SWITCH_VAR=DEVBREW_QUALITY_GATES_DISABLE_CODEX' "kill-switch var name"
@@ -96,8 +94,7 @@ assert_file_grep "$CONF" 'CODEX_KILL_SWITCH_VAR=DEVBREW_QUALITY_GATES_DISABLE_CO
 echo "=== Case 12: 이웃 플러그인 변수 잔존 없음 ==="
 assert_file_absent "$CONF" 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX|DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX' "이웃 변수 잔존 없음"
 
-# F2 의 compounding — malformed conf 가 fail-closed 하는지 (리뷰를 빠져나간 버그를
-# 그것을 잡았어야 할 검사 파일에 새로 넣어 닫는다). 추적 conf 는 덮지 않는다 —
+# F2 — malformed conf 가 fail-closed 하는지. 추적 conf 는 덮지 않는다 —
 # 링크를 푼 감지기 사본을 $TMP/probe 에 두고, 감지기가 dirname "${BASH_SOURCE[0]}"
 # 로 찾는 형제 conf 자리에 망가진 값을 쓴다.
 mkdir -p "$TMP/probe"

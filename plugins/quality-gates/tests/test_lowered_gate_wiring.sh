@@ -38,7 +38,7 @@ case_step4() {
   assert_contains "$S4" '`--restore-lowered <번호들>` 을 더한다' "Step 4: 합성기에 --restore-lowered 를 싣는다"
   assert_contains "$S4" '(예: `--restore-lowered L1,L3`), 전부면 `all` 이다' "Step 4: 번호 꼴과 all"
   assert_contains "$S4" '표에 없는 번호면 rc 2 다(`모르는 낮춘 지적 번호:`)' "Step 4: 모르는 번호는 rc 2 다"
-  # final-review M2 — 잘못 친 번호 하나로 리뷰가 끝난 실행 전체가 멈추지 않는다
+  # 잘못 친 번호 하나로 리뷰가 끝난 실행 전체가 멈추지 않는다
   assert_not_contains "$S4" '— 위 rc 규칙대로 보고하고 멈춘다.' "Step 4: 모르는 번호의 rc 2 로 실행을 멈추던 옛 문장이 없다"
   assert_contains "$S4" '그래도 rc 2 면 멈추지 않는다: `mv "$RV/synth-before-restore.out" "$RV/synth.out"` 으로 앞 출력을 되돌리고' \
     "Step 4: 다시 합성이 rc 2 면 앞 출력을 되돌린다(옛 문장 부재의 양성 짝)"
@@ -152,7 +152,7 @@ case_record_fence() {
   assert_not_contains "$out" '## 낮춘 지적' "기록: 낮춘 것이 없으면 절을 쓰지 않는다"
 }
 
-# final-review M2 — 기타 칸 번호 확인 펜스를 실제 합성기 출력(L1 하나)으로 돌린다
+# 기타 칸 번호 확인 펜스를 실제 합성기 출력(L1 하나)으로 돌린다
 case_pick_fence() {
   note "Step 4.5 — 기타 칸 번호 확인 펜스"
   local fence syn out

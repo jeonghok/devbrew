@@ -17,7 +17,7 @@ assert_file_grep "$A" 'new_findings' "adversarial can add missed findings"
 # frontmatter `description:` line also contains "amplified into real edits",
 # so an 'amplif' alternative is header-satisfiable (passes even if the
 # persona body's load-bearing framing is gutted). 'load-bearing' alone does
-# not appear in frontmatter — body-unique, has teeth. See task-9-report.md.
+# not appear in frontmatter — body-unique, has teeth.
 assert_file_grep "$A" 'load-bearing' "persona states FP gate is load-bearing (edits amplify)"
 
 finish

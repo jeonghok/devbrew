@@ -5,8 +5,7 @@
 # `inherit` 는 사용자의 subagent 기본 티어 설정(`CLAUDE_CODE_SUBAGENT_MODEL`)을 덮어쓴다. 키가
 # 없어야 하니스가 「사용자 설정 → 세션 모델」 순으로 위임한다.
 #
-# 예외는 없다 — qg 리뷰 agent 도 키가 없다(R2a 사용자 결정 「세션 모델을 따른다」). 옛 qg v10
-# 재결정 R3(「리뷰는 opus」, 사용자 지시)이 두 agent 를 `model: opus` 로 고정했던 것을 뒤집었다.
+# 예외는 없다 — qg 리뷰 agent 도 키가 없다(사용자 결정 「세션 모델을 따른다」).
 # 어느 agent 든 model 키가 생기면 RED 다.
 #
 # 범위 밖: 외부(비-devbrew) 플러그인의 하드코딩 핀은 존중한다 — 이 스윕은 이 리포의 `plugins/` 만 본다.

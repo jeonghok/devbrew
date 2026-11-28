@@ -1,19 +1,12 @@
 #!/usr/bin/env bash
 # guards: plugins/*/scripts/*.py tools/adjudication/check_wiring.py tools/adjudication/cite.py shared/tests/fixtures/adjudication/run_wiring_scan.py shared/tests/fixtures/adjudication/run_wiring_probe.py shared/tests/fixtures/adjudication/run_wiring_absorb.py
 #
-# 수정 라운드 1 (F6) — 판정기 자신(`tools/adjudication/check_wiring.py`)이
-# 이 락의 `# guards:` 에 없었다. 27개 선언 전수 확인 결과 `tools/adjudication/`
-# 는 «어떤» 락에도 없었다 — 판정기를 약화시켜도 그 사실을 잡는 락이
-# 선택되지 않는다는 뜻이다. 도출은 열거가 아니라 import: 이 락이 실행하는
-# `fixtures/adjudication/run_wiring_scan.py`·`run_wiring_probe.py` 둘 다
-# `from check_wiring import ...` 를 쓴다 — 그래서 이 판정기가 여기 산다.
-#
-# 수정 라운드 2 (I1) — F6 은 `check_wiring.py`(락이 import 하는 대상) 만 덮고
-# 그것을 «부르는» `run_wiring_scan.py`/`run_wiring_probe.py` 자신은 안
-# 덮었다. F4 의 실제 결함이 `check_slots.py` 가 아니라 `run_slots.py` 의
-# print 루프에 있었던 것과 같은 자리 — 러너 스크립트 자체가 무방비였다.
-# 이 두 파일을 그 러너를 실제로 실행하는 이 락 하나에 편입한다(다른 락은
-# 이 러너를 안 부르므로 여기가 유일한 소비자).
+# 판정기 자신(`tools/adjudication/check_wiring.py`)과 그것을 «부르는» 러너
+# `fixtures/adjudication/run_wiring_scan.py`·`run_wiring_probe.py` 도 이 락의
+# `# guards:` 에 든다 — 없으면 판정기나 러너를 약화시켜도 그 사실을 잡는 락이
+# 선택되지 않는다. 도출은 열거가 아니라 import · 실행이다: 이 락이 실행하는 두
+# 러너가 `from check_wiring import ...` 를 쓰고, 다른 락은 이 러너를 안 부르므로
+# 여기가 유일한 소비자다.
 #
 # 버리는 분기가 자기 처분을 부르는지 검사한다.
 #
@@ -28,7 +21,7 @@
 # `quality-gates/tests/test_synthesize_disposition.sh`(synthesize_findings.py) ·
 # `quality-gates/tests/test_synthesize_artifact_findings.sh` ·
 # `shared/tests/test_docreview_route.sh`(docreview_route.py).
-# 단일 락을 지목하면 그 하나가 덮지 않는 나머지 소비자가 조용해진다(최종 리뷰 A/m3).
+# 단일 락을 지목하면 그 하나가 덮지 않는 나머지 소비자가 조용해진다.
 #
 # **모집단의 범위 — 「모든 자리」가 아니다.** 이 락(과 L2)이 겨누는 것은
 # `Ledger` 를 import 하는 `.py` 소비자와 `consumer=<.py 경로>` 앵커뿐이다.
@@ -306,12 +299,10 @@ else
   note "$(cat "$TMPD/clone.err" 2>/dev/null)"
 fi
 
-# T6b 재리뷰(F-2 판정 항목) — TERMINAL_CONSUMERS 는 EXEMPT 와 달리 신선도
-# 검사가 없어 파일이 지워지거나(PR 3) 앵커가 새로 생겨도(호스트 wiring) 등재가
-# 영원히 남을 수 있었다. `stale_terminal()` 로 EXEMPT 와 같은 축을 잰다(크기
-# baseline 은 25줄 예산 안에서 뺐다 — TERMINAL_CONSUMERS 는 몇 건뿐이라(크기는 위
-# `TERMINAL_CONSUMERS 크기` note 가 매 실행 낸다) EXEMPT 급 성장 위험이 없고, 이
-# 신선도 검사가 "영원히 남는다"는 실제 우려를 이미 잡는다).
+# TERMINAL_CONSUMERS 의 신선도 — 파일이 지워지거나 앵커가 새로 생겨도(호스트 wiring)
+# 등재가 영원히 남지 않게 `stale_terminal()` 로 EXEMPT 와 같은 축을 잰다(크기
+# baseline 은 두지 않는다 — TERMINAL_CONSUMERS 는 몇 건뿐이라(크기는 위
+# `TERMINAL_CONSUMERS 크기` note 가 매 실행 낸다) EXEMPT 급 성장 위험이 없다).
 terminal_stale="$(printf '%s\n' "$SCAN" | sed -n 's/^terminal_stale=//p')"
 assert_eq "$terminal_stale" "0" "TERMINAL_CONSUMERS 항목이 전부 여전히 유효하다 (파일이 아직 IMPORT + 아직 ANCHOR 없음)"
 printf '%s\n' "$SCAN" | sed -n 's/^  STALE_TERMINAL //p' | while IFS= read -r l; do

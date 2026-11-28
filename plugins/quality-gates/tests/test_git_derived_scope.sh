@@ -5,23 +5,20 @@
 # 「Bash 로 쓴 파일이 기본 scope 에 들어간다」는 tests/test_a20_tool_agnostic_scope.py
 # 가 잰다(셸-작성 픽스처 + 배포 신호 + 은퇴 산출물 부재).
 #
-# NOTE: 원래 브리프의 다섯 번째 검사(리포 전체 files.md 살아있는 참조 0건)는
-# 이 락에 포함하지 않는다 — 그 검사는 자기 자신의 본문에 있는 'files.md' 리터럴
+# NOTE: 리포 전체 files.md 살아있는 참조 0건 검사는
+# 이 락에 두지 않는다 — 그 검사는 자기 자신의 본문에 있는 'files.md' 리터럴
 # (이 머리말)을 스스로 매치해 통과할 수 없기 때문이다. 그 검사와 정의 단락의
-# files.md 부재는 위 A20 락의 축 3 이 대신 진다: 비교 대상 이름을 자기 본문에 적지 않고
+# files.md 부재는 위 A20 락의 축 3 이 진다: 비교 대상 이름을 자기 본문에 적지 않고
 # scripts/qg-gc.py 의 회수 마커에서 읽어 오므로 자기-매치가 성립하지 않는다.
 #
-# NOTE: check #1 은 원래 "정의가 check-review-scope.sh 를 근거로
-# 든다"였다 — 그런데 그 자체가 CRITICAL 결함이었다. $resolved_scope_file_count 를
-# check-review-scope.sh 의 산출값(예: $branch_ahead_count)으로 정의하면, 그 값과
-# 정직-verdict floor 가 비교하는 $changes_exist(같은 스크립트가 emit)가 항상 같은
-# 소스에서 나와 서로 disagree 할 수 없게 되고, session(default)·branch 모드에서
-# floor 의 첫 분기(`resolved_scope_file_count == 0 AND changes_exist == yes`)가
-# 영원히 도달 불가능해진다 — floor 가 무력화된다. 수정: $resolved_scope_file_count
-# 는 오케스트레이터가 step 1 에서 실제로 resolve·review 한 집합의 크기이지,
-# check-review-scope.sh 의 산출값이 아니다. check #1 을 그 정의로 교체하고, 원래
-# 결함이었던 등식("정의가 $branch_ahead_count 로 정의된다")의 재발을 잡는 새 음의
-# 검사(check #1b)를 추가한다.
+# $resolved_scope_file_count 는 오케스트레이터가 step 1 에서 실제로 resolve·review 한
+# 집합의 크기이지, check-review-scope.sh 의 산출값이 아니다. 그 산출값(예:
+# $branch_ahead_count)으로 정의하면, 그 값과 정직-verdict floor 가 비교하는
+# $changes_exist(같은 스크립트가 emit)가 항상 같은 소스에서 나와 서로 disagree 할 수
+# 없게 되고, session(default)·branch 모드에서 floor 의 첫 분기
+# (`resolved_scope_file_count == 0 AND changes_exist == yes`)가 영원히 도달 불가능해진다
+# — floor 가 무력화된다. 아래 양의 짝이 그 정의를, 음의 짝이 그 등식
+# ("정의가 $branch_ahead_count 로 정의된다")의 재발을 잰다.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 FAIL=0
@@ -29,8 +26,8 @@ ok() { echo "  ✓ $1"; }
 no() { echo "  ✗ $1"; FAIL=1; }
 SK=plugins/quality-gates/skills/quality-pipeline/SKILL.md
 
-# 앵커는 내용으로 찾는다 — 재작성된 단락의 시작 문구가 바뀌었으므로 awk 시작
-# 패턴도 그 문구를 따라간다. 대상을 못 찾으면 즉시, 크게 실패한다(무음 통과 금지).
+# 앵커는 내용으로 찾는다 — awk 시작 패턴은 정의 단락의 시작 문구다.
+# 대상을 못 찾으면 즉시, 크게 실패한다(무음 통과 금지).
 DEF="$(awk '/resolved_scope_file_count. = the size of the file set/,/do not re-measure/' "$SK")"
 [[ -n "$DEF" ]] || { no "정의 단락을 찾지 못했다 (앵커 이동)"; exit 1; }
 
@@ -41,7 +38,7 @@ grep -qF 'the size of the file set you actually resolved' <<<"$DEF" \
   || no "A22: 정의가 더 이상 resolve 된 집합의 크기를 claim하지 않는다"
 
 # 음의 짝 — 그 정의가 $branch_ahead_count 로 등식화되지 않는다. floor 를
-# 무력화시킨 원래 결함은 정확히 이 등식이었다: $resolved_scope_file_count =
+# 무력화시키는 결함은 정확히 이 등식이다: $resolved_scope_file_count =
 # $branch_ahead_count. 위 양의 짝은 "resolve 한 집합" 문구가 남아 있으면서
 # $branch_ahead_count 등식이 다시 추가된 문서도 통과시킨다(추가는 위 체크를 안
 # 건드리므로) — 그래서 별도 체크가 필요하다.
@@ -54,14 +51,12 @@ grep -qF 'do NOT silently treat it as 0' <<<"$DEF" \
   && ok "A22: 판정-불가 degrade 분기 생존" \
   || no "A22: degrade 분기가 사라졌다"
 
-# 정직-verdict floor 자체(이 unit 의 정의가 그 floor 의 입력이라는 관계)는 이
-# 작업이 건드리지 않는다 (양성 대조 — GREEN 이 정답). 표면 문구는 Task8(R-AA)
-# 가 `NOT certified clean` 에서 닫힌 사유 열거 `scope-empty` 로 바꿨다 — 대상은
-# 그 이동을 따라간다.
+# 양성 대조 — 정직-verdict floor 행 자체(이 unit 의 정의가 그 floor 의 입력이라는
+# 관계)가 살아 있다(GREEN 이 정답). floor 는 닫힌 사유 열거 `scope-empty` 로 말한다.
 #
-# Fix round 1, Minor 6 — `scope-empty` 단독 리터럴은 파일에 4곳(Step 1b 소개 ·
-# honesty-norm 인용 두 곳 · floor 행 자신)에 있어, floor 행 자체를 지워도 나머지
-# 세 곳이 대신 만족시켜 GREEN 으로 남았다. floor 행 자신에만 있는 세 조각(0 카운트
+# `scope-empty` 단독 리터럴은 파일 여러 곳(Step 1b 소개 ·
+# honesty-norm 인용 · floor 행 자신)에 있어, floor 행 자체를 지워도 나머지가
+# 대신 만족시켜 GREEN 으로 남는다. floor 행 자신에만 있는 세 조각(0 카운트
 # 조건 · changes_exist 조건 · scope-empty 사유)이 «같은 줄»에 함께 있는지로 좁힌다.
 grep -qE 'resolved_scope_file_count == 0.*changes_exist == yes.*scope-empty' "$SK" \
   && ok "양성 대조: 정직-verdict floor 행 자신이 생존(같은 줄에 세 조각 모두)" \

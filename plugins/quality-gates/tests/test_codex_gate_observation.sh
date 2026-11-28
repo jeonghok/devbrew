@@ -53,19 +53,10 @@ obs_setup "$SCRATCH"
 UNGATED_run_codex_reviewer_sh='quality-pipeline/SKILL.md 이 산문 게이트 — 이 사이클 범위 밖 (설계 §10 미해결 1)'
 UNGATED_run_artifact_codex_reviewer_sh='artifact-critique/SKILL.md 이 산문 게이트 — 이 사이클 범위 밖 (설계 §10 미해결 1)'
 UNGATED_test_codex_json_extraction_sh='수동 spike — 어떤 SKILL도 부르지 않는다'
-# spec-distill 의 옛 design-doc 러너 등재는 여기서 **지웠다**(T7). 등재 사유는 "게이트
-# 마커는 이미 옮겨갔는데 러너 파일이 아직 남아 ratchet 이 RED 를 낸다"였고, T7 이 그
-# 파일을 지우면서 후보 목록에서 빠졌다 — 후보가 사라지면 그 변수는 아무도 읽지 않고
-# 단언도 note 도 나오지 않는다(**이 원장은 그 방향으로는 자동 만료되지 않는다**: 위
-# 헤더의 "목록은 줄어들기만 한다"는 «게이트가 생김» 방향에만 참이다). 그래서 삭제를
-# 손으로 함께 했다 — 남겨두면 조용히 썩는 죽은 코드다.
-# `run_docreview_codex_reviewer.sh`의 등재는 여기서 **지웠다**(2026-09-08). 등재 사유는
-# "호출자 0 — 진입 skill이 아직 이 러너를 안 부른다"였는데, `spec-review`이 문서 리뷰
-# 엔진의 껍데기가 되면서 그 skill의 SKILL.md가 `codex-gate:begin runner=run_docreview_
-# codex_reviewer.sh` 마커 짝으로 이 러너를 부른다 — 위 ratchet이 그 순간 "게이트가
-# 생겼는데 원장에 아직 있다(stale)"로 RED를 냈고, 이 삭제가 그 RED가 지시한 조치다.
-# (등재 당시의 예상대로 자동 만료는 없었다 — 마커가 SKILL.md 안에 놓였으므로 ratchet이
-#  대신 소리를 냈다.)
+# 등재된 러너 파일이 지워지면 그 변수는 아무도 읽지 않고 단언도 note 도 나오지 않는다 —
+# **이 원장은 그 방향으로는 자동 만료되지 않는다**(위 헤더의 "목록은 줄어들기만 한다"는
+# «게이트가 생김» 방향에만 참이다). 러너를 지울 때 등재도 손으로 함께 지운다 — 남겨두면
+# 조용히 썩는 죽은 코드다.
 ungated_key() { printf 'UNGATED_%s' "$(printf '%s' "$1" | tr '.-' '__')"; }
 
 # ── 마킹된 게이트 블록 수집 ──────────────────────────────────────────────────
@@ -136,8 +127,8 @@ codex_resolved_desc() {   # 진단용 — 위와 같은 PATH에서 실제 해석
 }
 
 # ── 마킹된 게이트를 아래 시나리오들(가용·kill switch·미설치·버전 바닥 미달·감지기
-# 부재 — 목록은 아래 루프 본문이 정의하며 여기서 개수를 세지 않는다: N4, 개수
-# 리터럴은 시나리오가 늘 때마다 이 자리에서 또 stale 해진다)로 실행한다 ───────────
+# 부재 — 목록은 아래 루프 본문이 정의하며 여기서 개수를 세지 않는다: 개수
+# 리터럴은 시나리오가 늘 때마다 이 자리에서 stale 해진다)로 실행한다 ───────────
 # 블록이 요구하는 변수는 하니스가 전부 공급한다 — 어느 이름을 쓰는지는 블록 자유다.
 run_gate() {   # $1=SKILL, $2=runner basename, $3=capture, $4=gate_path(전제 검증 통과), $5..=env KEY=VAL
   local sk="$1" runner="$2" cap="$3" gate_path="$4"; shift 4
@@ -184,7 +175,7 @@ run_scenario() {   # $1=SKILL $2=runner $3=capture $4=gate_path $5=기대디렉�
 mkdir -p "$SCRATCH/home"
 # bash/awk/sed/grep/python3/mktemp 등 게이트·러너가 쓰는 coreutils가 여기 있다
 # (리포 선례: test_codex_copies_agree.sh의 probe_out()과 동일 계열). homebrew 등
-# 사용자 설치 경로는 명시적으로 제외한다 — 그게 이 라운드가 막는 leak 경로다.
+# 사용자 설치 경로는 명시적으로 제외한다 — 진짜 codex 로 새는 leak 경로다.
 BASE_SUFFIX="/usr/bin:/bin"
 
 for i in "${!GATED_RUNNER[@]}"; do
@@ -225,11 +216,11 @@ for i in "${!GATED_RUNNER[@]}"; do
     *) no "$label: 미설치 → codex ${n}회" ;;
   esac
 
-  # 버전 바닥 미달 — **계측 가능한** below-floor mock 을 쓴다 (C1, qg 2026-08-13).
-  # 예전에는 `mocks/below-floor/codex` 를 썼는데 그 mock 은 CODEX_CAPTURE_DIR 에
-  # 아무것도 쓰지 않는다. 그래서 아래 `0` 기대값은 "게이트가 막았다" 와 "게이트가
-  # 발화했는데 실행된 바이너리가 캡처를 안 한다" 를 구별하지 못했다 — 죽은 계측기의
-  # 값과 기대값이 같았다. 캡처하는 쌍둥이를 쓰면 발화 시 call-0 이 남아 `0` 이
+  # 버전 바닥 미달 — **계측 가능한** below-floor mock 을 쓴다.
+  # `mocks/below-floor/codex` 는 CODEX_CAPTURE_DIR 에 아무것도 쓰지 않아, 아래 `0`
+  # 기대값이 "게이트가 막았다" 와 "게이트가 발화했는데 실행된 바이너리가 캡처를 안
+  # 한다" 를 구별하지 못한다 — 죽은 계측기의 값과 기대값이 같다. 캡처하는 쌍둥이를
+  # 쓰면 발화 시 call-0 이 남아 `0` 이
   # 비로소 무언가를 주장한다. (공유 자산을 고치지 않는 이유는 그 mock 헤더 참조.)
   FLOOR_BIN="$SCRATCH/floor-$label-bin"; mkdir -p "$FLOOR_BIN"
   cp "$ROOT/plugins/quality-gates/tests/mocks/below-floor-capturing/codex" "$FLOOR_BIN/codex"
@@ -242,26 +233,18 @@ for i in "${!GATED_RUNNER[@]}"; do
     *) no "$label: 바닥 미달 → codex ${n}회" ;;
   esac
 
-  # 감지기 부재(F5, Task 15 fix round 1 도입) — Step 9 loud-failure 수정의 보안 관련
-  # 절반이 실행 관측 없이 남아 있었다. detect_codex.sh 심볼릭 링크가 dangling 이
-  # 되면(예: 배포가 target 없이 나가면) 게이트 스크립트 자체가 안 돈다 — 그 상태에서도
-  # codex 를 부르면 안 된다. PATH 는 "가용" 시나리오와 동일하게 codex 가 정상
-  # 해석되도록 둔다 — PATH 문제가 아니라 감지기 부재 자체가 codex 호출을 막는지를
-  # 격리해서 잰다. 세 fence 전부 dangling 링크로 실측 완료 — 셋 다
-  # `skip_reason=detector_not_runnable` 을 올바르게 만든다. `reviewing-brief` 는 문서 리뷰
-  # 엔진 껍데기가 되면서 else 분기가 no-op 에서 SKIPPED 공시로 바뀌어, 이제 stderr 로
-  # 관측된다(아래 case 의 stderr 계열).
+  # 감지기 부재(F5) — detect_codex.sh 심볼릭 링크가 dangling 이 되면(예: 배포가
+  # target 없이 나가면) 게이트 스크립트 자체가 안 돈다 — 그 상태에서도 codex 를 부르면
+  # 안 된다. PATH 는 "가용" 시나리오와 동일하게 codex 가 정상 해석되도록 둔다 — PATH
+  # 문제가 아니라 감지기 부재 자체가 codex 호출을 막는지를 격리해서 잰다.
   #
-  # round 2 수정(N3): 호출 **횟수만** 세면 이 축이 무엇도 재지 못한다 — 감지기가
-  # 없으면 codex_avail 이 빈 문자열이라 세 fence 모두 `if [[ "$codex_avail" == "true"
-  # ]]` 로 codex 를 안 부르므로, `skip_reason="detector_not_runnable"` 세 줄을 통째로
-  # 지워도 호출 수는 그대로 0 이다(호출-수 axis 는 "codex 미설치"·"kill switch" 등
-  # 다른 모든 스킵 경로와 값이 같아 구별 불가). `run_gate` 가 이미 stderr 를
-  # `"$cap.stderr"` 로 캡처하므로, stderr 에 skip_reason 값을 echo 하는 fence 는 그
-  # 캡처를 직접 grep 해 진짜 이빨을 만든다 — 아래 case 의 stderr 계열(reviewing-brief 도
-  # 문서 리뷰 엔진 전환 뒤 SKIPPED 공시로 사유를 내므로 이 계열이다). mutation 증명: 그
-  # fence 들의 `skip_reason="detector_not_runnable"` 줄을 지우면 stderr 가
-  # `${skip_reason:-unknown}` 의 fallback 인 "unknown" 을 내 grep 이 실패해 RED 다.
+  # 호출 **횟수만** 세면 이 축이 무엇도 재지 못한다 — 감지기가 없으면 codex_avail 이 빈
+  # 문자열이라 fence 가 `if [[ "$codex_avail" == "true" ]]` 로 codex 를 안 부르므로,
+  # `skip_reason="detector_not_runnable"` 줄을 지워도 호출 수는 그대로 0 이다(호출-수 축은
+  # "codex 미설치"·"kill switch" 등 다른 모든 스킵 경로와 값이 같아 구별 불가). `run_gate` 가
+  # stderr 를 `"$cap.stderr"` 로 캡처하므로, 아래 case 의 stderr 계열은 그 캡처를 직접
+  # grep 해 진짜 이빨을 만든다 — 그 줄을 지우면 stderr 가 `${skip_reason:-unknown}` 의
+  # fallback 인 "unknown" 을 내 grep 이 실패해 RED 다.
   # 게이트 블록은 사본의 SKILL 에서 잘라 `CLAUDE_PLUGIN_ROOT` 가 사본을 가리키게 돈다.
   # 펜스가 그 변수가 아닌 고정 경로로 실제 감지기를 부르면 여기서 codex 1회가 나와 RED 다.
   if ! copy_root="$(copy_plugin_tree "$plugin")"; then
@@ -293,20 +276,15 @@ for i in "${!GATED_RUNNER[@]}"; do
   restore_active_detector
   case "$n" in
     0)
-      # R1(round 3): `GATED_RUNNER`는 **선언이 아니라 발견**이다(`:60-68`, SKILL.md를
-      # 스캔해 채운다) — 그래서 아래 label 분류는 "stderr를 실제로 확인해 본 fence의
-      # 열거"이지 fail-closed 총합이 아니었다. 이전 판은 미분류 label을 `*)`에서
-      # 조용히 `ok`로 통과시키며 "이 fence는 else가 no-op이라 관측 불가"라는 구체
-      # 문장까지 붙였다 — reviewing-brief에 대해서는 참이지만, 넷째 gated fence가
-      # 생기면 아무도 확인하지 않은 그 fence에 대해 자동으로 거짓이 되는 문장이다
-      # (N1/N2와 같은 종류의 결함, 이번엔 프로즈가 아니라 코드가 낸다). `:181-186`이
-      # 이미 같은 모양(미인식 값을 추측하지 않고 `no … ; continue`)의 idiom을 쓰고
-      # 있다 — 그것을 그대로 따른다: 분류된 두 갈래만 이름으로 열거하고, 나머지는
-      # 전부 loud `no`로 떨어뜨려 다음 사람이 위 두 갈래 중 하나에 등재하게 만든다.
-      # (`quality-pipeline/SKILL.md:386-388`이 나머지 두 산문 게이트의 리터럴화가
-      # "이 사이클 범위 밖"이라고 적어 뒀다 — 즉 이 목록은 언젠가 반드시 자란다.)
+      # `GATED_RUNNER`는 **선언이 아니라 발견**이다(SKILL.md 를 스캔해 채운다) — 그래서
+      # 아래 label 분류는 "stderr 를 실제로 확인해 본 fence 의 열거"이고 fail-closed 총합이
+      # 아니다. 미분류 label 을 `*)` 에서 `ok` 로 통과시키면 새 gated fence 가 생길 때 아무도
+      # 확인하지 않은 그 fence 를 통과시킨다 — 위 플러그인 분류와 같은 idiom(미인식 값을
+      # 추측하지 않고 `no … ; continue`)을 따른다: 분류된 갈래만 이름으로 열거하고, 나머지는
+      # 전부 loud `no`로 떨어뜨려 다음 사람이 위 갈래에 등재하게 만든다. 산문 게이트(위
+      # UNGATED 원장)가 리터럴 게이트가 되면 이 목록은 자란다.
       case "$label" in
-        # 라벨 = skill 디렉토리 이름(위 label= 도출). spec-distill 5.0.0 · plugin-audit 1.0.0 개명을 따른다.
+        # 라벨 = skill 디렉토리 이름(위 label= 도출).
         plugin-audit|spec-review|reviewing-brief|intent-sync)
           if grep -q 'detector_not_runnable' "$NODETECT_CAP.stderr" 2>/dev/null; then
             ok "$label: 감지기 부재 → codex 0회 + stderr에 detector_not_runnable (loud-failure 확인)"

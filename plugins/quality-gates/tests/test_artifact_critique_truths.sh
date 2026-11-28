@@ -14,8 +14,8 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SK="$(ls "$ROOT"/plugins/quality-gates/skills/*/SKILL.md | xargs grep -l 'artifact-adversarial' | head -1)"
 tools="$(sed -n 's/^tools: //p' "$ROOT/plugins/quality-gates/agents/artifact-adversarial.md")"
 assert_eq "$tools" "Read, Grep, Glob" "artifact-adversarial 의 tools 는 읽기 셋뿐이다(전제)"
-# R2a 계획 3 Task 12(미룸): 옛 음성 검사(`egress 도구를 가지므로` 고정 문구 부재)는 그 한 문구만 봤다 — 다른 말로
-# 쓴 거짓 서술은 통과했다. 지금은 SKILL 이 인용한 `tools: …` 를 실제 tools 줄과 대조한다(인용이 실제와 다르면 RED).
+# 고정 문구 하나의 부재만 보면 다른 말로 쓴 거짓 서술이 통과한다 — SKILL 이 인용한 `tools: …` 를
+# 실제 tools 줄과 대조한다(인용이 실제와 다르면 RED).
 assert_contains "$(cat "$SK")" "\`tools: ${tools}\`" "egress 문장이 adversarial 의 실제 tools 줄을 그대로 인용한다"
 bad_quotes="$(grep -oE '`tools: [^`]*`' "$SK" | grep -vxF "\`tools: ${tools}\`")"
 assert_eq "$bad_quotes" "" "SKILL 이 인용한 tools 줄 가운데 실제 tools 줄과 다른 것이 없다(음성 — 위 양성 단언이 짝)"

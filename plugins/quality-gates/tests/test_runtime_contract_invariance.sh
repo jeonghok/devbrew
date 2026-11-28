@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test_runtime_contract_invariance.sh — create-baseline + 기존 계약 바이트 무변경.
-# AC7 AC21 AC22 AC24 AC25 AC26 · T5 T16 T17 T18
+# AC7 AC21 AC22 AC24 AC25 AC26 · T5 T18
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -55,8 +55,8 @@ case_create_baseline_is_still_idempotent() {
 
   local first second rc
   first=$(bash "$WT" create-baseline "$base_sha" "sess9999" 2>/dev/null)
-  # 앞선 실행이 남긴 **git-ignored 빌드 산출물**이 있는 상태가 정상 경로다 (C1 수정 이후
-  # cargo/venv 산출물은 전부 ignored 로 떨어진다). 여기서 막히면 게이트가 두 번째
+  # 앞선 실행이 남긴 **git-ignored 빌드 산출물**이 있는 상태가 정상 경로다
+  # (cargo/venv 산출물은 전부 ignored 로 떨어진다). 여기서 막히면 게이트가 두 번째
   # 실행부터 영구히 죽는다.
   mkdir -p "$first/target/debug" && : > "$first/target/debug/x.o"
   second=$(bash "$WT" create-baseline "$base_sha" "sess9999" 2>/dev/null); rc=$?
@@ -81,14 +81,6 @@ case_remove_namespace_guard() {
   cd / && rm -rf "$REPO"
 }
 
-# T16 + AC21′ (대상 소멸 — Task 7): detect-runtime.sh 가 삭제됐다. 이 스텝이 잠그던
-# "무단 변경 없음" 은 대상이 사라지며 함께 소멸한다 — case_detect_runtime_frozen 은
-# 지운다(케이스 목록에서도 제거).
-
-# T17 (대상 이전 — qg v10 ①): create-sandbox / mutation-guard 는 plugin-audit 의
-# scripts/audit-sandbox.sh 로 옮겨 갔다. 그 동작은 plugins/plugin-audit/tests/
-# test_audit_sandbox_create.sh · test_audit_sandbox_mutation_guard.sh 가 잰다.
-
 # T18 + AC24/AC25/AC26: 훅 항목 수 · 에이전트 파일 수 불변
 #
 # 이 락은 몰래 늘거나 주는 쪽 둘 다 잡는 알람이지, "늘기만 막는" 래칫이 아니다 —
@@ -97,12 +89,10 @@ case_remove_namespace_guard() {
 case_no_new_surfaces() {
   local agents
   agents=$(ls "$PLUGIN_ROOT/agents" | wc -l | tr -d ' ')
-  # v10.0.0: 훅 둘(SessionStart · SessionEnd)을 지워 hooks/ 자체가 없다. 생기면 새 표면이다.
+  # hooks/ 자체가 없다(훅 0개). 생기면 새 표면이다.
   [[ ! -e "$PLUGIN_ROOT/hooks" ]] && ok "hooks/ 없음 (v10 — 훅 0개)" || no "hooks/ 가 다시 생겼다"
   [[ -d "$PLUGIN_ROOT/agents" ]] && ok "agents/ 는 있다 (위 부재가 경로 오타로 공허하지 않다)" \
     || no "agents/ 도 없다 — PLUGIN_ROOT 가 틀렸다"
-  # v10 ③: 게시 생성 agent 하나를 지워 6 → 5. ⑤: test-scope-validator 삭제로 5 → 4.
-  # R1(intent-critic 리뷰어 추가)으로 4 → 5.
   [[ "$agents" == "5" ]] && ok "agents/ 파일 5개 불변"    || no "agents 파일 수 $agents (기대 5)"
 }
 

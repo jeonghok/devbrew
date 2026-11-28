@@ -32,7 +32,7 @@ cat > "$TMP/fenced-legacy.jsonl" <<'EOF'
 EOF
 check "fenced JSON (legacy top-level) Stage 1" "$TMP/fenced-legacy.jsonl" "" 'file: a-legacy.py'
 
-# Fixture 1c: real on-the-wire fixture from Task 0 spike (regression anchor for codex schema drift)
+# Fixture 1c: real on-the-wire fixture captured by the spike (regression anchor for codex schema drift)
 check "real codex sample (Task 0 fixture)" "$PLUGIN_ROOT/tests/spike/fixtures/codex_jsonl_sample.json" "" 'agent: codex-reviewer'
 
 # Fixture 1d: fenced JSON WITHOUT trailing newline before closing backticks.
@@ -69,7 +69,7 @@ Error: authentication failed: invalid API key
 EOF
 check "auth error in stderr" "$TMP/empty.jsonl" "$TMP/auth-err.txt" 'reason: auth_error_in_stderr'
 
-# Fixture 5b: exit ≠ 0 의 모양 — 빈 stdout · 빈 stderr(옛 test_failure_injection.sh 1번)
+# Fixture 5b: codex 가 아무것도 못 내고 끝난 모양(빈 stdout · 빈 stderr)은 결과 없음 · 실패한 라운드로 읽힌다
 : > "$TMP/exit1.jsonl"; : > "$TMP/exit1.err"
 check "exit-1 shape (empty stdout + empty stderr)" "$TMP/exit1.jsonl" "$TMP/exit1.err" 'reason: missing_result'
 check "exit-1 shape is a failed round" "$TMP/exit1.jsonl" "$TMP/exit1.err" 'codex_failed: true'

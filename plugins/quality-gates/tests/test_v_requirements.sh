@@ -137,7 +137,7 @@ case_v12_dispatches_carry_project_dir() {
   done
 }
 
-# ── SKILL 본문 의무(Task 6 리뷰가 이월한 것) — 각자 자기 절 창 안에서 ──
+# ── SKILL 본문 의무 — 각자 자기 절 창 안에서 ──
 case_ac9_intent_line_printed_once() {
   assert_grep "$(win '^\*\*P3 — intent source' '^## Flow')" 'Print exactly one line for the whole run \(AC9\)' \
     "AC9 — intent: 줄은 실행 전체에서 정확히 한 줄이다"

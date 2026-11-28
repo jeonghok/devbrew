@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AC9/AC10 (v2.13.0) — README fan-out consent 게이트 주장 whole-file reconcile
+# AC9/AC10 — README fan-out consent 게이트 주장 whole-file reconcile
 # + prerequisites. negative(게이트 주장 부재) + positive(두 공시 줄 · optional deps).
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"

@@ -49,7 +49,7 @@ new_repo() {   # 견본을 새 자리에 복사한다(빈 리포 + main 두 커�
 }
 
 # ── 준비물 사본 격리: 한 사본에 더한 커밋이 다음 사본에 없고, 사본의 .git 이 견본 경로를 담지 않는다 ──
-#    견본 경로는 두 꼴(받은 꼴 · 링크를 푼 실제 경로 — macOS 의 /tmp → /private/tmp)로 찾는다.
+#    견본 경로는 두 꼴(받은 꼴 · 링크를 푼 실제 경로 — macOS 의 /var/folders → /private/var/folders)로 찾는다.
 case_new_repo_copies_are_isolated() {
   new_repo
   echo iso > iso.txt; git add iso.txt; git commit -qm iso
@@ -103,7 +103,7 @@ case_f1_two_siblings() {
 
 # ── F2: 구성원 하나가 머지됨 + ref 살아 있음 → 기준선 · in_base 공시 (AC4 재정의) ──
 #    머지된 topicA 의 선언은 판정 대상이 아니라 기준선이다 — 구성원은 아직 base 에 안 든
-#    topicB 뿐이고, 머지된 선언의 수가 in_base 로 나온다(재결정 P23 2026-09-27).
+#    topicB 뿐이고, 머지된 선언의 수가 in_base 로 나온다(재결정 P23).
 case_f2_merged_ref_alive() {
   new_repo
   local R; R=$(git rev-parse HEAD)
@@ -283,7 +283,7 @@ Spec: docs/x-design.md#pr2"
 #    짝: 진짜 트레일러의 다른 키는 declaration-invalid 로 잡는다 — case_f7_mixed_keys_in_T.
 #    트레일러 atom(`%(trailers:key=Spec,valueonly)`)은 키를 대소문자 무시로 매치하므로
 #    이 케이스에서 nkeys=2 로 부풀려 거짓 declaration-invalid 를 낸다. --grep 계열
-#    (대소문자 구분)은 안 낸다. 구 구현(atom) 대비 RED 로 이빨을 증명한다.
+#    (대소문자 구분)은 안 낸다.
 case_nkeys_lowercase_trailer_no_false_positive() {
   new_repo
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
@@ -319,7 +319,7 @@ case_f8_seal_first_then_maximal() {
   assert_contains "$(field tips "$out1")" "$SEAL" "F8 봉인을 먼저 넣으면 끝점에 든다"
   assert_not_contains "$(field tips "$out1")" "$TIPA" "F8 tip(A) 는 여전히 빠진다(조상이므로)"
 
-  # ── F1(리뷰): 합성 봉인 커밋은 tips 의 끝점이지만 commits 의 원소가 아니다 ──
+  # ── 합성 봉인 커밋은 tips 의 끝점이지만 commits 의 원소가 아니다 ──
   #    ref 없는 합성 커밋이 「토픽 커밋」으로 세이면 GC 뒤 사라질 SHA 가 clean 튜플에
   #    낀다. tips 는 그대로 봉인을 담아야 한다(§6.2.4) — commits 만 뺀다.
   local cout1; cout1=$(rt commits "$KEY" --seal "$SEAL")
@@ -343,8 +343,8 @@ case_seal_on_topic_yes() {
 }
 
 # ── 봉인의 부모가 토픽 밖 — seal_on_topic: no · status: ok · 오염 없음 ──────
-#    A1/A2 회귀 락: 옛 구현은 `$MAXIMAL`(끝점 = tips ∪ 봉인)에서 T·nkeys 를 뽑아
-#    봉인을 사후에 `grep -v -x -F` 로만 걷어냈다 — 봉인의 부모(outside 브랜치)가
+#    `$MAXIMAL`(끝점 = tips ∪ 봉인)에서 T·nkeys 를 뽑고 봉인을 사후에
+#    `grep -v -x -F` 로만 걷어내면 봉인의 부모(outside 브랜치)가
 #    끌고 온 조상 커밋은 그 후처리로 못 잡는다. `$BR_TIPS`(브랜치 집합 자체) 에서
 #    뽑으면 outside 브랜치가 애초에 B_t 밖이라 안 들어온다.
 case_seal_off_topic_excludes_commits() {
@@ -502,7 +502,7 @@ case_combine_edges() {
 }
 
 # ── 합치기 정상: 끝점 셋 → 누적기가 진짜 자란다 (AC6, 순차 2+ 스텝) ─────────
-#    Fix round 1 — 두-끝점 케이스만으로는 sequential accumulation 자체(스텝이
+#    두-끝점 케이스만으로는 sequential accumulation 자체(스텝이
 #    누적되는지, N-1 회 도는지)가 안 잠긴다. 형제 셋을 겹치지 않게 붙여
 #    steps: N-1 과 intermediates 개수·트리에 세 파일 전부를 확인한다.
 case_combine_three_clean() {
@@ -525,7 +525,7 @@ case_combine_three_clean() {
 }
 
 # ── 합치기 충돌 — 셋 중 «둘째»에서 충돌 (귀속이 "마지막 인자" 함정을 피함) ──
-#    Fix round 1 — 끝점 둘짜리 충돌 케이스는 failed_at 이 유일하게 tip2 (=
+#    끝점 둘짜리 충돌 케이스는 failed_at 이 유일하게 tip2 (=
 #    마지막 인자) 값 하나만 취할 수 있어, 「진짜 실패한 스텝의 tip」과
 #    「그냥 마지막 인자」를 구분 못 한다. 셋째 끝점(TC, 무관)을 더해
 #    첫 스텝(acc=TA, tip=TB)에서 충돌시키면 failed_at 이 TB(끝에서 둘째)여야
@@ -544,9 +544,9 @@ case_combine_three_conflict_attribution() {
   cleanup
 }
 
-# ── PR4 조립: resolve 의 tips(콤마) 를 combine 이 실제로 받는다(공백) ────────
-#    변환은 계획 문서에만 있고 두 스크립트 헤더·테스트 어디에도 없었다 — 두 스크립트가
-#    실제로 물리는지는 이 케이스가 처음 잰다(cross-task seam).
+# ── 조립: resolve 의 tips(콤마) 를 combine 이 실제로 받는다(공백) ────────
+#    두 스크립트가 실제로 물리는지(이음매)를 잰다 — 콤마 → 공백 변환은 두 스크립트
+#    헤더 어디에도 적혀 있지 않다.
 case_resolve_tips_feed_combine() {
   new_repo
   local R; R=$(git rev-parse HEAD)
@@ -565,7 +565,7 @@ case_resolve_tips_feed_combine() {
   cleanup
 }
 
-# ── PR1 이월: 로컬-이름 우선 dedupe 가 정렬 순서에 기댄다 — 순서를 기본값에 맡기지 않는다 ──
+# ── 로컬-이름 우선 dedupe 가 정렬 순서에 기댄다 — 순서를 기본값에 맡기지 않는다 ──
 case_for_each_ref_sort_pinned() {
   local got
   got=$(grep -n 'for-each-ref' "$RT" | grep -vE '^[0-9]+:[[:space:]]*#')
@@ -574,8 +574,8 @@ case_for_each_ref_sort_pinned() {
   assert_not_grep "$got" '--sort=-' "역순(--sort=-…)이 아니다"
 }
 
-# ── PR1 이월: base 원격 ref · origin/HEAD 는 선언을 «담아도» 구성원이 아니다 ─────────
-#    `%(refname:short)` 는 refs/remotes/origin/HEAD 를 `origin` 으로 찍는다(실측 P4). 다만
+# ── base 원격 ref · origin/HEAD 는 선언을 «담아도» 구성원이 아니다 ─────────
+#    `%(refname:short)` 는 refs/remotes/origin/HEAD 를 `origin` 으로 찍는다. 다만
 #    main · origin/main · origin/HEAD 는 같은 tip 이라 tip 중복 제거가 사전순으로 먼저 스캔된
 #    `main` 하나만 남긴다 — 첫 검사(base_ref 의 조상인 ref 를 뺀다)를 지우는 변이에서 이 락은
 #    `main` 으로 발화한다.
@@ -657,7 +657,7 @@ Spec: docs/x-design.md#pr2"
   cleanup
 }
 
-# ── detect: 값이 빈 Spec: 트레일러는 키로 세지 않는다(리뷰 I1) ──────────────
+# ── detect: 값이 빈 Spec: 트레일러는 키로 세지 않는다 ──────────────
 #    `--cleanup=verbatim` 으로 트레일러 뒤 공백을 보존해 `Spec: `(값 없음) 줄을 만든다.
 #    sort -u 는 빈 문자열을 진짜 키보다 앞에 두므로, 빈 값을 거르지 않으면 그것이
 #    topic_key 자리에 개행째 섞여 들어가고 진짜 키가 5번째 줄로 떠돈다.
@@ -704,7 +704,7 @@ case_detect_usage() {
   cleanup
 }
 
-# ── 머지 뒤 base 에서 딴 무관 브랜치는 구성원이 아니다 (재결정 P23 2026-09-27) ────
+# ── 머지 뒤 base 에서 딴 무관 브랜치는 구성원이 아니다 (재결정 P23) ────
 case_unrelated_after_merge_not_member() {
   new_repo
   git checkout -q -b topicA; decl_commit a.txt a1 "a1"
@@ -781,7 +781,7 @@ case_no_merged_member_machinery() {
     "C_LIVE 를 순회하는 루프가 둘(구성원 1단계 · 고아)"
 }
 
-# ── base-unresolved 이전 경로: in_base 는 «셀 수 없음»(-) 이지 0 이 아니다 (PR4d 닫기 #18) ──
+# ── base-unresolved 이전 경로: in_base 는 «셀 수 없음»(-) 이지 0 이 아니다 ──
 #    C 를 세기 전에 끝나는 경로(git 리포조차 아님)에서 IN_BASE 의 초기값이 그대로 나간다.
 #    그 초기값을 0 으로 바꾸는 변이는 「선언이 base 에 없다」는 거짓 확답을 만든다 —
 #    «셀 수 없음»과 «0»은 다른 사실이다(status 단언과 묶은 양의 짝).

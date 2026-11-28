@@ -25,11 +25,11 @@ fi
 # 등재되지 않은 실패는 전체 러너가 그 테스트를 직접 돌려 자기 `FAILED` 줄로 낸다.
 #
 # 정규화(실패 줄만 + <REPO>/<TMP> 치환 + 숫자 → N)의 이유(설계 §10 미해결 3):
-# 등재 대상 하나(test_security_reviewer_kill_switch.sh)의 출력이 이 사이클이
-# 편집하는 quality-pipeline/SKILL.md의 grep 카운트를 담아, 그 파일을 고칠
+# 등재 대상의 출력이 quality-pipeline/SKILL.md 의 grep 카운트를 담으면(예:
+# test_security_reviewer_kill_switch.sh), 그 파일을 고칠
 # 때마다 원시 해시가 stale이 된다. 어떤 assert가 실패하는지(문구)는 남으므로
 # 같은 파일이 **다른 이유로** 실패하기 시작하면 해시가 바뀐다.
-# L3 (라운드 1 리뷰): 빈 문자열의 sha256 — grep이 FAIL/✗ 줄을 하나도 못 찾으면
+# 빈 문자열의 sha256 — grep이 FAIL/✗ 줄을 하나도 못 찾으면
 # 지문이 여기로 무너진다. 이 값과 일치하는 지문은 절대 유효한 원장 값으로
 # 받아들이지 않는다(아래) — 서로 다른 실패 이유가 전부 이 값 하나로 뭉개지면
 # 위 정규화 문단의 계약("실패하기 시작하면 해시가 바뀐다")은 이 absorbing
@@ -38,7 +38,7 @@ EMPTY_DIGEST_SHA256='e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b785
 LEDGER="$SCRIPT_DIR/codex-blessed-red.txt"
 SELF="$(basename "${BASH_SOURCE[0]}")"
 fingerprint() {   # $1 = 테스트 경로 → 정규화된 실패 지문
-  # L3: 확장자로 python3/bash를 가른다 — .py 테스트를 bash로 실행하면 대개
+  # 확장자로 python3/bash를 가른다 — .py 테스트를 bash로 실행하면 대개
   # FAIL/✗ 패턴을 하나도 못 내 빈 입력이 EMPTY_DIGEST_SHA256로 뭉개진다.
   local runner
   case "$1" in

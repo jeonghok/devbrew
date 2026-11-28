@@ -1,44 +1,31 @@
 #!/usr/bin/env bash
 # AC10 · AC15 — 사본 갈라짐 **행동** 락.
 #
-# 왜 파일 diff가 아닌가: 두 사본은 의도된 차이(kill switch 변수명)를 갖는다. diff로
+# 왜 파일 diff가 아닌가: 사본은 의도된 차이(kill switch 변수명 — 형제 conf)를 갖는다. diff로
 # 재면 그 차이 때문에 항상 RED거나, 그것을 예외로 빼는 순간 다른 모든 차이도 함께
 # 빠진다. 여기서 재는 것은 **같은 입력에 같은 답을 내는가**이다.
 #
-# 봉쇄하는 실패: qg 사본의 마지막 변경은 2026-05-14, sd 사본은 2026-07-29까지 받았다.
-# 그 사이 qg는 `{"findings": {}}`에 `codex_failed: false`를 내고 있었다 — 실행되지
-# 못한 검사가 통과한 검사로 기록된다. 두 사본의 동기 여부를 재는 테스트는 없었다.
+# 봉쇄하는 실패: 두 사본이 갈라지면 한쪽이 `{"findings": {}}`에 `codex_failed: false`를
+# 낸다 — 실행되지 못한 검사가 통과한 검사로 기록된다.
 #
-# **역할 분담 — 층① (detect_codex.sh) 에 한정한 갱신** (2026-08 무게 감축,
-# 2026-08-17 실측 이후 심볼릭 링크로). 세 배포 지점은 이제
-# shared/codex/detect_codex.sh 를 가리키는 상대 심볼릭 링크다(설계 §16.1) —
-# **바이트 동일성**은 더 이상 "측정할" 대상이 아니라 파일이 하나뿐이라는 구조로
-# 보장된다. 링크가 여전히 링크인지 · 존재하는 정본을 가리키는지는
-# `shared/tests/test_copy_of_contract.sh` 가 **잴 것이다 — 그 파일은 Task 16이
-# 만든다. 이 커밋 시점에는 아직 없다.** 위 문단이 기각한 전제("두 사본은 의도된
-# 차이를 갖는다")는 그 차이를 형제 설정 파일 `codex-killswitch.conf` 로 빼내면서
-# 사라졌다.
+# **층①(detect_codex.sh)** — 세 배포 지점은 shared/codex/detect_codex.sh 를 가리키는
+# 상대 심볼릭 링크다(설계 §16.1). **바이트 동일성**은 파일이 하나뿐이라는 구조로
+# 보장되고, 링크가 링크인지 · 존재하는 정본을 가리키는지는
+# `shared/tests/test_copy_of_contract.sh` 가 잰다. 사본 사이의 의도된 차이(kill switch
+# 변수명)는 형제 설정 파일 `codex-killswitch.conf` 에 있다 — 세 링크가 **서로 다른 conf
+# 세 개**를 읽으므로 이 파일의 kill switch 축은 conf 드리프트 · 교차배선 · 스위치
+# 영구정지에 이빨이 있다.
 #
-# **이 문단이 말하지 않는 것**: 층①의 kill switch 축은 그대로 유효하다 — 세 링크가
-# **서로 다른 conf 세 개**를 읽으므로 conf 드리프트·교차배선에 여전히 이빨이 있다
-# (2026-08-17 mutation 으로 확인: 교차배선 60/62 · conf 무시 58/62 · 스위치 영구정지
-# 59/62, 전부 RED). 그리고 이 파일의 나머지 축들은 detect_codex 와 **무관하다** —
-# 층④는 codex_findings_to_yaml.py 를 잰다. **2026-08-17 실측 이후** 배포 지점도
-# shared/codex/codex_findings_to_yaml.py 를 가리키는 상대 심볼릭 링크가 됐다(층①과
-# 같은 이유) — 그 결과 층④ 안에서 **판정 등가**와 **값 고정**은 서로 다른 운명을
-# 갖는다(다른 하위 체크들 — anti-vacuous 계측기 확인·표본 수 바닥 — 은 이 갈림과
-# 무관하게 그대로 유효하다).
-#
+# **층④(codex_findings_to_yaml.py)** — 배포 지점도 정본
+# shared/codex/codex_findings_to_yaml.py 를 가리키는 상대 심볼릭 링크다.
 # **판정 등가**(qg · sd 두 호출 경로가 같은 판정을 내는가)는 이 파일이 재지 않고
 # `shared/tests/test_copy_of_contract.sh` (b)(축 1b — 두 호출이 태우는 형제
-# `codex_jsonl.py` copy-of 사본이 정본과 바이트 같다)가 지킨다.
+# `codex_jsonl.py` copy-of 사본이 정본과 바이트 같다)가 지킨다. 이 파일은 **값 고정**
+# (알려진-상이 표본에 대해 `codex_failed: false`/`true`가 실제로 나오는가)과
+# anti-vacuous 계측기 확인 · 표본 수 바닥을 잰다 — 사본이 하나여도 verdict()가 상수
+# 추출기로 퇴화하면 잡힌다.
 #
-# **값 고정**(알려진-상이 표본에 대해 `codex_failed: false`/`true`가 실제로
-# 나오는가)은 파일 수와 무관하게 그대로 이빨이 있다 — 사본이 하나가 돼도
-# verdict()가 상수 추출기로 퇴화하면 여전히 잡힌다. 이 둘을 뭉뚱그려 "층④가
-# 통째로 공허해졌다"고 적으면 Task 15가 고친 I1(판정 등가가 공허해진다는 관찰을
-# 파일 전체에 대해 말한 오류)을 방향만 바꿔 재현한다. 별도로 mock 자산 교집합
-# 락이 있다. 이 통합은 그 축들을 건드리지 않았다.
+# 층⑤(codex_jsonl.py 공백 가드)와 mock 자산 교집합 락은 각 절 머리가 적는다.
 set -u -o pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 QG="$ROOT/plugins/quality-gates"
@@ -64,8 +51,8 @@ mk '"no fence at all"'                               > "$samples_dir/05-no-json.
 : > "$samples_dir/06-empty.jsonl"
 printf 'not json\n'                                  > "$samples_dir/07-garbage.jsonl"
 
-# 판정 필드만 뽑는다. 〔2026-08-17 fix round 1〕 이 락은 아래에서 qg 호출을
-# **--emit-keys 인자 없이** 부른다(정본화 이후 기본값은 DEFAULT_KEYS) —
+# 판정 필드만 뽑는다. 이 락은 아래에서 qg 호출을
+# **--emit-keys 인자 없이** 부른다(기본값은 DEFAULT_KEYS) —
 # category/target_section이 나타나는 design 어휘는 여기서 아예 안 켜지므로
 # findings 본문에 지금 갈릴 만한 차이가 없다. 그 배선(호출자가 자기 keyset 을 --emit-keys 로
 # 실제로 넘기는가)은 이 락이 아니라 호출자 쪽 락이 잰다 — run_docreview_codex_reviewer.sh 는
@@ -121,32 +108,31 @@ if [ "$seen" -ge 7 ]; then ok "층④ 표본 ${seen}건 실행 (vacuous 아님)"
 else no "층④ 표본이 ${seen}건뿐 — 위 판정이 무의미하다"; fi
 
 # ── 층⑤: 공백 가드(F2)를 **물리 인스턴스 전부**에 대해 잰다 ────────────────────
-# 〔2026-08-17 fix round 2, R2-8〕 fix round 1 이 이 동작을 고정한 락은
-# plugins/spec-distill/tests/test_codex_findings_to_yaml.py 하나였는데, 그것은
-# sd 배포 지점을 태우므로 **sd 옆 사본만** 읽는다 — 정본이나 qg 옆 사본에서 가드를
-# 지우면 전부 GREEN 이었다(리뷰어 실측 행렬). 층④의 표본 7종에도 이 모양이 없다
+# plugins/spec-distill/tests/test_codex_findings_to_yaml.py 는 sd 배포 지점을 태우므로
+# **sd 옆 사본만** 읽는다 — 그것만으로는 정본이나 qg 옆 사본에서 가드를 지워도 GREEN
+# 이다. 층④의 표본 7종에도 이 모양이 없다
 # ("진짜 메시지 뒤에 빈 메시지" 는 01~07 어디에도 없다).
 #
 # 대상 집합은 **이름을 열거하지 않고** git 코퍼스에서 도출한다 — 정본과 그 copy-of
 # 사본 전부. 사본이 늘어나면 자동으로 함께 검사된다.
 #
-# 재는 것 셋 〔셋째·둘째는 2026-08-17 fix round 3, R3-2 가 더했다〕:
+# 재는 것 셋:
 #  ① 진짜 agent_message 뒤에 **공백-only** agent_message 가 흐를 때 앞선 진짜 것이
 #     살아남는가 — `candidate.strip()` 연언지. 가드가 없으면 빈 후보가 last_text 를
-#     덮어써 하류에서 codex_failed 가 뒤집힌다(fix round 1 F2 의 방향 서술 참조).
+#     덮어써 하류에서 codex_failed 가 뒤집힌다.
 #  ② 진짜 것 뒤에 **비-문자열** agent_message 가 흐를 때도 살아남는가 —
-#     `isinstance(candidate, str)` 연언지. 앞 판본은 ①만 태워서 이 연언지가 **네 파일
-#     어디에도 락이 없었다**: `isinstance(candidate, str) and candidate.strip()` 을
-#     `candidate and str(candidate).strip()` 로 네 파일 동시에 바꿔도 69/69 GREEN 이었고
-#     (실측), 그 상태에서 비-문자열 `text` 스트림은 codex_findings_to_yaml.py 에서
+#     `isinstance(candidate, str)` 연언지. ①만 태우면 이 연언지에 락이 없다:
+#     `isinstance(candidate, str) and candidate.strip()` 을
+#     `candidate and str(candidate).strip()` 로 바꿔도 GREEN 이고,
+#     그 상태에서 비-문자열 `text` 스트림은 codex_findings_to_yaml.py 에서
 #     잡히지 않는 TypeError 로 죽으며 YAML 을 **0바이트**로 남긴다. 표본은 **truthy**
 #     여야 한다 — falsy(0·"")면 `text or message` 가 message 로 넘어가 이 연언지를
 #     태우지 못한다.
 #  ③ legacy `{"type":"agent_message","message":…}` 폴백이 살아 있는가 —
 #     `item.get("text") or item.get("message")` 의 뒷항. 정본 docstring(Legacy shape,
-#     still supported as fallback)이 약속하는 동작이고, 역시 앞 판본에 락이 없었다.
+#     still supported as fallback)이 약속하는 동작이다.
 # 이 셋이 함께 있어야 `codex_jsonl.py` docstring 이 층⑤ 를 "이 동작을 고정하는 락" 으로
-# 인용하는 서술(R2-4)이 실제로 참이 된다.
+# 인용하는 서술이 실제로 참이 된다.
 CJ_PROBE="$TMP/blank_guard_probe.py"
 cat > "$CJ_PROBE" <<'PYEOF'
 import importlib.util, json, sys
@@ -265,9 +251,7 @@ done
 # 내는가**를 잰다.
 #
 # 대상은 **두 플러그인에 같은 이름으로 있는 것**의 교집합이다(`comm -12`) —
-# 한쪽 고유 mock(qg의 capture-codex·mock-codex-hang.sh·
-# mock-codex-no-agent-message.sh·mock-codex-valid-json-no-fence.sh, sd의
-# mock-codex-valid-json.sh)은 이름 열거가 아니라 교집합 자체가 대상에서 뺀다 —
+# 한쪽 고유 mock 은 이름 열거가 아니라 교집합 자체가 대상에서 뺀다 —
 # 대조하지 않고, 그 결과 RED도 나지 않는다.
 #
 # bin-stubs는 `shift; exec "$@"` 스텁이다 — 여기서 태우는 인자는 실행마다 1개뿐이라
@@ -278,7 +262,7 @@ mock_groups="$(comm -12 \
   <(ls "$QG/tests/mocks" 2>/dev/null | sort) \
   <(ls "$SD/tests/mocks" 2>/dev/null | sort))"
 n_groups="$(printf '%s\n' "$mock_groups" | grep -c . || true)"
-# 바닥은 실측값(8)이다 — brief 초안의 `-ge 4`는 통과하되 헐거워 그룹 하나가
+# 바닥은 실측값(8)이다 — 그보다 헐거운 바닥은 그룹 하나가
 # 조용히 사라져도(8→7) 못 잡는다. 실측치를 바닥으로 두면 축소는 반드시 RED,
 # 확장(그룹이 늘어나는 것)은 여전히 자유롭다.
 if [ "$n_groups" -ge 8 ]; then

@@ -2,8 +2,8 @@
 # 변이 락 — 모델 락(스윕 1 + 아래 pairs 의 per-agent 락)이 실제로 문다.
 #
 # 모든 agent 는 model 키 «부재»가 정답이다(통과가 정답인 부재 단언은 모양만으로 이빨을 판별할 수
-# 없다). qg 리뷰 agent 둘(security-reviewer · code-recritic)도 마찬가지다 — 옛 재결정 R3 의
-# `model: opus` 고정은 R2a 사용자 결정 「세션 모델을 따른다」로 풀렸다.
+# 없다). qg 리뷰 agent 둘(security-reviewer · code-recritic)도 마찬가지다 — 사용자 결정
+# 「세션 모델을 따른다」.
 #   (1) 스윕: model 키를 다섯 표기로 agent 에 넣으면 RED — (a) `model: inherit`
 #       (b) `model: opus` (c) `model:inherit` (d) `"model": inherit` (e) `model : inherit`.
 #   (2) per-agent 락: (a)·(d) 를 넣으면 RED — 키가 생겨서.
@@ -75,7 +75,7 @@ for p in "${pairs[@]}"; do
   done
 done
 
-# (g) qg 리뷰 agent 에 옛 고정 `model: opus` 를 되살리면 스윕과 per-agent 락이 RED 다(R2a 결정으로 풀린 R3)
+# (g) qg 리뷰 agent 에 옛 고정 `model: opus` 를 되살리면 스윕과 per-agent 락이 RED 다
 for p in "plugins/quality-gates/agents/security-reviewer.md|plugins/quality-gates/tests/test_security_reviewer_persona.sh" \
          "plugins/quality-gates/agents/code-recritic.md|plugins/quality-gates/tests/test_code_recritic_frontmatter.sh"; do
   agent="${p%%|*}"; lock="${p##*|}"

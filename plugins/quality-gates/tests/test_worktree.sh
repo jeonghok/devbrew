@@ -107,11 +107,8 @@ fi
 rm -rf "$(dirname "$REPO")"
 
 # --- Test 8: agent.md Inputs contract drift guard (AC2, T8) ---
-# T3-3: codex-reviewer.md deleted — removed from this loop (no longer applicable post-T3-3).
-# T3-2: synthesizer.md deleted — removed from this loop (no longer applicable post-T3-2).
-# T3-1: scout.md deleted — removed from this loop (no longer applicable post-T3-1).
-# PR4a: adversarial.md deleted — removed from this loop. The re-critic is
-# quality-gates:code-recritic (Step 3.5), which declares project_dir (checked below).
+# The reviewer agents that take project_dir: security-reviewer and the re-critic
+# quality-gates:code-recritic (Step 3.5).
 for agent in security-reviewer code-recritic; do
   if grep -q 'project_dir' "$PLUGIN_DIR/agents/$agent.md"; then
     ok "T8: agents/$agent.md declares project_dir input"
@@ -120,7 +117,7 @@ for agent in security-reviewer code-recritic; do
   fi
 done
 
-# --- Test 7: T3-3 — codex-reviewer.md deleted; script exists + uses CLAUDE_PLUGIN_ROOT ---
+# --- Test 7: codex-reviewer is a script, not an agent; the script uses CLAUDE_PLUGIN_ROOT ---
 if [[ -f "$PLUGIN_DIR/agents/codex-reviewer.md" ]]; then
   no "T7: codex-reviewer.md should be absent post-T3-3"
 elif grep -q '\$REPO_ROOT/plugins/quality-gates' "$PLUGIN_DIR/scripts/run_codex_reviewer.sh" 2>/dev/null; then
@@ -128,11 +125,6 @@ elif grep -q '\$REPO_ROOT/plugins/quality-gates' "$PLUGIN_DIR/scripts/run_codex_
 else
   ok "T7: codex-reviewer migrated to script; script uses \${CLAUDE_PLUGIN_ROOT} (devbrew-portable)"
 fi
-
-# --- Test 9: REMOVED — v1.32.0 schema intentionally has no project_dir field ---
-# project_dir is now a per-dispatch runtime parameter threaded by the SKILL
-# (see T5), not a state-frontmatter field. The schema field was removed to
-# avoid coordinate drift between worktree-mode and main-repo-mode pipelines.
 
 # --- Summary ---
 finish

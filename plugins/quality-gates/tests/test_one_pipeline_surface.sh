@@ -30,8 +30,7 @@ case_old_surface_absent() {
   #
   # PASS/FAIL 경계 정규식은 대소문자 그대로 둔다 — `pass`/`fail`/`fail-open`/`fail-closed`
   # 는 차등 테스트의 현재 어휘(개별 unit 결과·정책 이름)로 레퍼런스 전체에 수십 회
-  # 등장한다. -i 를 붙이면 이 락이 자기 코퍼스 대부분에서 RED 가 된다(실측: fix round 1
-  # 에서 grep -i 로 확인 — SKILL.md 6곳 · differential-test.md 20+곳 · 옛 qg.md 1곳).
+  # 등장한다. -i 를 붙이면 이 락이 자기 코퍼스 대부분에서 RED 가 된다.
   # 옛 판정 어휘(대문자 PASS/FAIL, verdict.py 밖 금지)와 새 소문자 pass/fail 어휘를 가르는
   # 것이 바로 이 대소문자 구분이다 — 둘을 섞으면 락의 이빨이 아니라 락 자체가 무너진다.
   local tok f
@@ -43,7 +42,7 @@ case_old_surface_absent() {
 
   # 나머지 토큰은 다단어 식별자/아키텍처 이름이라 대소문자 충돌 위험이 낮다 — -i 로 대소문자
   # 변형(RUNTIME GATE · runtime gate 등)도 잡는다. 'review gate'/'runtime gate' 만은
-  # 경계를 보강한다 — SKILL.md:413 의 "hard-review gate"(CLAUDE.md 의 무관한 fan-out
+  # 경계를 보강한다 — SKILL.md 의 "hard-review gate"(CLAUDE.md 의 무관한 fan-out
   # 합의 게이트 역사 서술)가 하이픈 앞 소문자 'review gate' 로 -i 하에서 오탐되기 때문에
   # 앞이 `[-A-Za-z]` 가 아니어야 한다는 경계를 둔다.
   for tok in 'runtime-verifier' 'detect-runtime' 'create-sandbox' 'mutation-guard' \

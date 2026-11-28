@@ -256,7 +256,7 @@ case_filtered_diff_is_review_diff_file() {
 }
 
 case_override_clears_stale_scope_file() {
-  # I1 수정 — override 는 이번 iteration 에 1a 를 돌리지 않으므로, 남아 있을 수 있는 이전
+  # override 는 이번 iteration 에 1a 를 돌리지 않으므로, 남아 있을 수 있는 이전
   # 스코프 파일을 지운다. 파일 부재는 차등 절차 D0 · D1 에서 session 스코프로 간다([ -f "$S" ]
   # 가 거짓이라 status==ok 를 만족 못한다). rm 줄이 1a(기본 모드) 쪽에
   # 있으면(mutation) 그 펜스 바로 위 문단에 override · branch · --paths 가 함께 없다.
@@ -274,7 +274,7 @@ case_override_clears_stale_scope_file() {
 case_in_base_notice() {
   # AC4 재정의 — 머지된 앞 조각이 토픽 구성원에서 빠졌고 형제와 그 조각을 품은 구성원이 함께 있으면 그 변경이 diff 에 다시 보인다는 사실을 ① 1a 가 공지한다(같은 줄).
   # 1a 창(「**1a — 토픽 선언」 ~ 「**session 스코프**」) 안에서만 찾는다 — 다른 절로 옮기면 RED.
-  # 끝 마커 자체의 실재를 별도로 잰다(PR4d 닫기 #19) — 마커를 개명(예: "**session scope**")하면
+  # 끝 마커 자체의 실재를 별도로 잰다 — 마커를 개명(예: "**session scope**")하면
   # awk 의 종료 조건이 다시는 안 걸려 창이 파일 끝까지 넓어지고, 옮겨진 공지 줄이 그 넓은
   # 창 안에서 «다시» 걸려 뒤집기를 못 잡는다. 마커가 정확히 한 번 리터럴로 있어야 창이 닫힌다.
   assert_eq "$(grep -c -F '**session 스코프**' "$SKILL")" "1" "1a 창의 끝 마커가 SKILL 에 정확히 한 번 리터럴로 있다(양의 짝 — 없으면 창이 파일 끝까지 새는 것을 못 잡는다)"
@@ -285,7 +285,7 @@ case_in_base_notice() {
   assert_grep "$got" '^[[:space:]]*`status: ok` 이고 파일의 `in_base:` 가 0 보다 크면 공지 한 줄: `> \[quality-gates\] 토픽 ' \
     "조건(status ok · in_base > 0)과 목적지(공지 한 줄: …)가 같은 줄의 긍정형이다"
   assert_not_grep "$got" '않|말 것|생략|아니고' "그 줄에 부정 · 반전 토큰이 없다(「토픽 구성원에서 빠졌다」는 위에서 따로 잰다)"
-  # 줄 전체 끝 앵커(PR4d 닫기 #20) — 위 긍정형 단언은 접두만 고정해, 닫는 백틱 뒤에 꼬리를
+  # 줄 전체 끝 앵커 — 위 긍정형 단언은 접두만 고정해, 닫는 백틱 뒤에 꼬리를
   # 덧붙이는 변이(부정 토큰 없이)를 못 잡는다. 문장이 그 백틱에서 «끝난다»를 별도로 잰다.
   assert_grep "$got" '이번 diff 에 다시 보인다\.`$' "그 문장이 닫는 백틱 직후에 끝난다(줄 끝 앵커 — 백틱 뒤 덧붙임을 잡는다)"
   assert_eq "$(printf '%s\n' "$got" | grep -c -F '`> [quality-gates] 토픽 <topic_key> 의 선언 커밋 <in_base>개는 이미 base 에 있어 토픽 구성원에서 빠졌다 — 그 머지 전에 갈라져 base 를 아직 안 들인 형제 구성원이 그 조각을 품은 구성원과 함께 있으면 그 변경이 이번 diff 에 다시 보인다.`')" "1" "공지 문장 전체가 글자 그대로다(조건절의 양보 · 한정 삭제 · 「형제」 치환 · 자리표시 · 수량 표현을 잡는다)"
