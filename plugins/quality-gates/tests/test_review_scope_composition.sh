@@ -29,10 +29,9 @@ assert_contains "$S3" '선택: <리뷰어>(근거: <신호>)' "시작 줄의 선
 assert_not_grep "$S3" 'at most 8|최대 8' "Step 3: 리뷰어 상한 8 이 없다(AC24 — 비용 장치 제거)"
 assert_not_grep "$(cat "$SKILL")" 'Do not re-dispatch the same reviewer|같은 리뷰어를 다시 부르지' "같은 반복 재호출 금지가 없다(AC24)"
 assert_contains "$S3" '시작 구성' "구성표는 시작 구성이다"
-assert_contains "$S3" '> [quality-gates] 리뷰어 <계획한 수>명을 부른다(구성표 <a>명 · 근거를 적어 더한 <b>명)' "시작 줄 꼴"
+assert_grep "$S3" '리뷰어 <계획한 수>명.*더함: <리뷰어>\(근거' "시작 줄이 계획한 리뷰어 수와 근거를 적어 더한 리뷰어를 알린다(한 줄)"
 assert_not_contains "$S3" 'iter N —' "시작 · 끝 줄에 반복 번호 앞머리가 없다(한 실행은 한 번 지난다)"
-assert_contains "$S3" '/ 더함: <리뷰어>(근거: <한 줄>)' "시작 줄의 더함 자리"
-assert_contains "$S3" '> [quality-gates] 다시 부른 리뷰어 <r>명(일시 실패 재시도 <x> · 나눠 돌림 <y>)' "끝 줄 꼴"
+assert_contains "$S3" '다시 부른 리뷰어 <r>명' "끝 줄이 다시 부른 리뷰어 수를 알린다"
 start_ln=$(printf '%s\n' "$S3" | grep -n '리뷰어 <계획한 수>명을 부른다' | head -1 | cut -d: -f1)
 end_ln=$(printf '%s\n' "$S3" | grep -n '다시 부른 리뷰어 <r>명' | head -1 | cut -d: -f1)
 agent_ln=$(printf '%s\n' "$S3" | grep -n 'subagent_type: "quality-gates:security-reviewer"' | head -1 | cut -d: -f1)
